@@ -1,4 +1,6 @@
 from enum import Enum
+from utils import PayloadType
+import random
 
 BrachaStep = Enum('BrachaStep', 'one two three')
 MsgType = Enum('MsgType', 'init echo ready')
@@ -13,19 +15,20 @@ class Bracha:
         self.echo_count = 0
         self.ready_count = 0
         self.body = None
+        random.seed()
 
     def process(self, msg):
-        print("received: ", msg)
+        print "received: ", msg
         ty = msg["ty"]
         round = msg["round"]
         body = msg["body"]
 
         if round < 0:
-            print("invalid round", round)
+            print "bracha: invalid round", round
             return
 
         if ty != MsgType.init.value and round != self.round:
-            print("found invalid message", msg)
+            print "bracha: found invalid message", msg
             return
 
         if ty == MsgType.init.value:
@@ -36,8 +39,8 @@ class Bracha:
         elif ty == MsgType.ready.value:
             self.ready_count += 1
         else:
-            print("unexpected msg type: ", msg["ty"])
-            raise
+            print "bracha: unexpected msg type: ", msg["ty"]
+            raise AssertionError
 
         assert (self.init_count == 0 or self.init_count == 1)
 
@@ -53,15 +56,18 @@ class Bracha:
             if self.enough_ready():
                 self.step = BrachaStep.one
                 self.round = -1
-                print("accept", body)
+                print "bracha: ACCEPT", body
+
+    def bcast_init(self):
+        self.round = random.randint(0, 9999)
+        self.bcast(make_init(self.round, "agree this " + str(random.random())))
+        print "initiating round", self.round
 
     def bcast_echo(self, body):
-        for p in self.peers.itervalues():
-            p.sendJSON(make_echo(self.round, body))
+        self.bcast(make_echo(self.round, body))
 
     def bcast_ready(self, body):
-        for p in self.peers.itervalues():
-            p.sendJSON(make_ready(self.round, body))
+        self.bcast(make_ready(self.round, body))
 
     def ok_to_send(self):
         if self.echo_count >= (self.config.n + self.config.t) / 2 or self.ready_count >= (self.config.t + 1):
@@ -72,6 +78,12 @@ class Bracha:
         if self.ready_count >= 2 * self.config.t + 1:
             return True
         return False
+
+    def bcast(self, msg):
+        for k, v in self.peers.iteritems():
+            proto = v[2]
+            proto.sendJSON(msg)
+        # self.process(msg["payload"])
 
 
 def make_init(round, body):
@@ -87,5 +99,5 @@ def make_ready(round, body):
 
 
 def _make_msg(ty, round, body):
-    return {"ty": ty, "round": round, "body": body}
+    return {"payload_type": PayloadType.bracha.value, "payload": {"ty": ty, "round": round, "body": body}}
 

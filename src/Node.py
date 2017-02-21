@@ -3,16 +3,13 @@ from twisted.internet.protocol import Factory
 from twisted.protocols.basic import LineOnlyReceiver
 from twisted.internet import reactor
 from twisted.internet.error import CannotListenError
-from enum import Enum
 import json
 import sys
 import uuid
 
-from utils import byteify
+from utils import byteify, PayloadType
 from Bracha import Bracha
 from Discovery import Discovery, got_discovery
-
-PayloadType = Enum('PayloadType', 'ping pong bracha')
 
 def connect_client(peer, proto):
     host, port = peer.split(":")
@@ -36,16 +33,20 @@ class JsonReceiver(LineOnlyReceiver):
 
 
 class MyProto(JsonReceiver):
-    def __init__(self, config, bracha):
-        self.config = config
-        self.bracha = bracha
-        self.peers = bracha.peers  # NOTE does not include myself
+    def __init__(self, factory):
+        self.factory = factory
+        self.config = factory.config
+        self.bracha = factory.bracha
+        self.peers = factory.peers  # NOTE does not include myself
         self.remote_id = None
         self.state = 'SERVER'
 
     def connectionLost(self, reason):
         print "deleting peer ", self.remote_id
-        del (self.peers[self.remote_id])
+        try:
+            del (self.peers[self.remote_id])
+        except KeyError:
+            print "peer already deleted", self.remote_id, "my id is", self.config.id
 
     def jsonReceived(self, obj):
         ty = obj["payload_type"]
@@ -55,6 +56,8 @@ class MyProto(JsonReceiver):
             self.handle_pong(obj["payload"])
         elif ty == PayloadType.bracha.value:
             self.bracha.process(obj["payload"])
+        elif ty == PayloadType.dummy.value:
+            print "got dummy message from", self.remote_id
         else:
             pass
 
@@ -70,22 +73,24 @@ class MyProto(JsonReceiver):
         assert(self.state == 'SERVER')
         _id, _port = msg
         if uuid.UUID(_id) in self.peers.keys():
-            self.transport.loseConnection()
-        else:
-            self.peers[uuid.UUID(_id)] = (self.transport.getPeer().host, _port, self)
-            self.sendJSON({"payload_type": PayloadType.pong.value, "payload": (config.id.urn, config.port)})
-            self.remote_id = uuid.UUID(_id)
-            print "sent pong"
+            print "ping found myself in peers.keys"
+            # self.transport.loseConnection()
+        self.peers[uuid.UUID(_id)] = (self.transport.getPeer().host, _port, self)
+        self.sendJSON({"payload_type": PayloadType.pong.value, "payload": (config.id.urn, config.port)})
+        self.remote_id = uuid.UUID(_id)
+        print "sent pong"
 
     def handle_pong(self, msg):
         print "got pong", msg
         assert(self.state == 'CLIENT')
         _id, _port = msg
         if uuid.UUID(_id) in self.peers.keys():
-            self.transport.loseConnection()
-        else:
-            self.peers[uuid.UUID(_id)] = (self.transport.getPeer().host, _port, self)
-            self.remote_id = uuid.UUID(_id)
+            print "pong: found myself in peers.keys"
+            # self.transport.loseConnection()
+        self.peers[uuid.UUID(_id)] = (self.transport.getPeer().host, _port, self)
+        self.remote_id = uuid.UUID(_id)
+        print "done pong"
+        self.printInfo()
 
     # def handleHello(self, msg):
     #     id = uuid.UUID(msg)
@@ -130,7 +135,7 @@ class MyFactory(Factory):
         self.bracha = Bracha(self.peers, self.config)
 
     def buildProtocol(self, addr):
-        return MyProto(self.config, self.bracha)
+        return MyProto(self)
 
     def new_connection_if_not_exist(self, nodes):
         for id, addr in nodes.iteritems():
@@ -144,10 +149,14 @@ class MyFactory(Factory):
     def make_new_connection(self, host, port):
         print "making client connection", host, port
         point = TCP4ClientEndpoint(reactor, host, port)
-        proto = MyProto(self.config, self.bracha)
+        proto = MyProto(self)
         d = connectProtocol(point, proto)
         d.addCallback(got_protocol).addErrback(error_back)
-        # d.addCallback(got_discovery, config.id.urn, listen_port).addErrback(error_back)
+
+    def bcast(self, msg):
+        for k, v in self.peers.iteritems():
+            proto = v[2]
+            proto.sendJSON(msg)
 
 
 def got_protocol(p):
@@ -191,8 +200,20 @@ if __name__ == '__main__':
         print("cannot listen on ", listen_port)
         sys.exit(1)
 
+    # connect to discovery server
     point = TCP4ClientEndpoint(reactor, "localhost", 8123)
     d = connectProtocol(point, Discovery({}, f))
     d.addCallback(got_discovery, config.id.urn, listen_port).addErrback(error_back)
+
+    # connect to myself
+    point = TCP4ClientEndpoint(reactor, "localhost", listen_port)
+    d = connectProtocol(point, MyProto(f))
+    d.addCallback(got_protocol).addErrback(error_back)
+
+    # test dummy broadcast
+    if listen_port == 12345:
+        print "bcasting..."
+        reactor.callLater(5, f.bcast, {"payload_type": PayloadType.dummy.value, "payload": "z"})
+        reactor.callLater(6, f.bracha.bcast_init)
 
     reactor.run()

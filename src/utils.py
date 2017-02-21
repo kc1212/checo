@@ -1,3 +1,6 @@
+from enum import Enum
+PayloadType = Enum('PayloadType', 'ping pong bracha dummy')
+
 def byteify(inp):
     """
     Recursively encode an object from unicode into UTF-8, any object that is not of instance unicode is ignored.
@@ -12,5 +15,6 @@ def byteify(inp):
         return inp.encode('utf-8')
     else:
         return inp
+
 
 
