@@ -3,11 +3,10 @@ import random
 from gevent.queue import Queue
 from gevent import Greenlet
 
+
 n = 4
 t = 1
 queues = [Queue() for _ in range(n)]
-tasks = []
-
 
 def broadcast(i, msg):
     print("broadcasting..", i, msg)
@@ -15,12 +14,36 @@ def broadcast(i, msg):
         q.put((i, msg))
 
 
+def bv_broadcast(i, n, t, q, vi):
+    table = {}
+    not_yet_bc = True
+    values = []
+
+    broadcast(i, vi)
+
+    while True:
+        (j, v) = q.get()
+        assert v in (0, 1)
+
+        table[j] = True
+
+        if len(table) >= t + 1 and not_yet_bc:
+            broadcast(i, v)
+            not_yet_bc = False
+
+        if len(table) >= 2*t + 1:
+            print("node", i, "deliver", v)
+            if v not in values:
+                values.append(v)
+            if len(values) == 2:
+                return
+
+
 def bracha(i, n, t, q):
     echo_count = 0
     init_count = 0
     ready_count = 0
     step = 1
-
     # TODO check round and message body
 
     def _bc(ty, msg):
@@ -65,11 +88,26 @@ def init_bracha(i, msg):
     broadcast(i, ('init', msg))
 
 
-if __name__ == "__main__":
+def test_bracha():
+    tasks = []
     for (i, q) in zip(range(n), queues):
         if i == 0:
             tasks.append(gevent.spawn(init_bracha, i, "xaxa"))
         tasks.append(gevent.spawn(bracha, i, n, t, q))
-
-    # tasks.append(gevent.sleep(5))
     gevent.joinall(tasks)
+
+
+def test_bv_broadcast():
+    tasks = []
+    for (i, q) in zip(range(n), queues):
+        vi = random.randint(0, 1)
+        if i == 0:
+            tasks.append(gevent.spawn(bv_broadcast, i, n, t, q, random.randint(0, 1)))
+        else:
+            tasks.append(gevent.spawn(bv_broadcast, i, n, t, q, vi))
+    gevent.joinall(tasks)
+
+
+if __name__ == "__main__":
+    test_bv_broadcast()
+
