@@ -1,9 +1,10 @@
 from enum import Enum
-from utils import PayloadType
+from messages import Payload
 import random
 
 BrachaStep = Enum('BrachaStep', 'one two three')
 MsgType = Enum('MsgType', 'init echo ready')
+
 
 class Bracha:
     def __init__(self, peers, config):
@@ -18,10 +19,23 @@ class Bracha:
         random.seed()
 
     def process(self, msg):
+        """
+        msg should be in the following format
+        struct Msg {
+            ty: u32,
+            round: u32,
+            body: String,
+        }
+        :param msg:
+        :return:
+        """
         print "received: ", msg
         ty = msg["ty"]
         round = msg["round"]
         body = msg["body"]
+
+        assert isinstance(round, int)
+        assert isinstance(ty, int)
 
         if round < 0:
             print "bracha: invalid round", round
@@ -56,6 +70,7 @@ class Bracha:
             if self.enough_ready():
                 self.step = BrachaStep.one
                 self.round = -1
+                self.init_count = 0
                 print "bracha: ACCEPT", body
 
     def bcast_init(self):
@@ -82,8 +97,8 @@ class Bracha:
     def bcast(self, msg):
         for k, v in self.peers.iteritems():
             proto = v[2]
-            proto.sendJSON(msg)
-        # self.process(msg["payload"])
+            proto.send_json(msg)
+            # self.process(msg["payload"])
 
 
 def make_init(round, body):
@@ -99,5 +114,4 @@ def make_ready(round, body):
 
 
 def _make_msg(ty, round, body):
-    return {"payload_type": PayloadType.bracha.value, "payload": {"ty": ty, "round": round, "body": body}}
-
+    return Payload.make_bracha({"ty": ty, "round": round, "body": body}).to_dict()

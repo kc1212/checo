@@ -7,28 +7,23 @@ import json
 import sys
 import uuid
 
-from utils import byteify, PayloadType
+from utils import byteify
 from Bracha import Bracha
 from Discovery import Discovery, got_discovery
-
-def connect_client(peer, proto):
-    host, port = peer.split(":")
-    port = int(port)
-    point = TCP4ClientEndpoint(reactor, host, int(port))
-    d = connectProtocol(point, proto)
-    # d.addCallback(got_protocol)\
-    d.addErrback(error_back)
+from messages import Payload, PayloadType
 
 
 class JsonReceiver(LineOnlyReceiver):
     def lineReceived(self, line):
         obj = byteify(json.loads(line))
-        self.jsonReceived(obj)
+        self.json_received(obj)
 
-    def jsonReceived(self, obj):
+    def json_received(self, obj):
+        # we also expect a dict or list
         raise NotImplementedError
 
-    def sendJSON(self, obj):
+    def send_json(self, obj):
+        # we expect dict or list
         self.sendLine(json.dumps(obj))
 
 
@@ -48,41 +43,51 @@ class MyProto(JsonReceiver):
         except KeyError:
             print "peer already deleted", self.remote_id, "my id is", self.config.id
 
-    def jsonReceived(self, obj):
-        ty = obj["payload_type"]
+    def json_received(self, obj):
+        """
+        struct Payload {
+            payload_type: u32,
+            payloada: Msg, // any type, passed directly to sub system
+        }
+        :param obj:
+        :return:
+        """
+        payload = Payload.from_dict(obj)
+        ty = payload.payload_type
+
         if ty == PayloadType.ping.value:
-            self.handle_ping(obj["payload"])
+            self.handle_ping(payload.payload)
         elif ty == PayloadType.pong.value:
-            self.handle_pong(obj["payload"])
+            self.handle_pong(payload.payload)
         elif ty == PayloadType.bracha.value:
-            self.bracha.process(obj["payload"])
+            self.bracha.process(payload.payload)
         elif ty == PayloadType.dummy.value:
             print "got dummy message from", self.remote_id
         else:
             pass
 
-        self.printInfo()
+        self.print_info()
 
     def send_ping(self):
-        self.sendJSON({"payload_type": PayloadType.ping.value, "payload": (config.id.urn, config.port)})
+        self.send_json(Payload.make_ping((config.id.urn, config.port)).to_dict())
         print "sent ping"
         self.state = 'CLIENT'
 
     def handle_ping(self, msg):
         print "got ping", msg
-        assert(self.state == 'SERVER')
+        assert (self.state == 'SERVER')
         _id, _port = msg
         if uuid.UUID(_id) in self.peers.keys():
             print "ping found myself in peers.keys"
             # self.transport.loseConnection()
         self.peers[uuid.UUID(_id)] = (self.transport.getPeer().host, _port, self)
-        self.sendJSON({"payload_type": PayloadType.pong.value, "payload": (config.id.urn, config.port)})
+        self.send_json(Payload.make_pong((config.id.urn, config.port)).to_dict())
         self.remote_id = uuid.UUID(_id)
         print "sent pong"
 
     def handle_pong(self, msg):
         print "got pong", msg
-        assert(self.state == 'CLIENT')
+        assert (self.state == 'CLIENT')
         _id, _port = msg
         if uuid.UUID(_id) in self.peers.keys():
             print "pong: found myself in peers.keys"
@@ -90,40 +95,8 @@ class MyProto(JsonReceiver):
         self.peers[uuid.UUID(_id)] = (self.transport.getPeer().host, _port, self)
         self.remote_id = uuid.UUID(_id)
         print "done pong"
-        self.printInfo()
 
-    # def handleHello(self, msg):
-    #     id = uuid.UUID(msg)
-    #     if id not in self.peers:
-    #         self.peers[id] = (self, self.remote_peer)
-    #
-    # def sendHello(self):
-    #     payload = {"payload_type": PayloadType.hello.value, "payload": self.config.id.urn}
-    #     self.sendJSON(payload)
-    #     print "send hello payload", payload
-    #
-    # def sendPeers(self):
-    #     payload = self.makePeersPayload()
-    #     self.sendJSON(payload)
-    #     print "send peers payload", payload
-    #
-    # def handlePeers(self, results):
-    #     for res in results:
-    #         id = uuid.UUID(res[0])
-    #         remote = res[1]
-    #         if id == self.config.id:
-    #             continue
-    #         else:
-    #             print "handle res", res
-    #             connect_client(remote, MyProto(self.bracha))
-    #     print "handled results", results
-    #
-    # def makePeersPayload(self):
-    #     remotes = [v[1] for v in self.peers.values()]
-    #     payload = zip(self.peers.keys(), remotes)
-    #     return {"payload_type": PayloadType.peers.value, "payload": payload}
-
-    def printInfo(self):
+    def print_info(self):
         print "info: me: {}, remote: {}, peers: {}".format(self.config.id, self.remote_id, self.peers.keys())
 
 
@@ -156,11 +129,12 @@ class MyFactory(Factory):
     def bcast(self, msg):
         for k, v in self.peers.iteritems():
             proto = v[2]
-            proto.sendJSON(msg)
+            proto.send_json(msg)
 
 
 def got_protocol(p):
     reactor.callLater(1, p.send_ping)
+
 
 # singleton
 class Config:
@@ -171,18 +145,7 @@ class Config:
         self.port = port
 
 
-"""
-struct Payload {
-    payload_type: u32,
-    payloada: Msg,
-}
 
-struct Msg {
-    ty: u32,
-    round: u32,
-    body: String,
-}
-"""
 
 def error_back(failure):
     sys.stderr.write(str(failure))
@@ -213,7 +176,7 @@ if __name__ == '__main__':
     # test dummy broadcast
     if listen_port == 12345:
         print "bcasting..."
-        reactor.callLater(5, f.bcast, {"payload_type": PayloadType.dummy.value, "payload": "z"})
+        # reactor.callLater(5, f.bcast, Payload.make_dummy("z").to_dict())
         reactor.callLater(6, f.bracha.bcast_init)
 
     reactor.run()
