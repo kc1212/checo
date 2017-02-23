@@ -1,12 +1,15 @@
 import gevent
 import random
 from gevent.queue import Queue
-from gevent import Greenlet
+# from gevent import Greenlet
 
 
 n = 4
 t = 1
 queues = [Queue() for _ in range(n)]
+coin_queues = [Queue() for _ in range(n)]
+coin_req_queue = Queue()
+
 
 def broadcast(i, msg):
     print("broadcasting..", i, msg)
@@ -14,28 +17,85 @@ def broadcast(i, msg):
         q.put((i, msg))
 
 
-def bv_broadcast(i, n, t, q, vi):
-    table = {}
+def run_common_coin():
+    def f():
+        coins = []
+        while True:
+            (i, r) = coin_req_queue.get()
+            assert r <= len(coins)  # round (begins at 0) cannot exceed the number of coins
+            assert i in range(n)
+
+            if len(coins) == r:
+                v = random.randint(0, 1)
+                coins.append(v)
+                coin_queues[i].put((i, r, v))
+            else:
+                coin_queues[i].put((i, r, coins[r]))
+
+    gevent.spawn(f)
+
+
+def get_common_coin(i, r):
+    coin_req_queue.put((i, r))
+    (_i, _r, _v) = coin_queues[i].get()
+    assert i == _i
+    assert r == _r
+    assert _v is not None
+    return _v
+
+
+def binary_consensus(i, n, t, bc, q, vi):
+    est = vi
+    ri = 0
+
+    # we need to forward the messages to the appropriate queues
+    def forward_msg():
+        while True:
+            (i, tag, m) = q.get()
+            if tag == 'EST':
+                pass
+            elif tag == 'COIN':
+                pass
+            elif tag == 'AUX':
+                pass
+            else:
+                raise AssertionError
+
+    while True:
+        ri += 1
+        # TODO the q may contain results from another broadcast
+        bv_broadcast(i, n, t, bc, q, est)
+
+    raise RuntimeError
+
+
+def bv_broadcast(i, n, t, bc, q, vi):
+    table = [{}, {}]
     not_yet_bc = True
     values = []
 
-    broadcast(i, vi)
+    assert i in range(n)
+    assert n > 3 * t
+
+    bc(i, vi)
 
     while True:
         (j, v) = q.get()
         assert v in (0, 1)
 
-        table[j] = True
+        table[v][j] = True
 
-        if len(table) >= t + 1 and not_yet_bc:
-            broadcast(i, v)
+        if len(table[v]) >= t + 1 and not_yet_bc:
+            print("node", i, "relaying", v)
+            bc(i, v)
             not_yet_bc = False
 
-        if len(table) >= 2*t + 1:
-            print("node", i, "deliver", v)
+        if len(table[v]) >= 2 * t + 1:
             if v not in values:
                 values.append(v)
+                print("node", i, "deliver", values)
             if len(values) == 2:
+                print("node", i, "deliver two things", values)
                 return
 
 
@@ -46,6 +106,7 @@ def bracha(i, n, t, q):
     step = 1
     # TODO check round and message body
 
+    # TODO broadcast in args
     def _bc(ty, msg):
         return broadcast(i, (ty, msg))
 
@@ -68,7 +129,7 @@ def bracha(i, n, t, q):
         elif ty == 'ready':
             ready_count += 1
         else:
-            raise
+            raise AssertionError
 
         if step == 1:
             if init_count > 0 or _ok_to_send():
@@ -99,15 +160,24 @@ def test_bracha():
 
 def test_bv_broadcast():
     tasks = []
+    bc = broadcast
+    vi = random.randint(0, 1)
     for (i, q) in zip(range(n), queues):
-        vi = random.randint(0, 1)
+        print("test_bv_broadcast", i, vi)
         if i == 0:
-            tasks.append(gevent.spawn(bv_broadcast, i, n, t, q, random.randint(0, 1)))
+            tasks.append(gevent.spawn(bv_broadcast, i, n, t, bc, q, random.randint(0, 1)))
         else:
-            tasks.append(gevent.spawn(bv_broadcast, i, n, t, q, vi))
+            tasks.append(gevent.spawn(bv_broadcast, i, n, t, bc, q, vi))
     gevent.joinall(tasks)
 
 
+def test_common_coin():
+    run_common_coin()
+    for r in range(10):
+        for i in range(n):
+            print("round", r, "node", i, "coin", get_common_coin(i, r))
+
 if __name__ == "__main__":
     test_bv_broadcast()
+    # test_common_coin()
 
