@@ -16,9 +16,10 @@ class Bracha:
         self.echo_count = 0
         self.ready_count = 0
         self.body = None
+        self.peers_state = {} # TODO make sure peers do not replay messages
         random.seed()
 
-    def process(self, msg):
+    def handle_bracha(self, msg):
         """
         msg should be in the following format
         struct Msg {

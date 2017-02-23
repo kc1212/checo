@@ -39,7 +39,7 @@ class MyProto(JsonReceiver):
     def connectionLost(self, reason):
         print "deleting peer ", self.remote_id
         try:
-            del (self.peers[self.remote_id])
+            del self.peers[self.remote_id]
         except KeyError:
             print "peer already deleted", self.remote_id, "my id is", self.config.id
 
@@ -60,7 +60,7 @@ class MyProto(JsonReceiver):
         elif ty == PayloadType.pong.value:
             self.handle_pong(payload.payload)
         elif ty == PayloadType.bracha.value:
-            self.bracha.process(payload.payload)
+            self.bracha.handle_bracha(payload.payload)
         elif ty == PayloadType.dummy.value:
             print "got dummy message from", self.remote_id
         else:
