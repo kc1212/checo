@@ -1,5 +1,6 @@
 from enum import Enum
 from messages import Payload
+from utils import bcolors
 import random
 
 BrachaStep = Enum('BrachaStep', 'one two three')
@@ -8,19 +9,20 @@ MsgType = Enum('MsgType', 'init echo ready')
 
 class Bracha:
     def __init__(self, peers, config):
-        self.peers = peers
-        self.config = config
+        self.peers = peers  # this needs to be a reference to the peers list maintained in the factory
+        self.config = config  # this is also a reference to config in the factory
         self.step = BrachaStep.one
         self.round = -1
         self.init_count = 0
         self.echo_count = 0
         self.ready_count = 0
         self.body = None
-        self.peers_state = {} # TODO make sure peers do not replay messages
+        self.peers_state = {}  # TODO make sure peers do not replay messages
         random.seed()
 
-    def handle_bracha(self, msg):
+    def handle(self, msg):
         """
+        This function is called on a new incoming message, we expect the type is correct
         msg should be in the following format
         struct Msg {
             ty: u32,
@@ -43,6 +45,7 @@ class Bracha:
             return
 
         if ty != MsgType.init.value and round != self.round:
+            # NOTE this is often ok, since the value may already be accepted
             print "bracha: found invalid message", msg
             return
 
@@ -72,7 +75,7 @@ class Bracha:
                 self.step = BrachaStep.one
                 self.round = -1
                 self.init_count = 0
-                print "bracha: ACCEPT", body
+                print bcolors.OKGREEN + "bracha: ACCEPT" + bcolors.ENDC, body
 
     def bcast_init(self):
         self.round = random.randint(0, 9999)

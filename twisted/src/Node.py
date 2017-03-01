@@ -6,6 +6,7 @@ from twisted.internet.error import CannotListenError
 import json
 import sys
 import uuid
+import argparse
 
 from utils import byteify
 from Bracha import Bracha
@@ -60,7 +61,8 @@ class MyProto(JsonReceiver):
         elif ty == PayloadType.pong.value:
             self.handle_pong(payload.payload)
         elif ty == PayloadType.bracha.value:
-            self.bracha.handle_bracha(payload.payload)
+            # TODO we should have an empty Bracha object initially
+            self.bracha.handle(payload.payload)
         elif ty == PayloadType.dummy.value:
             print "got dummy message from", self.remote_id
         else:
@@ -152,29 +154,35 @@ def error_back(failure):
 
 
 if __name__ == '__main__':
-    listen_port = int(sys.argv[1])
-    config = Config(4, 1, listen_port)
+    parser = argparse.ArgumentParser()
+    parser.add_argument('port', type=int, help='the listener port')
+    parser.add_argument('n', type=int, help='the total number of promoters')
+    parser.add_argument('t', type=int, help='the total number of malicious nodes')
+    parser.add_argument('--init', action='store_true', help='this is for testing, only one initiator allowed')
+    args = parser.parse_args()
+
+    config = Config(args.n, args.t, args.port)
 
     f = MyFactory(config)
 
     try:
-        reactor.listenTCP(listen_port, f)
+        reactor.listenTCP(config.port, f)
     except CannotListenError:
-        print("cannot listen on ", listen_port)
+        print("cannot listen on ", config.port)
         sys.exit(1)
 
     # connect to discovery server
     point = TCP4ClientEndpoint(reactor, "localhost", 8123)
     d = connectProtocol(point, Discovery({}, f))
-    d.addCallback(got_discovery, config.id.urn, listen_port).addErrback(error_back)
+    d.addCallback(got_discovery, config.id.urn, config.port).addErrback(error_back)
 
     # connect to myself
-    point = TCP4ClientEndpoint(reactor, "localhost", listen_port)
+    point = TCP4ClientEndpoint(reactor, "localhost", config.port)
     d = connectProtocol(point, MyProto(f))
     d.addCallback(got_protocol).addErrback(error_back)
 
     # test dummy broadcast
-    if listen_port == 12345:
+    if args.init:
         print "bcasting..."
         # reactor.callLater(5, f.bcast, Payload.make_dummy("z").to_dict())
         reactor.callLater(6, f.bracha.bcast_init)
