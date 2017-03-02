@@ -9,8 +9,9 @@ import uuid
 import argparse
 
 from utils import byteify
-from Bracha import Bracha
-from Discovery import Discovery, got_discovery
+from bracha import Bracha
+from mostefaoui import Mostefaoui
+from discovery import Discovery, got_discovery
 from messages import Payload, PayloadType
 
 
@@ -32,7 +33,6 @@ class MyProto(JsonReceiver):
     def __init__(self, factory):
         self.factory = factory
         self.config = factory.config
-        self.bracha = factory.bracha
         self.peers = factory.peers  # NOTE does not include myself
         self.remote_id = None
         self.state = 'SERVER'
@@ -58,17 +58,22 @@ class MyProto(JsonReceiver):
 
         if ty == PayloadType.ping.value:
             self.handle_ping(payload.payload)
+
         elif ty == PayloadType.pong.value:
             self.handle_pong(payload.payload)
+
         elif ty == PayloadType.bracha.value:
-            # TODO we should have an empty Bracha object initially
-            self.bracha.handle(payload.payload)
+            self.factory.bracha.handle(payload.payload)
+
+        elif ty == PayloadType.mostefaoui.value:
+            self.factory.mostefaoui.handle(payload.payload, self.remote_id)
+
         elif ty == PayloadType.dummy.value:
             print "got dummy message from", self.remote_id
         else:
             pass
 
-        self.print_info()
+        # self.print_info()
 
     def send_ping(self):
         self.send_json(Payload.make_ping((config.id.urn, config.port)).to_dict())
@@ -107,7 +112,8 @@ class MyFactory(Factory):
     def __init__(self, config):
         self.peers = {}  # key: uuid, value: (host: str, port: int, self: MyProto)
         self.config = config
-        self.bracha = Bracha(self.peers, self.config)
+        self.bracha = Bracha(self)
+        self.mostefaoui = Mostefaoui(self)
 
     def buildProtocol(self, addr):
         return MyProto(self)
@@ -129,6 +135,11 @@ class MyFactory(Factory):
         d.addCallback(got_protocol).addErrback(error_back)
 
     def bcast(self, msg):
+        """
+        Broadcast a message to all nodes in self.peers, the list should include myself
+        :param msg: dictionary that can be converted into json via send_json
+        :return:
+        """
         for k, v in self.peers.iteritems():
             proto = v[2]
             proto.send_json(msg)
@@ -147,8 +158,6 @@ class Config:
         self.port = port
 
 
-
-
 def error_back(failure):
     sys.stderr.write(str(failure))
 
@@ -158,11 +167,12 @@ if __name__ == '__main__':
     parser.add_argument('port', type=int, help='the listener port')
     parser.add_argument('n', type=int, help='the total number of promoters')
     parser.add_argument('t', type=int, help='the total number of malicious nodes')
-    parser.add_argument('--init', action='store_true', help='this is for testing, only one initiator allowed')
+    parser.add_argument('--test', choices=['dummy', 'bracha', 'bv_bcast'],
+                        help='this is for testing, choose which algorithm to initialise, '
+                             'empty selection runs a purely reactive node')
     args = parser.parse_args()
 
     config = Config(args.n, args.t, args.port)
-
     f = MyFactory(config)
 
     try:
@@ -181,10 +191,13 @@ if __name__ == '__main__':
     d = connectProtocol(point, MyProto(f))
     d.addCallback(got_protocol).addErrback(error_back)
 
-    # test dummy broadcast
-    if args.init:
-        print "bcasting..."
-        # reactor.callLater(5, f.bcast, Payload.make_dummy("z").to_dict())
-        reactor.callLater(6, f.bracha.bcast_init)
+    # optionally run tests, args.test == None implies reactive node
+    if args.test == 'dummy':
+        reactor.callLater(5, f.bcast, Payload.make_dummy("z").to_dict())
+    elif args.test == 'bracha':
+        reactor.callLater(5, f.bracha.bcast_init)
+    elif args.test == 'bv_bcast':
+        reactor.callLater(5, f.mostefaoui.start, 1)
+        pass
 
     reactor.run()

@@ -62,4 +62,5 @@ def got_discovery(p, id, port):
 
 if __name__ == '__main__':
     reactor.listenTCP(8123, DiscoveryFactory())
+    print "discovery server running..."
     reactor.run()

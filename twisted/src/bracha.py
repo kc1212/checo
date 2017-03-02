@@ -8,16 +8,16 @@ MsgType = Enum('MsgType', 'init echo ready')
 
 
 class Bracha:
-    def __init__(self, peers, config):
-        self.peers = peers  # this needs to be a reference to the peers list maintained in the factory
-        self.config = config  # this is also a reference to config in the factory
+    def __init__(self, factory):
+        self.factory = factory
         self.step = BrachaStep.one
         self.round = -1
         self.init_count = 0
         self.echo_count = 0
         self.ready_count = 0
-        self.body = None
+        self.body = None  # TODO make sure the bodies match
         self.peers_state = {}  # TODO make sure peers do not replay messages
+        self.done = False
         random.seed()
 
     def handle(self, msg):
@@ -32,6 +32,11 @@ class Bracha:
         :param msg:
         :return:
         """
+        if self.done:
+            print "Bracha is done, doing nothing"
+            return
+
+
         print "received: ", msg
         ty = msg["ty"]
         round = msg["round"]
@@ -75,6 +80,7 @@ class Bracha:
                 self.step = BrachaStep.one
                 self.round = -1
                 self.init_count = 0
+                self.done = True
                 print bcolors.OKGREEN + "bracha: ACCEPT" + bcolors.ENDC, body
 
     def bcast_init(self):
@@ -89,20 +95,23 @@ class Bracha:
         self.bcast(make_ready(self.round, body))
 
     def ok_to_send(self):
-        if self.echo_count >= (self.config.n + self.config.t) / 2 or self.ready_count >= (self.config.t + 1):
+        n = self.factory.config.n
+        t = self.factory.config.t
+
+        if self.echo_count >= (n + t) / 2 or self.ready_count >= (t + 1):
             return True
         return False
 
     def enough_ready(self):
-        if self.ready_count >= 2 * self.config.t + 1:
+        t = self.factory.config.t
+
+        if self.ready_count >= 2 * t + 1:
             return True
         return False
 
     def bcast(self, msg):
-        for k, v in self.peers.iteritems():
-            proto = v[2]
-            proto.send_json(msg)
-            # self.process(msg["payload"])
+        print "broadcast:", msg["payload"]
+        self.factory.bcast(msg)
 
 
 def make_init(round, body):
