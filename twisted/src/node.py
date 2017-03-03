@@ -10,7 +10,7 @@ import argparse
 
 from utils import byteify
 from bracha import Bracha
-from mostefaoui import Mostefaoui
+from mo14 import Mo14
 from discovery import Discovery, got_discovery
 from messages import Payload, PayloadType
 
@@ -65,8 +65,8 @@ class MyProto(JsonReceiver):
         elif ty == PayloadType.bracha.value:
             self.factory.bracha.handle(payload.payload)
 
-        elif ty == PayloadType.mostefaoui.value:
-            self.factory.mostefaoui.handle(payload.payload, self.remote_id)
+        elif ty == PayloadType.mo14.value:
+            self.factory.mo14.handle(payload.payload, self.remote_id)
 
         elif ty == PayloadType.dummy.value:
             print "got dummy message from", self.remote_id
@@ -113,7 +113,7 @@ class MyFactory(Factory):
         self.peers = {}  # key: uuid, value: (host: str, port: int, self: MyProto)
         self.config = config
         self.bracha = Bracha(self)
-        self.mostefaoui = Mostefaoui(self)
+        self.mo14 = Mo14(self)
 
     def buildProtocol(self, addr):
         return MyProto(self)
@@ -197,7 +197,7 @@ if __name__ == '__main__':
     elif args.test == 'bracha':
         reactor.callLater(5, f.bracha.bcast_init)
     elif args.test == 'bv_bcast':
-        reactor.callLater(5, f.mostefaoui.start, 1)
+        reactor.callLater(5, f.mo14.start, 1)
         pass
 
     reactor.run()
