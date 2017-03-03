@@ -5,9 +5,14 @@ import json
 import uuid
 
 from utils import byteify
+from jsonreceiver import JsonReceiver
+from messages import Payload, PayloadType
 
 
-class Discovery(LineOnlyReceiver):
+class Discovery(JsonReceiver):
+    """
+    this is both a discovery server and a coin server
+    """
     def __init__(self, nodes, node_factory=None):
         self.nodes = nodes
         self.id = None
@@ -15,41 +20,58 @@ class Discovery(LineOnlyReceiver):
         self.state = 'SERVER'
         self.factory = node_factory
 
-    def connectionLost(self, reason):
+    def connection_lost(self, reason):
         if self.id in self.nodes:
             del self.nodes[self.id]
             print "deleted", self.id
 
-    def lineReceived(self, line):
-        print "received", line
+    def json_received(self, msg):
+        print "received", msg
+
+        payload = Payload.from_dict(msg)
+        ty = payload.payload_type
 
         if self.state == 'SERVER':
-            # line must in the format: [str, str], received sayHello
-            (_id, _port) = byteify(json.loads(line))
-            self.id = uuid.UUID(_id).urn
-            self.addr = self.transport.getPeer().host + ":" + str(_port)
+            if ty == PayloadType.discover.value:
+                (_id, _port) = payload.payload
+                self.id = uuid.UUID(_id).urn
+                self.addr = self.transport.getPeer().host + ":" + str(_port)
 
-            # TODO check addr to be in the form host:port
-            if self.id not in self.nodes:
-                print "added node", self.id, self.addr
-                self.nodes[self.id] = self.addr
+                # TODO check addr to be in the form host:port
+                if self.id not in self.nodes:
+                    print "added node", self.id, self.addr
+                    self.nodes[self.id] = self.addr
 
-            self.sendLine(json.dumps(self.nodes))
+                self.send_json(Payload.make_discover_reply(self.nodes).to_dict())
+
+            elif ty == PayloadType.coin.value:
+                pass
+
+            else:
+                print "invalid payload type on SERVER", ty
+                raise AssertionError
 
         elif self.state == 'CLIENT':
-            nodes = byteify(json.loads(line))
-            print "making new clients...", nodes
-            self.factory.new_connection_if_not_exist(nodes)
+            if ty == PayloadType.discover_reply.value:
+                nodes = payload.payload
+                print "making new clients...", nodes
+                self.factory.new_connection_if_not_exist(nodes)
 
-    def sayHello(self, id, port):
+            elif ty == PayloadType.coin_reply.value:
+                pass
+
+            else:
+                print "invalid payload type on CLIENT", ty
+                raise AssertionError
+
+    def say_hello(self, uuid, port):
         self.state = 'CLIENT'
-        self.sendLine(json.dumps((id, port)))
-        print "discovery sent", id, port
+        self.send_json(Payload.make_discover((uuid, port)).to_dict())
+        print "discovery sent", uuid, port
 
 
 class DiscoveryFactory(Factory):
     def __init__(self):
-        # TODO do delete
         self.nodes = {}  # key = uuid, val = addr
 
     def buildProtocol(self, addr):
@@ -57,7 +79,7 @@ class DiscoveryFactory(Factory):
 
 
 def got_discovery(p, id, port):
-    p.sayHello(id, port)
+    p.say_hello(id, port)
 
 
 if __name__ == '__main__':

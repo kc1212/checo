@@ -1,32 +1,16 @@
 from twisted.internet.endpoints import TCP4ClientEndpoint, connectProtocol
 from twisted.internet.protocol import Factory
-from twisted.protocols.basic import LineOnlyReceiver
 from twisted.internet import reactor
 from twisted.internet.error import CannotListenError
-import json
 import sys
 import uuid
 import argparse
 
-from utils import byteify
 from bracha import Bracha
 from mo14 import Mo14
 from discovery import Discovery, got_discovery
 from messages import Payload, PayloadType
-
-
-class JsonReceiver(LineOnlyReceiver):
-    def lineReceived(self, line):
-        obj = byteify(json.loads(line))
-        self.json_received(obj)
-
-    def json_received(self, obj):
-        # we also expect a dict or list
-        raise NotImplementedError
-
-    def send_json(self, obj):
-        # we expect dict or list
-        self.sendLine(json.dumps(obj))
+from jsonreceiver import JsonReceiver
 
 
 class MyProto(JsonReceiver):
@@ -37,7 +21,7 @@ class MyProto(JsonReceiver):
         self.remote_id = None
         self.state = 'SERVER'
 
-    def connectionLost(self, reason):
+    def connection_lost(self, reason):
         print "deleting peer ", self.remote_id
         try:
             del self.peers[self.remote_id]
