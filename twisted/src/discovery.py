@@ -1,10 +1,7 @@
 from twisted.internet.protocol import Factory
-from twisted.protocols.basic import LineOnlyReceiver
 from twisted.internet import reactor
-import json
 import uuid
 
-from utils import byteify
 from jsonreceiver import JsonReceiver
 from messages import Payload, PayloadType
 
@@ -45,7 +42,7 @@ class Discovery(JsonReceiver):
                 self.send_json(Payload.make_discover_reply(self.nodes).to_dict())
 
             elif ty == PayloadType.coin.value:
-                pass
+                raise NotImplementedError
 
             else:
                 print "invalid payload type on SERVER", ty
@@ -58,7 +55,7 @@ class Discovery(JsonReceiver):
                 self.factory.new_connection_if_not_exist(nodes)
 
             elif ty == PayloadType.coin_reply.value:
-                pass
+                raise NotImplementedError
 
             else:
                 print "invalid payload type on CLIENT", ty

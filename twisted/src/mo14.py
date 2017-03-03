@@ -3,24 +3,42 @@ from messages import Payload
 from enum import Enum
 
 Mo14Type = Enum('Mo14Type', 'EST AUX')
-Mo14State = Enum('Mo14State', 'stopped start est1 est2 aux coin')
+Mo14State = Enum('Mo14State', 'stopped start est aux coin')
+
+_coins = """
+01111010 00101101 10001000 10101100 10001101 10011111 10001110 11011111
+10010111 01100111 00001000 10101101 11011011 10001101 01110000 01111010
+01111000 10111111 11111100 10110111 00010010 00001101 01000101 11010100
+11010111 10000000 01000000 11100010 01101011 11111111 00000001 11000110
+10111011 01100000 00000010 11001000 01111001 11001000 11011000 11001000
+01100111 11011001 01100101 00100110 11001000 01001110 10000000 10100101
+00000011 01010010 01000001 10000100 11110000 10010011 00101111 11100100
+01010000 01011101 01010000 11000000 10010010 10100100 01110101 00110001
+10100101 00001010 10001001 00101011 10111010 00100000 00101001 10001000
+11101000 00111011 00101110 01101100 11110011 01101010 01000111 11101110
+01100110 00101111 01111100 00011101 01111101 01010000 10000111 00000101
+10110100 00010000 11100001 11111110 00101110 01111101 00101100 01110101
+10000010 00101001 00101001 01001110 """
+
+# we cheat the common coin...
+coins = [int(x) for x in "".join(_coins.split())]
 
 
 class Mo14:
     def __init__(self, factory):
         self.factory = factory
         self.table = [{}, {}]
+        # TODO make these into dict
         self.est_values = []  # indexed by r, every item is a tuple of sets for 0 and 1, the set contain uuid
         self.aux_values = []  # indexed by r
         self.broadcasted = []  # indexed by r
         self.bin_values = []  # indexed by r, items are binary set()
         self.r = 0
         self.est = -1
-        self.state = Mo14State.stopped
+        self.state = Mo14State.start
         # TODO do the initial broadcast
 
     def start(self, v):
-        assert self.state == Mo14State.stopped  # TODO ?
         assert v in (0, 1)
 
         self.r += 1
@@ -28,51 +46,10 @@ class Mo14:
         self.state = Mo14.start
         print "initial message broadcasted", v
 
-    def store_est(self, r, v, uuid):
-        pass
-
-    def store_aux(self, r, v, uuid):
-        pass
-
-    def handle_bv(self, msg, uuid):
-        """
-        Msg {
-            ty: u32,
-            r: u32,
-            v: u32, // binary
-        }
-        :param msg:
-        :param uuid:
-        :return:
-        """
-        print "received", msg, "from", uuid
-
-        t = self.factory.config.t
-
-        assert(msg["ty"] == Mo14Type.EST.value)
-        v = msg["v"]
-        assert v in (0, 1)
-
-        self.table[v][uuid] = True
-
-        if len(self.table[v]) >= t + 1 and not self.broadcasted:
-            print "relaying", v
-            self.bcast_est(v)
-            self.broadcasted = True
-
-        if len(self.table[v]) >= 2 * t + 1:
-            self.bin_values.add(v)
-            print "delivering", v
-
-            if len(self.bin_values) == 2:
-                print "found two...", self.bin_values
-
     def store_msg(self, msg, uuid):
         ty = msg['ty']
         v = msg['v']
         r = msg['r']
-        t = self.factory.config.t
-        n = self.factory.config.n
 
         if ty == Mo14Type.EST.value:
             try:
@@ -102,6 +79,11 @@ class Mo14:
         :return:
         """
         # store the message
+
+        if self.state == Mo14State.stopped:
+            print "not processing due to stopped state"
+            return
+
         ty = msg['ty']
         v = msg['v']
         r = msg['r']
@@ -109,26 +91,27 @@ class Mo14:
         n = self.factory.config.n
 
         self.store_msg(msg, uuid)
-        assert r == self.r
+        if r != self.r:
+            print "not processing because r != self.r", r, self.r
+            return
 
-        # the state machine, the first broadcast is performed in self.start
-        if self.state == Mo14State.start:
-            if ty == Mo14Type.AUX.value:
-                return
+        def update_bin_values():
             if len(self.est_values[self.r][v]) >= t + 1 and not self.broadcasted[self.r]:
                 print "relaying v", v
                 self.bcast_est(v)
                 self.broadcasted[self.r] = True
-                self.state = Mo14State.est1
 
-        # TODO we need to redo this condition, need to run it more than once for a round
-        if self.state == Mo14State.est1:
             if (self.est_values[self.r][v]) >= 2 * t + 1:
                 self.bin_values[self.r].add(v)
-                self.state = Mo14State.est2
+                return True
+            return False
 
-        # we should have something in self.bin_values
-        if self.state == Mo14State.est2:
+        if ty == Mo14Type.EST.value:
+            got_bin_values = update_bin_values()
+            if got_bin_values and self.state == Mo14State.start:
+                self.state = Mo14State.est
+
+        if self.state == Mo14State.est:
             w = random.choice(self.bin_values[self.r])
             print "relaying w", w
             self.bcast_aux(w)
@@ -143,7 +126,7 @@ class Mo14:
                     self.state = Mo14State.coin
 
         if self.state == Mo14State.coin:
-            s = 1 # TODO get coin
+            s = coins[self.r]
             if vals == [v]:
                 if v == s:
                     print "decided", v
@@ -152,6 +135,8 @@ class Mo14:
                     self.est = v
             else:
                 self.est = s
+
+        self.start(self.est)
 
     def bcast_aux(self, v):
         self.bcast(make_aux(self.r, v))
@@ -179,6 +164,7 @@ def get_aux_vals(aux_value):
     if one_count == 0:
         return [0], length
     return [0, 1], length
+
 
 def make_est(r, v):
     """
