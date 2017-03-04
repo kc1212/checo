@@ -1,6 +1,7 @@
 import random
 from messages import Payload
 from enum import Enum
+from collections import defaultdict
 
 Mo14Type = Enum('Mo14Type', 'EST AUX')
 Mo14State = Enum('Mo14State', 'stopped start est aux coin')
@@ -27,24 +28,30 @@ coins = [int(x) for x in "".join(_coins.split())]
 class Mo14:
     def __init__(self, factory):
         self.factory = factory
-        self.table = [{}, {}]
-        # TODO make these into dict
-        self.est_values = []  # indexed by r, every item is a tuple of sets for 0 and 1, the set contain uuid
-        self.aux_values = []  # indexed by r
-        self.broadcasted = []  # indexed by r
-        self.bin_values = []  # indexed by r, items are binary set()
         self.r = 0
         self.est = -1
         self.state = Mo14State.start
-        # TODO do the initial broadcast
+        self.est_values = {}  # key: r, val: [set(), set()], sets are uuid
+        self.aux_values = {}  # key: r, val: [set(), set()], sets are uuid
+        self.broadcasted = defaultdict(bool)  # key: r, val: boolean
+        self.bin_values = defaultdict(set)  # key: r, val: binary set()
 
     def start(self, v):
         assert v in (0, 1)
 
         self.r += 1
         self.bcast_est(v)
-        self.state = Mo14.start
+        self.state = Mo14State.start
         print "initial message broadcasted", v
+
+    def delayed_start(self, v):
+        from twisted.internet import reactor
+        assert v in (0, 1)
+
+        self.r += 1
+        reactor.callLater(5, self.bcast_est, v)
+        self.state = Mo14State.start
+        print "delayed message broadcasted", v
 
     def store_msg(self, msg, uuid):
         ty = msg['ty']
@@ -52,20 +59,14 @@ class Mo14:
         r = msg['r']
 
         if ty == Mo14Type.EST.value:
-            try:
-                self.est_values[r][v].add(uuid)
-            except ValueError:
-                self.est_values.append([set(), set()])
-                self.est_values[r][v].add(uuid)
-                # we shouldn't be more than 1 round behind
+            if r not in self.est_values:
+                self.est_values[r] = [set(), set()]
+            self.est_values[r][v].add(uuid)
 
         elif ty == Mo14Type.AUX.value:
-            try:
-                self.aux_values[r][v].add(uuid)
-            except ValueError:
-                self.aux_values.append([set(), set()])
-                self.aux_values[r][v].add(uuid)
-                # we shouldn't be more than 1 round behind
+            if r not in self.aux_values:
+                self.aux_values[r] = [set(), set()]
+            self.aux_values[r][v].add(uuid)
 
     def handle(self, msg, uuid):
         """
@@ -91,6 +92,7 @@ class Mo14:
         n = self.factory.config.n
 
         self.store_msg(msg, uuid)
+        print "stored msg", msg, uuid
         if r != self.r:
             print "not processing because r != self.r", r, self.r
             return
@@ -101,69 +103,83 @@ class Mo14:
                 self.bcast_est(v)
                 self.broadcasted[self.r] = True
 
-            if (self.est_values[self.r][v]) >= 2 * t + 1:
+            if len(self.est_values[self.r][v]) >= 2 * t + 1:
+                print "adding to bin_values", v
                 self.bin_values[self.r].add(v)
                 return True
             return False
 
         if ty == Mo14Type.EST.value:
+            # this condition runs every time EST is received, but the state is updated only at the start state
             got_bin_values = update_bin_values()
             if got_bin_values and self.state == Mo14State.start:
                 self.state = Mo14State.est
 
         if self.state == Mo14State.est:
-            w = random.choice(self.bin_values[self.r])
+            # broadcast aux when we have something in bin_values
+            print "reached est state"
+            w = tuple(self.bin_values[self.r])[0]
             print "relaying w", w
             self.bcast_aux(w)
             self.state = Mo14State.aux
 
         if self.state == Mo14State.aux:
+            print "reached aux state"
+            if self.r not in self.aux_values:
+                return
             vals, count = get_aux_vals(self.aux_values[self.r])
             if count >= n - t:
-                if len(vals) == 0 and vals[0] in self.bin_values[self.r]:
+                if len(vals) == 1 and tuple(vals)[0] in self.bin_values[self.r]:
                     self.state = Mo14State.coin
                 elif len(vals) == 2 and len(self.bin_values[self.r]) == 2:
                     self.state = Mo14State.coin
 
         if self.state == Mo14State.coin:
             s = coins[self.r]
-            if vals == [v]:
+            print "reached coin state, s =", s, "v =", v
+            print "vals =? set([v])", vals, set([v])
+            if vals == set([v]):
                 if v == s:
-                    print "decided", v
+                    print "decided on", v, "so we stopped..."
                     self.state = Mo14State.stopped
+                    return
                 else:
                     self.est = v
             else:
                 self.est = s
 
-        self.start(self.est)
+            # start again after round completion
+            self.start(self.est)
 
     def bcast_aux(self, v):
+        assert v in (0, 1)
+        print "broadcast aux:", v
         self.bcast(make_aux(self.r, v))
 
     def bcast_est(self, v):
+        assert v in (0, 1)
+        print "broadcast est:", v
         self.bcast(make_est(self.r, v))
 
     def bcast(self, msg):
-        print "broadcast:", msg['payload']
         self.factory.bcast(msg)
 
 
 def get_aux_vals(aux_value):
     """
 
-    :param aux_value:
-    :return: (vals, number of aux)
+    :param aux_value: [set(), set()], the sets are of uuid
+    :return: (vals, tally of vals)
     """
     zero_count = len(aux_value[0])
     one_count = len(aux_value[1])
     length = zero_count + one_count
 
     if zero_count == 0:
-        return [1], length
+        return set([1]), length
     if one_count == 0:
-        return [0], length
-    return [0, 1], length
+        return set([0]), length
+    return set([0, 1]), length
 
 
 def make_est(r, v):

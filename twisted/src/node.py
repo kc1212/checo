@@ -153,9 +153,10 @@ if __name__ == '__main__':
     parser.add_argument('port', type=int, help='the listener port')
     parser.add_argument('n', type=int, help='the total number of promoters')
     parser.add_argument('t', type=int, help='the total number of malicious nodes')
-    parser.add_argument('--test', choices=['dummy', 'bracha', 'bv_bcast'],
-                        help='this is for testing, choose which algorithm to initialise, '
-                             'empty selection runs a purely reactive node')
+    parser.add_argument('--test', choices=['dummy', 'bracha', 'mo14'],
+                        help='[for testing] choose an algorithm to initialise')
+    parser.add_argument('--value', choices=[0, 1], default=1,
+                        help='[for testing] the initial input for byzantine agreement')
     args = parser.parse_args()
 
     config = Config(args.n, args.t, args.port)
@@ -182,8 +183,8 @@ if __name__ == '__main__':
         reactor.callLater(5, f.bcast, Payload.make_dummy("z").to_dict())
     elif args.test == 'bracha':
         reactor.callLater(5, f.bracha.bcast_init)
-    elif args.test == 'bv_bcast':
-        reactor.callLater(5, f.mo14.start, 1)
+    elif args.test == 'mo14':
+        reactor.callLater(1, f.mo14.delayed_start, args.value)
         pass
 
     reactor.run()
