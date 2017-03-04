@@ -149,6 +149,7 @@ class Mo14:
                 self.est = s
 
             # start again after round completion
+            print "starting again, est =", self.est
             self.start(self.est)
 
     def bcast_aux(self, v):

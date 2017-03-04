@@ -155,7 +155,7 @@ if __name__ == '__main__':
     parser.add_argument('t', type=int, help='the total number of malicious nodes')
     parser.add_argument('--test', choices=['dummy', 'bracha', 'mo14'],
                         help='[for testing] choose an algorithm to initialise')
-    parser.add_argument('--value', choices=[0, 1], default=1,
+    parser.add_argument('--value', choices=['0', '1'], default='1',
                         help='[for testing] the initial input for byzantine agreement')
     args = parser.parse_args()
 
@@ -184,7 +184,7 @@ if __name__ == '__main__':
     elif args.test == 'bracha':
         reactor.callLater(5, f.bracha.bcast_init)
     elif args.test == 'mo14':
-        reactor.callLater(1, f.mo14.delayed_start, args.value)
+        reactor.callLater(1, f.mo14.delayed_start, int(args.value))
         pass
 
     reactor.run()
