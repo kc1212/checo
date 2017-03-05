@@ -126,13 +126,34 @@ class Mo14:
         if self.state == Mo14State.aux:
             print "reached aux state"
             if self.r not in self.aux_values:
+                print "self.r not in self.aux_values", self.r, self.aux_values
                 return
-            vals, count = get_aux_vals(self.aux_values[self.r])
-            if count >= n - t:
-                if len(vals) == 1 and tuple(vals)[0] in self.bin_values[self.r]:
-                    self.state = Mo14State.coin
-                elif len(vals) == 2 and len(self.bin_values[self.r]) == 2:
-                    self.state = Mo14State.coin
+
+            def get_aux_vals(aux_value):
+                """
+
+                :param aux_value: [set(), set()], the sets are of uuid
+                :return: (vals, tally of vals)
+                """
+                if len(self.bin_values[self.r]) == 1:
+                    x = tuple(self.bin_values[self.r])[0]
+                    if len(aux_value[x]) >= n - t:
+                        return set([x])
+                elif len(self.bin_values[self.r]) == 2:
+                    if len(aux_value[0].union(aux_value[1])) >= n - t:
+                        return set([0, 1])
+                    elif len(aux_value[0]) >= n - t:
+                        return set([0])
+                    elif len(aux_value[1]) >= n - t:
+                        return set([1])
+                    else:
+                        print "impossible condition in get_aux_vals"
+                        raise AssertionError
+                return None
+
+            vals = get_aux_vals(self.aux_values[self.r])
+            if vals:
+                self.state = Mo14State.coin
 
         if self.state == Mo14State.coin:
             s = coins[self.r]
@@ -140,7 +161,7 @@ class Mo14:
             print "vals =? set([v])", vals, set([v])
             if vals == set([v]):
                 if v == s:
-                    print "decided on", v, "so we stopped..."
+                    print "DECIDED ON", v, "so we stopped..."
                     self.state = Mo14State.stopped
                     return
                 else:
@@ -153,34 +174,21 @@ class Mo14:
             self.start(self.est)
 
     def bcast_aux(self, v):
+        if self.factory.config.byzantine:
+            v = random.choice([0, 1])
         assert v in (0, 1)
-        print "broadcast aux:", v
+        print "broadcast aux:", v, self.r
         self.bcast(make_aux(self.r, v))
 
     def bcast_est(self, v):
+        if self.factory.config.byzantine:
+            v = random.choice([0, 1])
         assert v in (0, 1)
-        print "broadcast est:", v
+        print "broadcast est:", v, self.r
         self.bcast(make_est(self.r, v))
 
     def bcast(self, msg):
         self.factory.bcast(msg)
-
-
-def get_aux_vals(aux_value):
-    """
-
-    :param aux_value: [set(), set()], the sets are of uuid
-    :return: (vals, tally of vals)
-    """
-    zero_count = len(aux_value[0])
-    one_count = len(aux_value[1])
-    length = zero_count + one_count
-
-    if zero_count == 0:
-        return set([1]), length
-    if one_count == 0:
-        return set([0]), length
-    return set([0, 1]), length
 
 
 def make_est(r, v):

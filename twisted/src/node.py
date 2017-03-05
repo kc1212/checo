@@ -137,11 +137,15 @@ def got_protocol(p):
 
 # singleton
 class Config:
-    def __init__(self, n, t, port):
+    def __init__(self, n, t, port, byzantine):
         self.n = n
         self.t = t
         self.id = uuid.uuid4()
         self.port = port
+        if byzantine:
+            self.byzantine = True
+        else:
+            self.byzantine = False
 
 
 def error_back(failure):
@@ -156,10 +160,12 @@ if __name__ == '__main__':
     parser.add_argument('--test', choices=['dummy', 'bracha', 'mo14'],
                         help='[for testing] choose an algorithm to initialise')
     parser.add_argument('--value', choices=['0', '1'], default='1',
-                        help='[for testing] the initial input for byzantine agreement')
+                        help='[for testing] the initial input for BA')
+    parser.add_argument('--byzantine', action="store_true",
+                        help='[for testing] whether the node is Byzantine')
     args = parser.parse_args()
 
-    config = Config(args.n, args.t, args.port)
+    config = Config(args.n, args.t, args.port, args.byzantine)
     f = MyFactory(config)
 
     try:
