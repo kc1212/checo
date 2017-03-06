@@ -82,6 +82,8 @@ class Mo14:
         """
         # store the message
 
+        # TODO is there a way to start a new round of the algorithm implicitly?
+
         if self.state == Mo14State.stopped:
             print "Mo14: not processing due to stopped state"
             return None

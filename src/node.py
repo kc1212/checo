@@ -48,18 +48,25 @@ class MyProto(JsonReceiver):
             self.handle_pong(payload.payload)
 
         elif ty == PayloadType.bracha.value:
+            if self.factory.config.silent:
+                return
             self.factory.bracha.handle(payload.payload)
 
         elif ty == PayloadType.mo14.value:
+            if self.factory.config.silent:
+                return
             self.factory.mo14.handle(payload.payload, self.remote_id)
 
         elif ty == PayloadType.acs.value:
+            if self.factory.config.silent:
+                return
             self.factory.acs.handle(payload.payload, self.remote_id)
 
         elif ty == PayloadType.dummy.value:
             print "got dummy message from", self.remote_id
         else:
-            pass
+            print "invalid message type"
+            raise AssertionError
 
         # self.print_info()
 
@@ -142,15 +149,21 @@ def got_protocol(p):
 
 # singleton
 class Config:
-    def __init__(self, n, t, port, byzantine):
+    def __init__(self, n, t, port, byzantine, silent):
         self.n = n
         self.t = t
         self.id = uuid.uuid4()
         self.port = port
+
         if byzantine:
             self.byzantine = True
         else:
             self.byzantine = False
+
+        if silent:
+            self.silent = True
+        else:
+            self.silent = False
 
 
 def error_back(failure):
@@ -172,7 +185,7 @@ if __name__ == '__main__':
                         help='[for testing] whether the node is silent (omission)')
     args = parser.parse_args()
 
-    config = Config(args.n, args.t, args.port, args.byzantine)
+    config = Config(args.n, args.t, args.port, args.byzantine, args.silent)
     f = MyFactory(config)
 
     try:
