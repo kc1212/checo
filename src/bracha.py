@@ -8,7 +8,7 @@ MsgType = Enum('MsgType', 'init echo ready')
 
 
 class Bracha:
-    def __init__(self, factory):
+    def __init__(self, factory, acs_hdr_f=None):
         self.factory = factory
         self.step = BrachaStep.one
         self.init_count = 0
@@ -17,6 +17,7 @@ class Bracha:
         self.body = None  # TODO make sure the bodies match
         self.peers_state = {}  # TODO make sure peers do not replay messages
         self.done = False
+        self.acs_hdr_f = acs_hdr_f
         random.seed()
 
     def handle(self, msg):
@@ -27,14 +28,14 @@ class Bracha:
             ty: u32,
             body: String,
         }
-        :param msg:
-        :return:
+        :param msg: the input message to send
+        :return: the delivered message when completed, otherwise None
         """
         if self.done:
-            print "Bracha is done, doing nothing"
-            return
+            print "Bracha: done, doing nothing"
+            return None
 
-        print "received: ", msg
+        print "Bracha: received", msg
         ty = msg["ty"]
         body = msg["body"]
 
@@ -47,7 +48,7 @@ class Bracha:
         elif ty == MsgType.ready.value:
             self.ready_count += 1
         else:
-            print "bracha: unexpected msg type: ", msg["ty"]
+            print "Bracha: unexpected msg type", msg["ty"]
             raise AssertionError
 
         assert (self.init_count == 0 or self.init_count == 1)
@@ -65,16 +66,21 @@ class Bracha:
                 self.step = BrachaStep.one
                 self.init_count = 0
                 self.done = True
-                print bcolors.OKGREEN + "bracha: ACCEPT" + bcolors.ENDC, body
+                print "Bracha: ACCEPT", body
+                return body
+
+        return None
 
     def bcast_init(self, msg="some test msg!!"):
+        print "Bracha: initiating with msg", msg
         self.bcast(make_init(msg))
-        print "initiating with msg", msg
 
     def bcast_echo(self, body):
+        print "Bracha: broadcast echo", body
         self.bcast(make_echo(body))
 
     def bcast_ready(self, body):
+        print "Bracha: broadcast ready", body
         self.bcast(make_ready(body))
 
     def ok_to_send(self):
@@ -93,8 +99,11 @@ class Bracha:
         return False
 
     def bcast(self, msg):
-        print "broadcast:", msg["payload"]
-        self.factory.bcast(msg)
+        if self.acs_hdr_f is None:
+            self.factory.bcast(msg)
+        else:
+            # we don't need the extra 'payload_type' field
+            self.factory.bcast(self.acs_hdr_f(msg['payload']))
 
 
 def make_init(body):

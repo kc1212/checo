@@ -8,6 +8,7 @@ import argparse
 
 from bracha import Bracha
 from mo14 import Mo14
+from acs import ACS
 from discovery import Discovery, got_discovery
 from messages import Payload, PayloadType
 from jsonreceiver import JsonReceiver
@@ -51,6 +52,9 @@ class MyProto(JsonReceiver):
 
         elif ty == PayloadType.mo14.value:
             self.factory.mo14.handle(payload.payload, self.remote_id)
+
+        elif ty == PayloadType.acs.value:
+            self.factory.acs.handle(payload.payload, self.remote_id)
 
         elif ty == PayloadType.dummy.value:
             print "got dummy message from", self.remote_id
@@ -96,8 +100,9 @@ class MyFactory(Factory):
     def __init__(self, config):
         self.peers = {}  # key: uuid, value: (host: str, port: int, self: MyProto)
         self.config = config
-        self.bracha = Bracha(self)
-        self.mo14 = Mo14(self)
+        self.bracha = Bracha(self)  # just for testing
+        self.mo14 = Mo14(self)  # just for testing
+        self.acs = ACS(self)
 
     def buildProtocol(self, addr):
         return MyProto(self)
@@ -157,12 +162,14 @@ if __name__ == '__main__':
     parser.add_argument('port', type=int, help='the listener port')
     parser.add_argument('n', type=int, help='the total number of promoters')
     parser.add_argument('t', type=int, help='the total number of malicious nodes')
-    parser.add_argument('--test', choices=['dummy', 'bracha', 'mo14'],
+    parser.add_argument('--test', choices=['dummy', 'bracha', 'mo14', 'acs'],
                         help='[for testing] choose an algorithm to initialise')
     parser.add_argument('--value', choices=['0', '1'], default='1',
                         help='[for testing] the initial input for BA')
     parser.add_argument('--byzantine', action="store_true",
                         help='[for testing] whether the node is Byzantine')
+    parser.add_argument('--silent', action="store_true",
+                        help='[for testing] whether the node is silent (omission)')
     args = parser.parse_args()
 
     config = Config(args.n, args.t, args.port, args.byzantine)
@@ -191,6 +198,7 @@ if __name__ == '__main__':
         reactor.callLater(5, f.bracha.bcast_init)
     elif args.test == 'mo14':
         reactor.callLater(1, f.mo14.delayed_start, int(args.value))
-        pass
+    elif args.test == 'acs':
+        reactor.callLater(5, f.acs.start, config.port)  # use port number (unique on local network) as test message
 
     reactor.run()

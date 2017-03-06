@@ -1,7 +1,7 @@
 import json
 from enum import Enum
 
-PayloadType = Enum('PayloadType', 'discover discover_reply ping pong bracha mo14 coin coin_reply dummy')
+PayloadType = Enum('PayloadType', 'discover discover_reply ping pong bracha mo14 coin coin_reply acs dummy')
 
 
 class Payload:
@@ -45,6 +45,10 @@ class Payload:
     @classmethod
     def make_discover_reply(cls, payload):
         return cls(PayloadType.discover_reply.value, payload)
+
+    @classmethod
+    def make_acs(cls, payload):
+        return cls(PayloadType.acs.value, payload)
 
     @classmethod
     def from_dict(cls, d):

@@ -26,7 +26,7 @@ coins = [int(x) for x in "".join(_coins.split())]
 
 
 class Mo14:
-    def __init__(self, factory):
+    def __init__(self, factory, acs_hdr_f=None):
         self.factory = factory
         self.r = 0
         self.est = -1
@@ -35,6 +35,7 @@ class Mo14:
         self.aux_values = {}  # key: r, val: [set(), set()], sets are uuid
         self.broadcasted = defaultdict(bool)  # key: r, val: boolean
         self.bin_values = defaultdict(set)  # key: r, val: binary set()
+        self.acs_hdr_f = acs_hdr_f
 
     def start(self, v):
         assert v in (0, 1)
@@ -42,7 +43,7 @@ class Mo14:
         self.r += 1
         self.bcast_est(v)
         self.state = Mo14State.start
-        print "initial message broadcasted", v
+        print "Mo14: initial message broadcasted", v
 
     def delayed_start(self, v):
         from twisted.internet import reactor
@@ -51,9 +52,9 @@ class Mo14:
         self.r += 1
         reactor.callLater(5, self.bcast_est, v)
         self.state = Mo14State.start
-        print "delayed message broadcasted", v
+        print "Mo14: delayed message broadcasted", v
 
-    def store_msg(self, msg, uuid):
+    def store_msg(self, msg, sender_uuid):
         ty = msg['ty']
         v = msg['v']
         r = msg['r']
@@ -61,14 +62,14 @@ class Mo14:
         if ty == Mo14Type.EST.value:
             if r not in self.est_values:
                 self.est_values[r] = [set(), set()]
-            self.est_values[r][v].add(uuid)
+            self.est_values[r][v].add(sender_uuid)
 
         elif ty == Mo14Type.AUX.value:
             if r not in self.aux_values:
                 self.aux_values[r] = [set(), set()]
-            self.aux_values[r][v].add(uuid)
+            self.aux_values[r][v].add(sender_uuid)
 
-    def handle(self, msg, uuid):
+    def handle(self, msg, sender_uuid):
         """
         Msg {
             ty: u32,
@@ -76,14 +77,14 @@ class Mo14:
             v: u32, // binary
         }
         :param msg:
-        :param uuid:
+        :param sender_uuid:
         :return:
         """
         # store the message
 
         if self.state == Mo14State.stopped:
-            print "not processing due to stopped state"
-            return
+            print "Mo14: not processing due to stopped state"
+            return None
 
         ty = msg['ty']
         v = msg['v']
@@ -91,20 +92,20 @@ class Mo14:
         t = self.factory.config.t
         n = self.factory.config.n
 
-        self.store_msg(msg, uuid)
-        print "stored msg", msg, uuid
+        self.store_msg(msg, sender_uuid)
+        print "Mo14: stored msg", msg, sender_uuid
         if r != self.r:
-            print "not processing because r != self.r", r, self.r
-            return
+            print "Mo14: not processing because r != self.r", r, self.r
+            return None
 
         def update_bin_values():
             if len(self.est_values[self.r][v]) >= t + 1 and not self.broadcasted[self.r]:
-                print "relaying v", v
+                print "Mo14: relaying v", v
                 self.bcast_est(v)
                 self.broadcasted[self.r] = True
 
             if len(self.est_values[self.r][v]) >= 2 * t + 1:
-                print "adding to bin_values", v
+                print "Mo14: adding to bin_values", v
                 self.bin_values[self.r].add(v)
                 return True
             return False
@@ -117,17 +118,17 @@ class Mo14:
 
         if self.state == Mo14State.est:
             # broadcast aux when we have something in bin_values
-            print "reached est state"
+            print "Mo14: reached est state"
             w = tuple(self.bin_values[self.r])[0]
-            print "relaying w", w
+            print "Mo14: relaying w", w
             self.bcast_aux(w)
             self.state = Mo14State.aux
 
         if self.state == Mo14State.aux:
-            print "reached aux state"
+            print "Mo14: reached aux state"
             if self.r not in self.aux_values:
-                print "self.r not in self.aux_values", self.r, self.aux_values
-                return
+                print "Mo14: self.r not in self.aux_values", self.r, self.aux_values
+                return None
 
             def get_aux_vals(aux_value):
                 """
@@ -147,7 +148,7 @@ class Mo14:
                     elif len(aux_value[1]) >= n - t:
                         return set([1])
                     else:
-                        print "impossible condition in get_aux_vals"
+                        print "Mo14: impossible condition in get_aux_vals"
                         raise AssertionError
                 return None
 
@@ -157,38 +158,44 @@ class Mo14:
 
         if self.state == Mo14State.coin:
             s = coins[self.r]
-            print "reached coin state, s =", s, "v =", v
-            print "vals =? set([v])", vals, set([v])
+            print "Mo14: reached coin state, s =", s, "v =", v
+            print "Mo14: vals =? set([v])", vals, set([v])
             if vals == set([v]):
                 if v == s:
-                    print "DECIDED ON", v, "so we stopped..."
+                    print "Mo14: DECIDED ON", v, "so we stopped..."
                     self.state = Mo14State.stopped
-                    return
+                    return v
                 else:
                     self.est = v
             else:
                 self.est = s
 
             # start again after round completion
-            print "starting again, est =", self.est
+            print "Mo14: starting again, est =", self.est
             self.start(self.est)
+
+        return None
 
     def bcast_aux(self, v):
         if self.factory.config.byzantine:
             v = random.choice([0, 1])
         assert v in (0, 1)
-        print "broadcast aux:", v, self.r
+        print "Mo14: broadcast aux:", v, self.r
         self.bcast(make_aux(self.r, v))
 
     def bcast_est(self, v):
         if self.factory.config.byzantine:
             v = random.choice([0, 1])
         assert v in (0, 1)
-        print "broadcast est:", v, self.r
+        print "Mo14: broadcast est:", v, self.r
         self.bcast(make_est(self.r, v))
 
     def bcast(self, msg):
-        self.factory.bcast(msg)
+        if self.acs_hdr_f is None:
+            self.factory.bcast(msg)
+        else:
+            # we don't need the extra 'payload_type' field
+            self.factory.bcast(self.acs_hdr_f(msg['payload']))
 
 
 def make_est(r, v):
@@ -206,5 +213,6 @@ def make_aux(r, v):
 
 
 def _make_msg(ty, r, v):
+    # TODO need to include ACS header
     return Payload.make_mo14({"ty": ty, "r": r, "v": v}).to_dict()
 
