@@ -29,6 +29,7 @@ class ACS:
             def acs_hdr_f_factory(instance, ty, round):
                 def f(msg):
                     return Payload.make_acs({"instance": instance, "ty": ty, "round": round, "body": msg}).to_dict()
+
                 return f
 
             self.brachas[peer] = Bracha(self.factory, acs_hdr_f_factory(peer.urn, PayloadType.bracha.value, self.round))

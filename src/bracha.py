@@ -8,6 +8,10 @@ MsgType = Enum('MsgType', 'init echo ready')
 
 
 class Bracha:
+    """
+    Bracha broadcast '87
+    Implemented using state machine (BrachaStep)
+    """
     def __init__(self, factory, acs_hdr_f=None):
         self.factory = factory
         self.step = BrachaStep.one

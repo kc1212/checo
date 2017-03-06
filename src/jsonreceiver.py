@@ -22,5 +22,3 @@ class JsonReceiver(LineOnlyReceiver):
     def send_json(self, obj):
         # we expect dict or list
         self.sendLine(json.dumps(obj))
-
-

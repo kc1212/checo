@@ -65,6 +65,7 @@ class Payload:
     def to_dict(self):
         return self.__dict__
 
+
 if __name__ == '__main__':
     p1 = Payload(1, "asdf")
     print p1

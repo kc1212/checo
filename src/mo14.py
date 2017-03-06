@@ -26,6 +26,10 @@ coins = [int(x) for x in "".join(_coins.split())]
 
 
 class Mo14:
+    """
+    Mostefaoui et el. '14
+    Implemented using a state machine
+    """
     def __init__(self, factory, acs_hdr_f=None):
         self.factory = factory
         self.r = 0
@@ -46,6 +50,11 @@ class Mo14:
         print "Mo14: initial message broadcasted", v
 
     def delayed_start(self, v):
+        """
+        We need this because all nodes should have the same self.r before performing bcast_est
+        :param v:
+        :return:
+        """
         from twisted.internet import reactor
         assert v in (0, 1)
 
@@ -71,16 +80,17 @@ class Mo14:
 
     def handle(self, msg, sender_uuid):
         """
+        We expect messages of type:
         Msg {
             ty: u32,
             r: u32,
             v: u32, // binary
         }
-        :param msg:
-        :param sender_uuid:
+        This function moves the state machine forward when new messages are received
+        :param msg: the new messages
+        :param sender_uuid: UUID of the sender (type uuid.UUID)
         :return:
         """
-        # store the message
 
         # TODO is there a way to start a new round of the algorithm implicitly?
 
@@ -101,6 +111,10 @@ class Mo14:
             return None
 
         def update_bin_values():
+            """
+            Main logic of the BV_broadcast algorithm, should be called on every EST message regardless of state
+            :return:
+            """
             if len(self.est_values[self.r][v]) >= t + 1 and not self.broadcasted[self.r]:
                 print "Mo14: relaying v", v
                 self.bcast_est(v)
@@ -136,7 +150,7 @@ class Mo14:
                 """
 
                 :param aux_value: [set(), set()], the sets are of uuid
-                :return: (vals, tally of vals)
+                :return: accepted values_i, otherwise None
                 """
                 if len(self.bin_values[self.r]) == 1:
                     x = tuple(self.bin_values[self.r])[0]
@@ -193,6 +207,11 @@ class Mo14:
         self.bcast(make_est(self.r, v))
 
     def bcast(self, msg):
+        """
+        Broadcasts a Mo14 message, hacked to switch the normal header for an ACS header
+        :param msg:
+        :return:
+        """
         if self.acs_hdr_f is None:
             self.factory.bcast(msg)
         else:
@@ -217,4 +236,3 @@ def make_aux(r, v):
 def _make_msg(ty, r, v):
     # TODO need to include ACS header
     return Payload.make_mo14({"ty": ty, "r": r, "v": v}).to_dict()
-

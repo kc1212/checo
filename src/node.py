@@ -15,6 +15,9 @@ from jsonreceiver import JsonReceiver
 
 
 class MyProto(JsonReceiver):
+    """
+    Main protocol that handles the Byzantine consensus, one instance is created for each connection
+    """
     def __init__(self, factory):
         self.factory = factory
         self.config = factory.config
@@ -68,7 +71,7 @@ class MyProto(JsonReceiver):
             print "invalid message type"
             raise AssertionError
 
-        # self.print_info()
+            # self.print_info()
 
     def send_ping(self):
         self.send_json(Payload.make_ping((config.id.urn, config.port)).to_dict())
@@ -102,8 +105,10 @@ class MyProto(JsonReceiver):
         print "info: me: {}, remote: {}, peers: {}".format(self.config.id, self.remote_id, self.peers.keys())
 
 
-# singleton
 class MyFactory(Factory):
+    """
+    The Twisted Factory with a broadcast functionality, should be singleton
+    """
     def __init__(self, config):
         self.peers = {}  # key: uuid, value: (host: str, port: int, self: MyProto)
         self.config = config
@@ -141,14 +146,15 @@ class MyFactory(Factory):
             proto.send_json(msg)
 
 
-
-
 def got_protocol(p):
     reactor.callLater(1, p.send_ping)
 
 
-# singleton
 class Config:
+    """
+    All the static settings, used in Factory
+    Should be singleton
+    """
     def __init__(self, n, t, port, byzantine, silent):
         self.n = n
         self.t = t

@@ -8,8 +8,9 @@ from messages import Payload, PayloadType
 
 class Discovery(JsonReceiver):
     """
-    this is both a discovery server and a coin server
+    this is both a discovery server and a coin server, the latter is not implemented yet
     """
+
     def __init__(self, nodes, node_factory=None):
         self.nodes = nodes
         self.id = None
@@ -20,10 +21,10 @@ class Discovery(JsonReceiver):
     def connection_lost(self, reason):
         if self.id in self.nodes:
             del self.nodes[self.id]
-            print "deleted", self.id
+            print "Discovery: deleted", self.id
 
     def json_received(self, msg):
-        print "received", msg
+        print "Discovery: received", msg
 
         payload = Payload.from_dict(msg)
         ty = payload.payload_type
@@ -36,7 +37,7 @@ class Discovery(JsonReceiver):
 
                 # TODO check addr to be in the form host:port
                 if self.id not in self.nodes:
-                    print "added node", self.id, self.addr
+                    print "Discovery: added node", self.id, self.addr
                     self.nodes[self.id] = self.addr
 
                 self.send_json(Payload.make_discover_reply(self.nodes).to_dict())
@@ -45,26 +46,26 @@ class Discovery(JsonReceiver):
                 raise NotImplementedError
 
             else:
-                print "invalid payload type on SERVER", ty
+                print "Discovery: invalid payload type on SERVER", ty
                 raise AssertionError
 
         elif self.state == 'CLIENT':
             if ty == PayloadType.discover_reply.value:
                 nodes = payload.payload
-                print "making new clients...", nodes
+                print "Discovery: making new clients...", nodes
                 self.factory.new_connection_if_not_exist(nodes)
 
             elif ty == PayloadType.coin_reply.value:
                 raise NotImplementedError
 
             else:
-                print "invalid payload type on CLIENT", ty
+                print "Discovery: invalid payload type on CLIENT", ty
                 raise AssertionError
 
     def say_hello(self, uuid, port):
         self.state = 'CLIENT'
         self.send_json(Payload.make_discover((uuid, port)).to_dict())
-        print "discovery sent", uuid, port
+        print "Discovery: discovery sent", uuid, port
 
 
 class DiscoveryFactory(Factory):
@@ -81,5 +82,5 @@ def got_discovery(p, id, port):
 
 if __name__ == '__main__':
     reactor.listenTCP(8123, DiscoveryFactory())
-    print "discovery server running..."
+    print "Discovery server running..."
     reactor.run()
