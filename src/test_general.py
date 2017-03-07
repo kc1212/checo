@@ -85,6 +85,10 @@ def test_simple_acs():
         node.Config(12348, n, t, silent=True)
     ]
 
+    # TODO put this in the setup phase
+    if not os.path.exists(DIR):
+        os.makedirs(DIR)
+
     delete_contents_of_dir(DIR)
 
     ps = []
