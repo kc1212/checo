@@ -4,6 +4,7 @@ import os
 import time
 import node
 import json
+import pytest
 from multiprocessing import Process
 
 
@@ -32,6 +33,22 @@ def search_for_string(fname, target):
                 return line
     print "Test: did not find", target, "in file", fname
     return None
+
+
+@pytest.fixture
+def discover():
+    import discovery
+    p = Process(target=discovery.run, args=())
+    p.start()
+    yield None
+    print "Test: tear down discovery"
+    p.terminate()
+
+
+@pytest.fixture
+def folder():
+    if not os.path.exists(DIR):
+        os.makedirs(DIR)
 
 
 def check_acs_files(n, t):
@@ -75,7 +92,7 @@ def check_acs_files(n, t):
     return True
 
 
-def test_simple_acs():
+def test_simple_acs(discover, folder):
     n = 4
     t = 1
     configs = [
@@ -84,10 +101,6 @@ def test_simple_acs():
         node.Config(12347, n, t, test='acs'),
         node.Config(12348, n, t, silent=True)
     ]
-
-    # TODO put this in the setup phase
-    if not os.path.exists(DIR):
-        os.makedirs(DIR)
 
     delete_contents_of_dir(DIR)
 
