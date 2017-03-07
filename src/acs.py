@@ -108,9 +108,11 @@ class ACS:
             raise AssertionError
 
         if len(self.mo14_results) >= n:
+            import json
             # return the result if we're done, otherwise return None
             assert n == len(self.mo14_results)
             self.done = True
-            print "ACS: DONE", self.mo14_results.values(), self.bracha_results.values()
+            res = {'set': self.mo14_results.values(), 'msgs': self.bracha_results.values()}
+            print "ACS: DONE", json.dumps(res)
             return self.mo14_results
         return None
