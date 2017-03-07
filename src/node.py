@@ -36,7 +36,7 @@ class MyProto(JsonReceiver):
         """
         struct Payload {
             payload_type: u32,
-            payloada: Msg, // any type, passed directly to sub system
+            payload: Msg, // any type, passed directly to sub system
         }
         :param obj:
         :return:
@@ -74,7 +74,7 @@ class MyProto(JsonReceiver):
             # self.print_info()
 
     def send_ping(self):
-        self.send_json(Payload.make_ping((config.id.urn, config.port)).to_dict())
+        self.send_json(Payload.make_ping((self.config.id.urn, self.config.port)).to_dict())
         print "sent ping"
         self.state = 'CLIENT'
 
@@ -86,7 +86,7 @@ class MyProto(JsonReceiver):
             print "ping found myself in peers.keys"
             # self.transport.loseConnection()
         self.peers[uuid.UUID(_id)] = (self.transport.getPeer().host, _port, self)
-        self.send_json(Payload.make_pong((config.id.urn, config.port)).to_dict())
+        self.send_json(Payload.make_pong((self.config.id.urn, self.config.port)).to_dict())
         self.remote_id = uuid.UUID(_id)
         print "sent pong"
 
@@ -122,7 +122,7 @@ class MyFactory(Factory):
     def new_connection_if_not_exist(self, nodes):
         for id, addr in nodes.iteritems():
             id = uuid.UUID(id)
-            if id not in self.peers.keys() and id != config.id:
+            if id not in self.peers.keys() and id != self.config.id:
                 host, port = addr.split(":")
                 self.make_new_connection(host, int(port))
             else:
@@ -133,7 +133,7 @@ class MyFactory(Factory):
         point = TCP4ClientEndpoint(reactor, host, port)
         proto = MyProto(self)
         d = connectProtocol(point, proto)
-        d.addCallback(got_protocol).addErrback(error_back)
+        d.addCallback(got_protocol)  # .addErrback(error_back)
 
     def bcast(self, msg):
         """
@@ -155,11 +155,13 @@ class Config:
     All the static settings, used in Factory
     Should be singleton
     """
-    def __init__(self, n, t, port, byzantine, silent):
+    def __init__(self, port, n, t, test=None, value=None, byzantine=None, silent=None):
+        self.port = port
         self.n = n
         self.t = t
         self.id = uuid.uuid4()
-        self.port = port
+        self.test = test
+        self.value = value
 
         if byzantine:
             self.byzantine = True
@@ -172,8 +174,37 @@ class Config:
             self.silent = False
 
 
-def error_back(failure):
-    sys.stderr.write(str(failure))
+def run(config):
+    f = MyFactory(config)
+
+    try:
+        reactor.listenTCP(config.port, f)
+    except CannotListenError:
+        print("cannot listen on ", config.port)
+        sys.exit(1)
+
+    # connect to discovery server
+    point = TCP4ClientEndpoint(reactor, "localhost", 8123)
+    d = connectProtocol(point, Discovery({}, f))
+    d.addCallback(got_discovery, config.id.urn, config.port)  # .addErrback(error_back)
+
+    # connect to myself
+    point = TCP4ClientEndpoint(reactor, "localhost", config.port)
+    d = connectProtocol(point, MyProto(f))
+    d.addCallback(got_protocol)  # .addErrback(error_back)
+
+    # optionally run tests, args.test == None implies reactive node
+    if not config.silent:
+        if config.test == 'dummy':
+            reactor.callLater(5, f.bcast, Payload.make_dummy("z").to_dict())
+        elif config.test == 'bracha':
+            reactor.callLater(5, f.bracha.bcast_init)
+        elif config.test == 'mo14':
+            reactor.callLater(1, f.mo14.delayed_start, int(config.value))
+        elif config.test == 'acs':
+            reactor.callLater(5, f.acs.start, config.port)  # use port number (unique on local network) as test message
+
+    reactor.run()
 
 
 if __name__ == '__main__':
@@ -191,33 +222,4 @@ if __name__ == '__main__':
                         help='[for testing] whether the node is silent (omission)')
     args = parser.parse_args()
 
-    config = Config(args.n, args.t, args.port, args.byzantine, args.silent)
-    f = MyFactory(config)
-
-    try:
-        reactor.listenTCP(config.port, f)
-    except CannotListenError:
-        print("cannot listen on ", config.port)
-        sys.exit(1)
-
-    # connect to discovery server
-    point = TCP4ClientEndpoint(reactor, "localhost", 8123)
-    d = connectProtocol(point, Discovery({}, f))
-    d.addCallback(got_discovery, config.id.urn, config.port).addErrback(error_back)
-
-    # connect to myself
-    point = TCP4ClientEndpoint(reactor, "localhost", config.port)
-    d = connectProtocol(point, MyProto(f))
-    d.addCallback(got_protocol).addErrback(error_back)
-
-    # optionally run tests, args.test == None implies reactive node
-    if args.test == 'dummy':
-        reactor.callLater(5, f.bcast, Payload.make_dummy("z").to_dict())
-    elif args.test == 'bracha':
-        reactor.callLater(5, f.bracha.bcast_init)
-    elif args.test == 'mo14':
-        reactor.callLater(1, f.mo14.delayed_start, int(args.value))
-    elif args.test == 'acs':
-        reactor.callLater(5, f.acs.start, config.port)  # use port number (unique on local network) as test message
-
-    reactor.run()
+    run(Config(args.port, args.n, args.t, args.test, args.value, args.byzantine, args.silent))
