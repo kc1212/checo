@@ -194,15 +194,14 @@ def run(config):
     d.addCallback(got_protocol)  # .addErrback(error_back)
 
     # optionally run tests, args.test == None implies reactive node
-    if not config.silent:
-        if config.test == 'dummy':
-            reactor.callLater(5, f.bcast, Payload.make_dummy("z").to_dict())
-        elif config.test == 'bracha':
-            reactor.callLater(5, f.bracha.bcast_init)
-        elif config.test == 'mo14':
-            reactor.callLater(1, f.mo14.delayed_start, int(config.value))
-        elif config.test == 'acs':
-            reactor.callLater(5, f.acs.start, config.port)  # use port number (unique on local network) as test message
+    if config.test == 'dummy':
+        reactor.callLater(5, f.bcast, Payload.make_dummy("z").to_dict())
+    elif config.test == 'bracha':
+        reactor.callLater(5, f.bracha.bcast_init)
+    elif config.test == 'mo14':
+        reactor.callLater(1, f.mo14.delayed_start, int(config.value))
+    elif config.test == 'acs':
+        reactor.callLater(5, f.acs.start, config.port)  # use port number (unique on local network) as test message
 
     reactor.run()
 
