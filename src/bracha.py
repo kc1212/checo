@@ -69,7 +69,7 @@ class Bracha:
                 self.step = BrachaStep.one
                 self.init_count = 0
                 self.done = True
-                print "Bracha: ACCEPT", body
+                print "Bracha: DELIVER", body
                 return body
 
         return None
