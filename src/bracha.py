@@ -1,6 +1,5 @@
 from enum import Enum
 from messages import Payload
-from utils import bcolors
 import random
 
 BrachaStep = Enum('BrachaStep', 'one two three')
