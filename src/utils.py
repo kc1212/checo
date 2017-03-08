@@ -1,3 +1,6 @@
+import json
+
+
 def byteify(inp):
     """
     Recursively encode an object from unicode into UTF-8, any object that is not of instance unicode is ignored.
@@ -23,3 +26,11 @@ class bcolors:
     ENDC = '\033[0m'
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
+
+
+class JsonSerialisable:
+    def __init__(self):
+        pass
+
+    def to_json(self):
+        return json.dumps(self, default=lambda o: o.__dict__)
