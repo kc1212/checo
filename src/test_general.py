@@ -2,13 +2,15 @@
 import sys
 import os
 import time
-import node
+import subprocess
 import json
 import pytest
-from multiprocessing import Process
+
+import node
 
 
 DIR = 'logs/'
+NODE_CMD_PREFIX = ['python2', '-u', 'src/node.py']  # -u forces stdin/stdout/stderr to be unbuffered
 
 
 def wrap_stdout(config):
@@ -46,21 +48,21 @@ def search_for_string_in_dir(folder, target, f=lambda x: x):
     return res
 
 
-def run_with_cfgs(cfgs):
+def run_subprocesses(prefix, cmds, outfs):
+    assert len(cmds) == len(outfs)
     ps = []
-    for cfg in cfgs:
-        print "running", cfg.port
-        p = Process(target=wrap_stdout, args=(cfg,))
-        p.start()
-        ps.append(p)
+    for cmd, outf in zip(cmds, outfs):
+        print "Test: running subprocess", prefix + cmd
+        with open(DIR + outf, 'wb') as fd:
+            p = subprocess.Popen(prefix + cmd, stdout=fd)
+            ps.append(p)
     return ps
 
 
 @pytest.fixture
 def discover():
-    import discovery
-    p = Process(target=discovery.run, args=())
-    p.start()
+    p = subprocess.Popen(['python2', 'src/discovery.py'])
+    time.sleep(1)  # wait for it to spin up
     yield None
     print "Test: tear down discovery"
     p.terminate()
@@ -136,14 +138,16 @@ def test_acs(n, t, discover, folder):
     for i in range(t):
         configs.append(node.Config(11111 + i, n, t, silent=True))
 
-    ps = run_with_cfgs(configs)
+    ps = run_subprocesses(NODE_CMD_PREFIX,
+                          [cfg.make_args() for cfg in configs],
+                          [str(cfg.port) + '.out' for cfg in configs])
 
     time.sleep(30)
     for p in ps:
         p.terminate()
 
     # TODO not sure where to flush, so use sleep for now...
-    time.sleep(5)
+    time.sleep(1)
     print "Test: ACS nodes terminated"
     assert check_acs_files(n, t)
     print "Test: ACS test passed"
@@ -154,22 +158,23 @@ def test_acs(n, t, discover, folder):
     (7, 2),
 ])
 def test_bracha(n, t, discover, folder):
-    configs = []
-    configs.append(node.Config(12345, n, t, test='bracha'))
+    configs = [node.Config(12345, n, t, test='bracha')]
     for i in range(n - t - 1):
         configs.append(node.Config(12345 + 1 + i, n, t))
     for i in range(t):
         configs.append(node.Config(11111 + i, n, t, silent=True))
 
-    ps = run_with_cfgs(configs)
+    ps = run_subprocesses(NODE_CMD_PREFIX,
+                          [cfg.make_args() for cfg in configs],
+                          [str(cfg.port) + '.out' for cfg in configs])
 
     time.sleep(30)
     for p in ps:
         p.terminate()
 
-    time.sleep(5)
+    # TODO not sure where to flush, so use sleep for now...
+    time.sleep(1)
     print "Test: Bracha nodes terminated"
     assert check_bracha_files(n, t)
     print "Test: Bracha test passed"
-
 

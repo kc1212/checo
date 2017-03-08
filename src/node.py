@@ -161,17 +161,33 @@ class Config:
         self.t = t
         self.id = uuid.uuid4()
         self.test = test
-        self.value = value
 
+        self.value = value
+        if self.value is not None:
+            self.value = int(self.value)
+            assert self.value in (0, 1)
+
+        self.byzantine = False
         if byzantine:
             self.byzantine = True
-        else:
-            self.byzantine = False
 
+        self.silent = False
         if silent:
             self.silent = True
-        else:
-            self.silent = False
+
+    def make_args(self):
+        res = [str(self.port), str(self.n), str(self.t)]
+        if self.test is not None:
+            res.append('--test')
+            res.append(self.test)
+        if self.value is not None:
+            res.append('--value')
+            res.append(str(self.value))
+        if self.byzantine:
+            res.append('--byzantine')
+        if self.silent:
+            res.append('--silent')
+        return res
 
 
 def run(config):
@@ -199,7 +215,7 @@ def run(config):
     elif config.test == 'bracha':
         reactor.callLater(5, f.bracha.bcast_init)
     elif config.test == 'mo14':
-        reactor.callLater(1, f.mo14.delayed_start, int(config.value))
+        reactor.callLater(1, f.mo14.delayed_start, config.value)
     elif config.test == 'acs':
         reactor.callLater(5, f.acs.start, config.port)  # use port number (unique on local network) as test message
 
