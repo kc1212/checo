@@ -17,8 +17,15 @@ class Signature:
         self.vk = vk
         self.sig = libnacl.crypto_sign(msg, sk)
 
-    def verify(self, vk):
-        return libnacl.crypto_sign_open(self.sig, vk)
+    def verify(self, vk, msg):
+        """
+        Throws ValueError on failure
+        :return:
+        """
+        if vk != self.vk:
+            raise ValueError("Mismatch verification key")
+        if libnacl.crypto_sign_open(self.sig, self.vk) != msg:
+            raise ValueError("Mismatch message")
 
 
 class TxBlock:
