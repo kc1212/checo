@@ -178,7 +178,7 @@ class Mo14:
             print "Mo14: vals =? set([v])", vals, set([v])
             if vals == set([v]):
                 if v == s:
-                    print "Mo14: DECIDED ON", v, "so we stopped..."
+                    print "Mo14: DECIDED", v
                     self.state = Mo14State.stopped
                     return v
                 else:

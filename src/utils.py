@@ -1,4 +1,5 @@
 import json
+from collections import Counter
 
 
 def byteify(inp):
@@ -17,6 +18,20 @@ def byteify(inp):
         return inp
 
 
+def value_and_tally(xs):
+    """
+    Given a list, get the unique values and their respective tally.
+    Caller often should use the `most_common()[0]`
+    :param xs:
+    :return: Counter
+    """
+    res = Counter()
+    for x in xs:
+        res[x] += 1
+
+    return res
+
+
 class bcolors:
     HEADER = '\033[95m'
     OKBLUE = '\033[94m'
@@ -29,8 +44,5 @@ class bcolors:
 
 
 class JsonSerialisable:
-    def __init__(self):
-        pass
-
     def to_json(self):
         return json.dumps(self, default=lambda o: o.__dict__)

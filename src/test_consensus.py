@@ -7,6 +7,7 @@ import json
 import pytest
 
 import node
+from utils import value_and_tally
 
 
 DIR = 'logs/'
@@ -77,59 +78,52 @@ def folder():
 
 
 def check_acs_files(n, t):
-    """
-    assume we have a clean directory
-    :return: boolean
-    """
     target = 'ACS: DONE'
     print os.listdir(DIR)
     acs_msgs = search_for_string_in_dir(DIR, target, json.loads)
 
     # do various checks
-    if len(acs_msgs) < n - t:
-        print "Test: ACS incorrect length!", len(acs_msgs), n, t
-        return False
+    assert len(acs_msgs) >= n - t, "ACS incorrect length! len = {}, n = {}, t = {}".format(len(acs_msgs), n, t)
 
     s = acs_msgs[0]['set']
     ones = [x for x in s if x == 1]
-    if len(ones) < n - t:
-        print "Test: ACS not enough ones", s
-        return False
+    assert len(ones) >= n - t, "ACS not enough ones! s = {}".format(s)
 
     for msg in acs_msgs:
-        if s != msg['set']:
-            print "Test: ACS set mismatch!", s, msg['set']
-            return False
+        assert s == msg['set'], "Test: ACS set mismatch! s = {}, msg = {}".format(s, msg['set'])
 
     m = acs_msgs[0]['msgs']
     for msg in acs_msgs:
-        if m != msg['msgs']:
-            print "Test: ACS msgs mismatch!", m, msg['msgs']
-            return False
-
-    return True
+        assert m == msg['msgs'], "Test: ACS msgs mismatch! m = {}, msg = {}".format(m, msg['msgs'])
 
 
 def check_bracha_files(n, t):
     target = 'Bracha: DELIVER'
     bracha_msgs = search_for_string_in_dir(DIR, target)
-    if len(bracha_msgs) < n - t:
-        print "Test: Bracha incorrect length!", len(bracha_msgs), n, t
-        return False
 
-    # TODO it's more accurate to check that n - t delivered the same message rather than all
-    m = bracha_msgs[0]
-    for msg in bracha_msgs:
-        if m != msg:
-            print "Test: Bracha msgs mismatch!", m, msg
-            return False
+    assert len(bracha_msgs) >= n - t, "Bracha incorrect length! len = {}, n = {}, t = {}".format(len(bracha_msgs), n, t)
 
-    return True
+    m, tally = value_and_tally(bracha_msgs).most_common(1)[0]
+    assert tally >= n - t, "Bracha incorrect tally! tally = {}, n = {}, t = {}, m = {}".format(tally, n, t, m)
+
+
+def check_mo14_files(n, t):
+    # TODO check expected value v
+    target = 'Mo14: DECIDED'
+    mo14_msgs = search_for_string_in_dir(DIR, target)
+
+    assert len(mo14_msgs) >= n - t, "Mo14 incorrect length! len = {}, n = {}, t = {}".format(len(mo14_msgs), n, t)
+
+    vs = [int(x) for x in mo14_msgs]
+    v, tally = value_and_tally(vs).most_common(1)[0]
+
+    assert tally >= n - t, "Mo14 incorrect tally! tally = {}, n = {}, t = {}, v = {}".format(tally, n, t, v)
 
 
 @pytest.mark.parametrize("n,t", [
-    (4, 0),
-    (7, 2),
+    (4, 1),
+    # (7, 2),
+    (19, 6),
 ])
 def test_acs(n, t, discover, folder):
     configs = []
@@ -149,13 +143,14 @@ def test_acs(n, t, discover, folder):
     # TODO not sure where to flush, so use sleep for now...
     time.sleep(1)
     print "Test: ACS nodes terminated"
-    assert check_acs_files(n, t)
+    check_acs_files(n, t)
     print "Test: ACS test passed"
 
 
 @pytest.mark.parametrize("n,t", [
-    (4, 0),
-    (7, 2),
+    (4, 1),
+    # (7, 2),
+    (19, 6),
 ])
 def test_bracha(n, t, discover, folder):
     configs = [node.Config(12345, n, t, test='bracha')]
@@ -175,6 +170,32 @@ def test_bracha(n, t, discover, folder):
     # TODO not sure where to flush, so use sleep for now...
     time.sleep(1)
     print "Test: Bracha nodes terminated"
-    assert check_bracha_files(n, t)
+    check_bracha_files(n, t)
     print "Test: Bracha test passed"
+
+
+@pytest.mark.parametrize("n,t", [
+    (4, 1),
+    # (7, 2),
+    (19, 6),
+])
+def test_mo14(n, t, discover, folder):
+    configs = []
+    for i in range(n - t):
+        configs.append(node.Config(12345 + i, n, t, test='mo14'))
+    for i in range(t):
+        configs.append(node.Config(11111 + i, n, t, test='mo14', byzantine=True))
+
+    ps = run_subprocesses(NODE_CMD_PREFIX,
+                          [cfg.make_args() for cfg in configs],
+                          [str(cfg.port) + '.out' for cfg in configs])
+
+    time.sleep(30)
+    for p in ps:
+        p.terminate()
+
+    time.sleep(1)
+    print "Test: Mo14 nodes terminates"
+    check_mo14_files(n, t)
+    print "Test: Mo14 test passed"
 

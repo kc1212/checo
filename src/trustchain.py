@@ -116,6 +116,12 @@ class Cons:
         self.blocks = blocks
         self.ss = ss
 
+    def _verify(self):
+        pass
+
+    def hash(self):
+        pass
+
 
 def generate_genesis_block(vk, sk):
     prev = libnacl.crypto_hash_sha256('0')
