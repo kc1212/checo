@@ -3,6 +3,7 @@ import sys
 import os
 import time
 import subprocess
+import pickle
 import json
 import pytest
 
@@ -80,42 +81,49 @@ def folder():
 def check_acs_files(n, t):
     target = 'ACS: DONE'
     print os.listdir(DIR)
-    acs_msgs = search_for_string_in_dir(DIR, target, json.loads)
+    acs_dones = search_for_string_in_dir(DIR, target, json.loads)
 
     # do various checks
-    assert len(acs_msgs) >= n - t, "ACS incorrect length! len = {}, n = {}, t = {}".format(len(acs_msgs), n, t)
+    assert len(acs_dones) >= n - t, "ACS incorrect length! len = {}, n = {}, t = {}".format(len(acs_dones), n, t)
 
-    s = acs_msgs[0]['set']
-    ones = [x for x in s if x == 1]
-    assert len(ones) >= n - t, "ACS not enough ones! s = {}".format(s)
+    # first find the agreed set and check there's majority
+    # NOTE: dictionary are unhashable, so we cheat and use pickle to convert it to a string, and then reload it
+    s, tally_s = value_and_tally([pickle.dumps(x['set']) for x in acs_dones])
+    assert tally_s >= n - t
+    s = pickle.loads(s)
 
-    for msg in acs_msgs:
-        assert s == msg['set'], "Test: ACS set mismatch! s = {}, msg = {}".format(s, msg['set'])
+    # filter the messages that is not in the agreed set
+    key_of_ones = [k for k, v in s.iteritems() if v == 1]
+    print key_of_ones
+    assert len(key_of_ones) >= n - t
 
-    m = acs_msgs[0]['msgs']
-    for msg in acs_msgs:
-        assert m == msg['msgs'], "Test: ACS msgs mismatch! m = {}, msg = {}".format(m, msg['msgs'])
+    # NOTE: we use the same trick with pickle
+    _msgs, tally_msgs = value_and_tally([pickle.dumps(x['msgs']) for x in acs_dones])
+    msgs = {k: pickle.loads(_msgs)[k] for k in key_of_ones}
+
+    # check that we have enough messages
+    assert len(msgs) >= n - t
 
 
 def check_bracha_files(n, t):
     target = 'Bracha: DELIVER'
-    bracha_msgs = search_for_string_in_dir(DIR, target)
+    bracha_delivers = search_for_string_in_dir(DIR, target)
 
-    assert len(bracha_msgs) >= n - t, "Bracha incorrect length! len = {}, n = {}, t = {}".format(len(bracha_msgs), n, t)
+    assert len(bracha_delivers) >= n - t, "Bracha incorrect length! len = {}, n = {}, t = {}".format(len(bracha_delivers), n, t)
 
-    m, tally = value_and_tally(bracha_msgs).most_common(1)[0]
+    m, tally = value_and_tally(bracha_delivers)
     assert tally >= n - t, "Bracha incorrect tally! tally = {}, n = {}, t = {}, m = {}".format(tally, n, t, m)
 
 
 def check_mo14_files(n, t):
     # TODO check expected value v
     target = 'Mo14: DECIDED'
-    mo14_msgs = search_for_string_in_dir(DIR, target)
+    mo14_decides = search_for_string_in_dir(DIR, target)
 
-    assert len(mo14_msgs) >= n - t, "Mo14 incorrect length! len = {}, n = {}, t = {}".format(len(mo14_msgs), n, t)
+    assert len(mo14_decides) >= n - t, "Mo14 incorrect length! len = {}, n = {}, t = {}".format(len(mo14_decides), n, t)
 
-    vs = [int(x) for x in mo14_msgs]
-    v, tally = value_and_tally(vs).most_common(1)[0]
+    vs = [int(x) for x in mo14_decides]
+    v, tally = value_and_tally(vs)
 
     assert tally >= n - t, "Mo14 incorrect tally! tally = {}, n = {}, t = {}, v = {}".format(tally, n, t, v)
 
@@ -194,8 +202,11 @@ def test_mo14(n, t, discover, folder):
     for p in ps:
         p.terminate()
 
+    # TODO not sure where to flush, so use sleep for now...
     time.sleep(1)
     print "Test: Mo14 nodes terminates"
     check_mo14_files(n, t)
     print "Test: Mo14 test passed"
 
+if __name__ == '__main__':
+    check_acs_files(4, 1)

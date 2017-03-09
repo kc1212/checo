@@ -112,7 +112,11 @@ class ACS:
             # return the result if we're done, otherwise return None
             assert n == len(self.mo14_results)
             self.done = True
-            res = {'set': self.mo14_results.values(), 'msgs': self.bracha_results.values()}
-            print "ACS: DONE", json.dumps(res)
+            print "ACS: DONE", json.dumps(self.get_results())
             return self.mo14_results
         return None
+
+    def get_results(self):
+        res = {'set': {k.urn: v for k, v in self.mo14_results.iteritems()},
+               'msgs': {k.urn: v for k, v in self.bracha_results.iteritems()}}
+        return res

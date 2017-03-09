@@ -21,7 +21,6 @@ def byteify(inp):
 def value_and_tally(xs):
     """
     Given a list, get the unique values and their respective tally.
-    Caller often should use the `most_common()[0]`
     :param xs:
     :return: Counter
     """
@@ -29,7 +28,7 @@ def value_and_tally(xs):
     for x in xs:
         res[x] += 1
 
-    return res
+    return res.most_common(1)[0]
 
 
 class bcolors:
