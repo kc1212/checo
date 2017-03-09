@@ -3,6 +3,12 @@ python:
   - "2.7"
 before_install:
   - sudo apt-get -qq update
-  - sudo apt-get install -y libsodium-dev
+  - sudo apt-get install -y gnupg
+  - wget https://download.libsodium.org/libsodium/releases/libsodium-1.0.11.tar.gz
+  - wget https://download.libsodium.org/libsodium/releases/libsodium-1.0.11.tar.gz.sig
+  - gpg --import libsodium.asc
+  - gpg --verify libsodium-1.0.11.tar.gz.sig libsodium-1.0.11.tar.gz
+  - tar -xzvf libsodium-1.0.11.tar.gz
+  - pushd libsodium-1.0.11 && ./configure && make && make check && sudo make install && popd
 install: "pip install -r requirements.txt"
 script: pytest -s
