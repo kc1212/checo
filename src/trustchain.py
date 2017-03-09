@@ -1,7 +1,7 @@
 import libnacl
+import pickle  # not the best since it's insecure, but we can't easily use json because it doesn't work with binary
 
 from enum import Enum
-from utils import JsonSerialisable
 
 ValidityState = Enum('ValidityState', 'Valid Invalid Unknown')
 
@@ -14,8 +14,8 @@ class Signature:
     }
     """
     def __init__(self, vk, sk, msg):
-        self.vk = vk
-        self.sig = libnacl.crypto_sign(msg, sk)
+        self.vk = vk  # this is also the identity
+        self.sig = libnacl.crypto_sign(msg, sk)  # self.sig contains the original message
 
     def verify(self, vk, msg):
         """
@@ -27,9 +27,18 @@ class Signature:
         if libnacl.crypto_sign_open(self.sig, self.vk) != msg:
             raise ValueError("Mismatch message")
 
+    def dumps(self):
+        return pickle.dumps(self)
+
 
 class TxBlock:
     """
+    In the network, TxBlock needs to be created using 3 way handshake.
+    1, s -> r: prev, h_s, m
+    2, s <- r: prev, h_r, s_r // s seals block
+    3, s -> r: s_s // r seals block
+    I'm always the sender, regardless of who initialised the handshake.
+    This protocol is not Byzantine fault tolerant, ongoing work for "double signature"
     struct TxBlock {
         prev: Digest,
         h_s: u64,
@@ -42,12 +51,15 @@ class TxBlock:
         validity: Valid | Invalid | Unknown
     }
     """
-    class Inner(JsonSerialisable):
+    class Inner:
         def __init__(self, prev, h_s, h_r, m):
             self.prev = prev
             self.h_s = h_s
             self.h_r = h_r
             self.m = m
+
+        def dumps(self):
+            return pickle.dumps(self)
 
     def __init__(self, prev, h_s, h_r, m):
         self.inner = self.Inner(prev, h_s, h_r, m)
@@ -55,23 +67,54 @@ class TxBlock:
         self.s_r = None
         self.validity = ValidityState.Unknown
 
-    def sign(self, vk, sk, s_r):
+    def sign(self, vk, sk):
         """
-        Expect to have obtained s_r from the receiver
+        Note that this does not populate the signature field
         :param vk:
         :param sk:
+        :return:
+        """
+        return Signature(vk, sk, self.inner.dumps())
+
+    def seal(self, vk_s, s_s, vk_r, s_r, prev_r):
+        """
+        Expect to have obtained s_r from the receiver
+        :param vk_s:
+        :param s_s:
+        :param vk_r: receiver verification key
         :param s_r:
+        :param prev_r:
         :return:
         """
         assert self.s_s is None
         assert self.s_r is None
-        # TODO verify s_r
+
+        s_r.verify(vk_r, self.make_pair(prev_r).inner.dumps())
         self.s_r = s_r
-        self.s_s = Signature(vk, sk, self.inner.to_json())
+
+        s_s.verify(vk_s, self.inner.dumps())
+        self.s_s = s_s
+
+        return self
+
+    def make_pair(self, prev):
+        """
+        Note we reverse h_s and h_r
+        :param prev:
+        :return: a TxBlock without signatures
+        """
+        return TxBlock(prev=prev, h_s=self.inner.h_r, h_r=self.inner.h_s, m=self.inner.m)
+
+    def hash(self):
+        msg = self.inner.dumps() + self.s_s.dumps() + self.s_r.dumps()
+        return libnacl.crypto_hash_sha256(msg)
 
 
 class CpBlock:
     """
+    1, node receives some consensus result
+    2, node receives some signatures
+    3, generate the cp block
     struct CpBlock {
         prev: Digest,
         round: u64, // of the Cons
@@ -80,27 +123,31 @@ class CpBlock:
         s: Signature,
     }
     """
-    class Inner(JsonSerialisable):
-        def __init__(self, prev, round, con, p):
+    class Inner:
+        def __init__(self, prev, cons, ss, p):
             self.prev = prev
-            self.round = round
-            self.con = con
+            self.round = cons.round
+            self.con = cons
+            self.ss = ss
             self.p = p
 
-    def __init__(self, prev, round, con, p):
-        self.inner = self.Inner(prev, round, con, p)
-        self.s = None
+        def dumps(self):
+            return pickle.dumps(self)
 
-    def sign(self, vk, sk):
-        """
-        We expect this function to be called immediately after __init__, when self.s is still None
-        :param vk:
-        :param sk:
-        :return:
-        """
-        assert self.s is None
-        self.s = Signature(vk, sk, self.inner.to_json())
-        return self
+    def __init__(self, prev, cons, ss, p, vk, sk, vks):
+        self.inner = self.Inner(prev, cons, ss, p)
+
+        if cons.round != -1 or len(ss) != 0 or len(vks) != 0:
+            # TODO verify must succeed t + 1 times
+            # TODO needs testing
+            for _s, _b, _vk in zip(ss, self.inner.con.blocks, vks):
+                _s.verify(_vk, _b.inner.dumps())
+
+        self.s = Signature(vk, sk, self.inner.dumps())
+
+    def hash(self):
+        msg = self.inner.dumps() + self.s.dumps()
+        return libnacl.crypto_hash_sha256(msg)
 
 
 class Cons:
@@ -108,24 +155,22 @@ class Cons:
     struct Cons {
         round: u64,
         blocks: List<CpBlock>,
-        ss: List<Signature>,
     }
     """
-    def __init__(self, round, blocks, ss):
+    def __init__(self, round, blocks):
         self.round = round
         self.blocks = blocks
-        self.ss = ss
 
-    def _verify(self):
-        pass
+    def dumps(self):
+        return pickle.dumps(self)
 
     def hash(self):
-        pass
+        return libnacl.crypto_hash_sha256(self.dumps())
 
 
 def generate_genesis_block(vk, sk):
     prev = libnacl.crypto_hash_sha256('0')
-    return CpBlock(prev, -1, None, 0).sign(vk, sk)
+    return CpBlock(prev, Cons(-1, None), [], 0, vk, sk, [])
 
 
 class Chain:
@@ -154,8 +199,9 @@ class TrustChain:
     Node maintains one TrustChain object and interacts with it either in in the reactor process or some other process.
     If it's the latter, there needs to be some communication mechanism.
 
-    type System = Map<Node, Chain>;
+    We assume there's a keyserver, so public keys (vk) of all nodes are available to us.
 
+    type System = Map<Node, Chain>;
     """
 
     def __init__(self):
