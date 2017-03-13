@@ -1,4 +1,5 @@
 import pytest
+import math
 from trustchain import *
 
 
@@ -56,9 +57,46 @@ def test_txblock():
     r_block.seal(vk_r, s_r, vk_s, s_s, s_prev.hash())
 
 
-def test_cpblock():
+@pytest.mark.parametrize("n,x", [
+    (4, 1),
+    (4, 2),
+    (4, 4),
+    (19, 6),
+    (19, 7),
+    (19, 19),
+])
+def test_cpblock(n, x):
     """
     locally simulate the delivery of cpblock and corresponding signatures
     :return:
     """
-    pass
+    vks = []
+    sks = []
+    blocks = []
+    for _ in range(n):
+        _, vk, sk = sigs()
+        vks.append(vk)
+        sks.append(sk)
+        blocks.append(generate_genesis_block(vk, sk))
+
+    # we have n blocks that has reached consensus
+    cons = Cons(1, blocks)
+
+    # x of the promoters signed those blocks
+    ss = []
+    for i, vk, sk in zip(range(x), vks, sks):
+        s = Signature(vk, sk, cons.hash())
+        ss.append(s)
+
+    # try creating the new checkpoint block
+    _, my_vk, my_sk = sigs()
+    my_genesis = generate_genesis_block(my_vk, my_sk)
+
+    t = math.floor((n - 1)/3.0)
+    if x - 1 >= t:  # number of signatures - 1 is greater than t
+        CpBlock(my_genesis.hash(), cons, ss, 1, my_vk, my_sk, vks)
+    else:
+        with pytest.raises(ValueError):
+            CpBlock(my_genesis.hash(), cons, ss, 1, my_vk, my_sk, vks)
+
+

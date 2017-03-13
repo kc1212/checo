@@ -1,3 +1,4 @@
+import math
 import libnacl
 import pickle  # not the best since it's insecure, but we can't easily use json because it doesn't work with binary
 
@@ -127,7 +128,7 @@ class CpBlock:
         def __init__(self, prev, cons, ss, p):
             self.prev = prev
             self.round = cons.round
-            self.con = cons
+            self.cons = cons
             self.ss = ss
             self.p = p
 
@@ -135,29 +136,59 @@ class CpBlock:
             return pickle.dumps(self)
 
     def __init__(self, prev, cons, ss, p, vk, sk, vks):
+        """
+
+        :param prev: hash pointer to the previous block
+        :param cons: type Cons
+        :param ss: signatures of the promoters, at least t-1 of them must be valid
+        :param p: promoter flag
+        :param vk: my verification key
+        :param sk: my secret key
+        :param vks: all verification keys of promoters
+        """
+        assert p in (0, 1)
         self.inner = self.Inner(prev, cons, ss, p)
 
         if cons.round != -1 or len(ss) != 0 or len(vks) != 0:
-            # TODO verify must succeed t + 1 times
-            # TODO needs testing
-            for _s, _b, _vk in zip(ss, self.inner.con.blocks, vks):
-                _s.verify(_vk, _b.inner.dumps())
-
+            t = math.floor((len(vks) - 1) / 3.0)
+            self._verify_signatures(ss, vks, t)
+        else:
+            # if this is executed, it means this is a genesis block
+            pass
         self.s = Signature(vk, sk, self.inner.dumps())
 
     def hash(self):
         msg = self.inner.dumps() + self.s.dumps()
         return libnacl.crypto_hash_sha256(msg)
 
+    def _verify_signatures(self, ss, vks, t):
+        oks = 0
+        _ss = [s for s in ss if s.vk in vks]  # only consider nodes that are promoters
+        for _s in _ss:
+            try:
+                _s.verify(_s.vk, self.inner.cons.hash())
+                oks += 1
+            except ValueError:
+                print "verification failed for", _s.vk
+
+        if not oks > t:
+            raise ValueError("verification failed, oks = {}, t = {}".format(oks, t))
+
 
 class Cons:
     """
+    The consensus results, data structure that the promoters agree on
     struct Cons {
         round: u64,
         blocks: List<CpBlock>,
     }
     """
     def __init__(self, round, blocks):
+        """
+
+        :param round: consensus round
+        :param blocks: list of agreed checkpoint blocks
+        """
         self.round = round
         self.blocks = blocks
 
