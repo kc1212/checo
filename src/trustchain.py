@@ -2,6 +2,7 @@ import math
 import libnacl
 import pickle  # not the best since it's insecure, but we can't easily use json because it doesn't work with binary
 
+from typing import List, Union
 from enum import Enum
 
 ValidityState = Enum('ValidityState', 'Valid Invalid Unknown')
@@ -14,11 +15,14 @@ class Signature:
         sig: [u8, x],
     }
     """
+
     def __init__(self, vk, sk, msg):
+        # type: (str, str, str) -> None
         self.vk = vk  # this is also the identity
         self.sig = libnacl.crypto_sign(msg, sk)  # self.sig contains the original message
 
     def verify(self, vk, msg):
+        # type: (str, str) -> None
         """
         Throws ValueError on failure
         :return:
@@ -29,6 +33,7 @@ class Signature:
             raise ValueError("Mismatch message")
 
     def dumps(self):
+        # type: () -> str
         return pickle.dumps(self)
 
 
@@ -52,23 +57,28 @@ class TxBlock:
         validity: Valid | Invalid | Unknown
     }
     """
+
     class Inner:
         def __init__(self, prev, h_s, h_r, m):
+            # type: (str, int, int, str) -> None
             self.prev = prev
             self.h_s = h_s
             self.h_r = h_r
             self.m = m
 
         def dumps(self):
+            # type: () -> str
             return pickle.dumps(self)
 
     def __init__(self, prev, h_s, h_r, m):
+        # type: (str, int, int, str) -> None
         self.inner = self.Inner(prev, h_s, h_r, m)
         self.s_s = None
         self.s_r = None
         self.validity = ValidityState.Unknown
 
     def sign(self, vk, sk):
+        # type: (str, str) -> Signature
         """
         Note that this does not populate the signature field
         :param vk:
@@ -78,12 +88,13 @@ class TxBlock:
         return Signature(vk, sk, self.inner.dumps())
 
     def seal(self, vk_s, s_s, vk_r, s_r, prev_r):
+        # type: (str, Signature, str, Signature, str) -> TxBlock
         """
         Expect to have obtained s_r from the receiver
         :param vk_s:
         :param s_s:
         :param vk_r: receiver verification key
-        :param s_r:
+        :param s_r: the previous digest of the receiver
         :param prev_r:
         :return:
         """
@@ -99,6 +110,7 @@ class TxBlock:
         return self
 
     def make_pair(self, prev):
+        # type: (str) -> TxBlock
         """
         Note we reverse h_s and h_r
         :param prev:
@@ -107,8 +119,17 @@ class TxBlock:
         return TxBlock(prev=prev, h_s=self.inner.h_r, h_r=self.inner.h_s, m=self.inner.m)
 
     def hash(self):
+        # type: () -> str
         msg = self.inner.dumps() + self.s_s.dumps() + self.s_r.dumps()
         return libnacl.crypto_hash_sha256(msg)
+
+    def get_h(self):
+        # type: () -> int
+        return self.inner.h_s
+
+    def get_prev(self):
+        # type: () -> str
+        return self.inner.prev
 
 
 class CpBlock:
@@ -124,44 +145,52 @@ class CpBlock:
         s: Signature,
     }
     """
+
     class Inner:
-        def __init__(self, prev, cons, ss, p):
+        def __init__(self, prev, h, cons, ss, p):
+            # type: (str, int, Cons, List[Signature], int) -> None
             self.prev = prev
+            self.h_s = h
             self.round = cons.round
             self.cons = cons
             self.ss = ss
             self.p = p
 
         def dumps(self):
+            # type: () -> str
             return pickle.dumps(self)
 
-    def __init__(self, prev, cons, ss, p, vk, sk, vks):
+    def __init__(self, prev, h, cons, p, vk, sk, ss, vks):
+        # type: (str, int, Cons, int, str, str, List[Signature], List[str]) -> None
         """
 
         :param prev: hash pointer to the previous block
         :param cons: type Cons
-        :param ss: signatures of the promoters, at least t-1 of them must be valid
+        :param h: height
         :param p: promoter flag
         :param vk: my verification key
         :param sk: my secret key
+        :param ss: signatures of the promoters, at least t-1 of them must be valid
         :param vks: all verification keys of promoters
         """
         assert p in (0, 1)
-        self.inner = self.Inner(prev, cons, ss, p)
+        self.inner = self.Inner(prev, h, cons, ss, p)
 
-        if cons.round != -1 or len(ss) != 0 or len(vks) != 0:
+        if cons.round != -1 or len(ss) != 0 or len(vks) != 0 or self.inner.h_s != 0:
             t = math.floor((len(vks) - 1) / 3.0)
-            self._verify_signatures(ss, vks, t)
+            self._verify_signatures(ss, vks, int(t))
         else:
             # if this is executed, it means this is a genesis block
             pass
         self.s = Signature(vk, sk, self.inner.dumps())
 
     def hash(self):
+        # type: () -> str
         msg = self.inner.dumps() + self.s.dumps()
         return libnacl.crypto_hash_sha256(msg)
 
     def _verify_signatures(self, ss, vks, t):
+        # type: (List[Signature], List[str], int) -> None
         oks = 0
         _ss = [s for s in ss if s.vk in vks]  # only consider nodes that are promoters
         for _s in _ss:
@@ -174,6 +203,14 @@ class CpBlock:
         if not oks > t:
             raise ValueError("verification failed, oks = {}, t = {}".format(oks, t))
 
+    def get_h(self):
+        # type: () -> int
+        return self.inner.h_s
+
+    def get_prev(self):
+        # type: () -> str
+        return self.inner.prev
+
 
 class Cons:
     """
@@ -183,7 +220,9 @@ class Cons:
         blocks: List<CpBlock>,
     }
     """
+
     def __init__(self, round, blocks):
+        # type: (int, List[CpBlock]) -> None
         """
 
         :param round: consensus round
@@ -193,15 +232,18 @@ class Cons:
         self.blocks = blocks
 
     def dumps(self):
+        # type: () -> str
         return pickle.dumps(self)
 
     def hash(self):
+        # type: () -> str
         return libnacl.crypto_hash_sha256(self.dumps())
 
 
 def generate_genesis_block(vk, sk):
+    # type: (str, str) -> CpBlock
     prev = libnacl.crypto_hash_sha256('0')
-    return CpBlock(prev, Cons(-1, None), [], 0, vk, sk, [])
+    return CpBlock(prev, 0, Cons(-1, []), 0, vk, sk, [], [])
 
 
 class Chain:
@@ -214,15 +256,35 @@ class Chain:
     // height (sequence number) should match the index
     type Chain = List<Block>;
     """
+
     def __init__(self, vk, sk):
+        # type: (str, str) -> None
         self.vk = vk
-        self.chain = [generate_genesis_block(vk, sk)]
+        self.chain = [generate_genesis_block(vk, sk)]  # type: List[Union[CpBlock, TxBlock]]
 
     def new_tx(self, tx):
-        pass
+        # type: (TxBlock) -> None
+        assert tx.get_h() == len(self.chain)
+        assert tx.get_prev() == self.chain[-1].hash()
+
+        self.chain.append(tx)
 
     def new_cp(self, cp):
-        pass
+        # type: (CpBlock) -> None
+        assert cp.get_h() == len(self.chain)
+        assert cp.get_prev() == self.chain[-1].hash()
+
+        prev_cp = self.previous_cp()
+        assert prev_cp.inner.round < cp.inner.round
+
+        self.chain.append(cp)
+
+    def previous_cp(self):
+        # type: () -> CpBlock
+        for b in reversed(self.chain):
+            if isinstance(b, CpBlock):
+                return b
+        raise ValueError("No CpBlock in Chain")
 
 
 class TrustChain:

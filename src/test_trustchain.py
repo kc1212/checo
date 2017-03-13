@@ -1,6 +1,7 @@
 import pytest
 import math
 from trustchain import *
+from typing import Tuple, List
 
 
 @pytest.fixture
@@ -29,6 +30,36 @@ def test_sigs_failure(sigs):
         s.verify(vk, msg)
 
 
+def gen_txblock(prev_s, prev_r, vk_s, sk_s, vk_r, sk_r, h_s, h_r, m):
+    # type: (str, str, str, str, str, str, int, int, str) -> Tuple[TxBlock, TxBlock]
+    """
+    A type signature of strs is just useless
+    :param prev_s:
+    :param prev_r:
+    :param vk_s:
+    :param sk_s:
+    :param vk_r:
+    :param sk_r:
+    :param h_s:
+    :param h_r:
+    :param m:
+    :return:
+    """
+    # r received h_s, h_r so he initialises a TxBlock and creates its signature
+    r_block = TxBlock(prev_r, h_r, h_s, m)
+    s_r = r_block.sign(vk_r, sk_r)
+
+    # s <- r: prev, h_r, s_r // s creates block
+    s_block = TxBlock(prev_s, h_s, h_r, m)
+    s_s = s_block.sign(vk_s, sk_s)
+    s_block.seal(vk_s, s_s, vk_r, s_r, prev_r)
+
+    # s -> r: s_s // r seals block
+    r_block.seal(vk_r, s_r, vk_s, s_s, prev_s)
+
+    return s_block, r_block
+
+
 def test_txblock():
     """
     locally simulate the 3 way handshake
@@ -39,22 +70,19 @@ def test_txblock():
     _, vk_r, sk_r = sigs()
 
     # s -> r: prev, h_s, m
-    s_prev = generate_genesis_block(vk_s, sk_s)
-    r_prev = generate_genesis_block(vk_r, sk_r)
+    prev_s = generate_genesis_block(vk_s, sk_s).hash()
+    prev_r = generate_genesis_block(vk_r, sk_r).hash()
     h_s = 1
     h_r = 1
 
+    # the following parts of the protocol are covered in gen_txblock
     # r received h_s, h_r so he initialises a TxBlock and creates its signature
-    r_block = TxBlock(r_prev.hash(), h_r, h_s, m)
-    s_r = r_block.sign(vk_r, sk_r)
-
     # s <- r: prev, h_r, s_r // s creates block
-    s_block = TxBlock(s_prev.hash(), h_s, h_r, m)
-    s_s = s_block.sign(vk_s, sk_s)
-    s_block.seal(vk_s, s_s, vk_r, s_r, r_prev.hash())
-
     # s -> r: s_s // r seals block
-    r_block.seal(vk_r, s_r, vk_s, s_s, s_prev.hash())
+    s_block, r_block = gen_txblock(prev_s, prev_r, vk_s, sk_s, vk_r, sk_r, h_s, h_r, m)
+
+    assert s_block.make_pair(prev_r).inner.dumps() == r_block.inner.dumps()
+    assert r_block.make_pair(prev_s).inner.dumps() == s_block.inner.dumps()
 
 
 @pytest.mark.parametrize("n,x", [
@@ -70,6 +98,29 @@ def test_cpblock(n, x):
     locally simulate the delivery of cpblock and corresponding signatures
     :return:
     """
+    vks, ss, cons = gen_cons(n, 1)
+    ss = ss[:x]
+
+    # try creating the new checkpoint block
+    _, my_vk, my_sk = sigs()
+    my_genesis = generate_genesis_block(my_vk, my_sk)
+
+    t = math.floor((n - 1) / 3.0)
+    if x - 1 >= t:  # number of signatures - 1 is greater than t
+        CpBlock(my_genesis.hash(), 1, cons, 1, my_vk, my_sk, ss, vks)
+    else:
+        with pytest.raises(ValueError):
+            CpBlock(my_genesis.hash(), 1, cons, 1, my_vk, my_sk, ss, vks)
+
+
+def gen_cons(n, cons_round):
+    # type: (int) -> Tuple[List[str], List[Signature], Cons]
+    """
+
+    :param n:
+    :param cons_round:
+    :return:
+    """
     vks = []
     sks = []
     blocks = []
@@ -80,23 +131,65 @@ def test_cpblock(n, x):
         blocks.append(generate_genesis_block(vk, sk))
 
     # we have n blocks that has reached consensus
-    cons = Cons(1, blocks)
+    cons = Cons(cons_round, blocks)
 
     # x of the promoters signed those blocks
     ss = []
-    for i, vk, sk in zip(range(x), vks, sks):
+    for i, vk, sk in zip(range(n), vks, sks):
         s = Signature(vk, sk, cons.hash())
         ss.append(s)
 
-    # try creating the new checkpoint block
-    _, my_vk, my_sk = sigs()
-    my_genesis = generate_genesis_block(my_vk, my_sk)
+    return vks, ss, cons
 
-    t = math.floor((n - 1)/3.0)
-    if x - 1 >= t:  # number of signatures - 1 is greater than t
-        CpBlock(my_genesis.hash(), cons, ss, 1, my_vk, my_sk, vks)
-    else:
-        with pytest.raises(ValueError):
-            CpBlock(my_genesis.hash(), cons, ss, 1, my_vk, my_sk, vks)
 
+@pytest.mark.parametrize("n,m", [
+    (4, 8),
+    (10, 5),
+])
+def test_cp_chain(n, m):
+    """
+    Continuously create checkpoint blocks
+    :param n: number of nodes
+    :param m: number of blocks
+    :return:
+    """
+    _, vk, sk = sigs()
+    chain = Chain(vk, sk)
+    prev = chain.chain[0].hash()
+
+    for i in range(m):
+        vks, ss, cons = gen_cons(n, i + 1)
+        cp = CpBlock(prev, i + 1, cons, 0, vk, sk, ss, vks)
+        prev = cp.hash()
+        chain.new_cp(cp)
+
+        with pytest.raises(AssertionError):
+            # adding again (bad hash) should result in an error
+            chain.new_cp(cp)
+
+
+@pytest.mark.parametrize("m", [
+    4,
+])
+def test_tx_chain(m):
+    """
+    I'm making transaction with one other person
+    :param m: number of blocks
+    :return:
+    """
+    _, vk_s, sk_s = sigs()
+    chain_s = Chain(vk_s, sk_s)
+    prev_s = chain_s.chain[0].hash()
+
+    _, vk_r, sk_r = sigs()
+    chain_r = Chain(vk_r, sk_r)
+    prev_r = chain_r.chain[0].hash()
+
+    for i in range(m):
+        block_s, block_r = gen_txblock(prev_s, prev_r, vk_s, sk_s, vk_r, sk_r, i + 1, i + 1, "test123")
+        prev_s = block_s.hash()
+        prev_r = block_r.hash()
+
+        chain_s.new_tx(block_s)
+        chain_r.new_tx(block_r)
 
