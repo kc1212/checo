@@ -10,7 +10,7 @@ from src import node
 from src.utils.utils import value_and_tally
 
 DIR = 'logs/'
-NODE_CMD_PREFIX = ['python2', '-u', 'src/node.py']  # -u forces stdin/stdout/stderr to be unbuffered
+NODE_CMD_PREFIX = ['python2', '-u', '-m', 'src.node']  # -u forces stdin/stdout/stderr to be unbuffered
 
 
 def delete_contents_of_dir(dname):
@@ -54,7 +54,7 @@ def run_subprocesses(prefix, cmds, outfs):
 
 @pytest.fixture
 def discover():
-    p = subprocess.Popen(['python2', 'src/discovery.py'])
+    p = subprocess.Popen(['python2', '-m', 'src.discovery'])
     time.sleep(1)  # wait for it to spin up
     yield None
     print "Test: tear down discovery"
@@ -123,6 +123,7 @@ def check_mo14_files(n, t):
     (4, 1),
     (7, 2),
     (19, 6),
+    (50, 0),
 ])
 def test_acs(n, t, discover, folder):
     configs = []

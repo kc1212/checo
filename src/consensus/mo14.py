@@ -2,9 +2,9 @@ import random
 from collections import defaultdict
 
 from enum import Enum
-from utils.messages import Payload
+from src.utils.messages import Payload
 
-from utils.utils import Replay, Handled
+from src.utils.utils import Replay, Handled
 
 Mo14Type = Enum('Mo14Type', 'EST AUX')
 Mo14State = Enum('Mo14State', 'stopped start est aux coin')

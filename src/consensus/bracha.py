@@ -1,9 +1,9 @@
 import random
 
 from enum import Enum
-from utils.messages import Payload
+from src.utils.messages import Payload
 
-from utils import Handled
+from src.utils.utils import Handled
 
 BrachaStep = Enum('BrachaStep', 'one two three')
 MsgType = Enum('MsgType', 'init echo ready')
@@ -14,7 +14,7 @@ class Bracha:
     Bracha broadcast '87
     Implemented using state machine (BrachaStep)
     """
-    def __init__(self, factory, acs_hdr_f=None):
+    def __init__(self, factory, acs_hdr_f=lambda _x: _x):
         self.factory = factory
         self.step = BrachaStep.one
         self.init_count = 0
@@ -105,11 +105,7 @@ class Bracha:
         return False
 
     def bcast(self, msg):
-        if self.acs_hdr_f is None:
-            self.factory.bcast(msg)
-        else:
-            # we don't need the extra 'payload_type' field
-            self.factory.bcast(self.acs_hdr_f(msg['payload']))
+        self.factory.bcast(self.acs_hdr_f(msg))
 
 
 def make_init(body):
