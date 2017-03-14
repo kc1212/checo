@@ -123,7 +123,7 @@ def check_mo14_files(n, t):
     (4, 1),
     (7, 2),
     (19, 6),
-    (50, 0),
+    # (50, 0),
 ])
 def test_acs(n, t, discover, folder):
     configs = []
