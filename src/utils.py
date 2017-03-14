@@ -31,7 +31,7 @@ def value_and_tally(xs):
     return res.most_common(1)[0]
 
 
-class bcolors:
+class BColors:
     HEADER = '\033[95m'
     OKBLUE = '\033[94m'
     OKGREEN = '\033[92m'
@@ -45,3 +45,12 @@ class bcolors:
 class JsonSerialisable:
     def to_json(self):
         return json.dumps(self, default=lambda o: o.__dict__)
+
+
+class Replay:
+    """
+    Dummy class returned by consensus algorithms to identify that the message should be replayed at a later time
+    because it cannot yet be handled.
+    """
+    def __init__(self):
+        pass

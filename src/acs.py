@@ -3,6 +3,7 @@ from twisted.internet import reactor
 from bracha import Bracha
 from mo14 import Mo14
 from messages import PayloadType, Payload
+from utils import Replay
 
 
 class ACS:
@@ -99,9 +100,9 @@ class ACS:
 
             if instance not in self.mo14_provided:
                 print "ACS: got BA before RBC..."
-                # if we got a BA instance, but we haven't deliver its corresponding RBC, we do nothing
-                # we process it later?
-                reactor.callLater(1, self.handle, msg, sender_uuid)
+                # if we got a BA instance, but we haven't deliver its corresponding RBC,
+                # we instruct the caller to replay the message
+                return Replay()
 
         else:
             print "ACS: invalid payload type", ty

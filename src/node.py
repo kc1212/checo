@@ -5,6 +5,7 @@ from twisted.internet.error import CannotListenError
 import sys
 import uuid
 import argparse
+import Queue
 
 from bracha import Bracha
 from mo14 import Mo14
@@ -12,6 +13,7 @@ from acs import ACS
 from discovery import Discovery, got_discovery
 from messages import Payload, PayloadType
 from jsonreceiver import JsonReceiver
+from utils import Replay
 
 
 class MyProto(JsonReceiver):
@@ -21,6 +23,7 @@ class MyProto(JsonReceiver):
     def __init__(self, factory):
         self.factory = factory
         self.config = factory.config
+        self.q = factory.q
         self.peers = factory.peers  # NOTE does not include myself
         self.remote_id = None
         self.state = 'SERVER'
@@ -34,6 +37,8 @@ class MyProto(JsonReceiver):
 
     def json_received(self, obj):
         """
+        first we handle the items in the queue
+        then we handle the received message
         struct Payload {
             payload_type: u32,
             payload: Msg, // any type, passed directly to sub system
@@ -41,6 +46,11 @@ class MyProto(JsonReceiver):
         :param obj:
         :return:
         """
+        print "received json, {} items in queue".format(self.q.qsize())
+        while not self.q.empty():
+            m = self.factory.q.get()
+            self.json_received(m)
+
         payload = Payload.from_dict(obj)
         ty = payload.payload_type
 
@@ -50,6 +60,13 @@ class MyProto(JsonReceiver):
         elif ty == PayloadType.pong.value:
             self.handle_pong(payload.payload)
 
+        elif ty == PayloadType.acs.value:
+            if self.factory.config.silent:
+                return
+            res = self.factory.acs.handle(payload.payload, self.remote_id)
+            self.check_and_add_to_queue(res, obj)
+
+        # messages below are for testing, bracha/mo14 is handled by acs
         elif ty == PayloadType.bracha.value:
             if self.factory.config.silent:
                 return
@@ -60,11 +77,6 @@ class MyProto(JsonReceiver):
                 return
             self.factory.mo14.handle(payload.payload, self.remote_id)
 
-        elif ty == PayloadType.acs.value:
-            if self.factory.config.silent:
-                return
-            self.factory.acs.handle(payload.payload, self.remote_id)
-
         elif ty == PayloadType.dummy.value:
             print "got dummy message from", self.remote_id
         else:
@@ -72,6 +84,12 @@ class MyProto(JsonReceiver):
             raise AssertionError
 
             # self.print_info()
+
+    def check_and_add_to_queue(self, o, m):
+        if o is None:
+            return
+        if isinstance(o, Replay):
+            self.q.put(m)
 
     def send_ping(self):
         self.send_json(Payload.make_ping((self.config.id.urn, self.config.port)).to_dict())
@@ -115,6 +133,7 @@ class MyFactory(Factory):
         self.bracha = Bracha(self)  # just for testing
         self.mo14 = Mo14(self)  # just for testing
         self.acs = ACS(self)
+        self.q = Queue.Queue()  # used for replaying un-handled messages
 
     def buildProtocol(self, addr):
         return MyProto(self)
