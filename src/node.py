@@ -3,19 +3,19 @@ import argparse
 import sys
 import uuid
 
+from consensus.acs import ACS
+from consensus.mo14 import Mo14
 from twisted.internet import reactor
 from twisted.internet.endpoints import TCP4ClientEndpoint, connectProtocol
 from twisted.internet.error import CannotListenError
 from twisted.internet.protocol import Factory
 from twisted.internet.task import LoopingCall
-
-from consensus.acs import ACS
-from consensus.bracha import Bracha
-from consensus.mo14 import Mo14
-from discovery import Discovery, got_discovery
 from utils.jsonreceiver import JsonReceiver
 from utils.messages import Payload, PayloadType
-from utils.utils import Replay, Handled
+
+from bracha import Bracha
+from src.discovery import Discovery, got_discovery
+from utils import Replay, Handled
 
 
 class MyProto(JsonReceiver):

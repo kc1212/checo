@@ -2,7 +2,6 @@ import uuid
 
 from twisted.internet import reactor
 from twisted.internet.protocol import Factory
-
 from utils.jsonreceiver import JsonReceiver
 from utils.messages import Payload, PayloadType
 

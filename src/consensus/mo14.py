@@ -2,8 +2,8 @@ import random
 from collections import defaultdict
 
 from enum import Enum
-
 from utils.messages import Payload
+
 from utils.utils import Replay, Handled
 
 Mo14Type = Enum('Mo14Type', 'EST AUX')

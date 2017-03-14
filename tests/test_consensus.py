@@ -1,24 +1,15 @@
 import json
 import pickle
 import subprocess
-import sys
 import time
 
 import os
 import pytest
 
-import node
-from utils.utils import value_and_tally
+from src.utils.utils import value_and_tally
 
 DIR = 'logs/'
-NODE_CMD_PREFIX = ['python2', '-u', 'node.py']  # -u forces stdin/stdout/stderr to be unbuffered
-
-
-def wrap_stdout(config):
-    # TODO wrap stderr?
-    sys.stdout = open(DIR + str(config.port) + '-' + str(os.getpid()) + '.out', 'w')
-    print 'Test: running config', config.port
-    node.run(config)
+NODE_CMD_PREFIX = ['python2', '-u', 'src/node.py']  # -u forces stdin/stdout/stderr to be unbuffered
 
 
 def delete_contents_of_dir(dname):
@@ -62,7 +53,7 @@ def run_subprocesses(prefix, cmds, outfs):
 
 @pytest.fixture
 def discover():
-    p = subprocess.Popen(['python2', 'discovery.py'])
+    p = subprocess.Popen(['python2', 'src/discovery.py'])
     time.sleep(1)  # wait for it to spin up
     yield None
     print "Test: tear down discovery"

@@ -1,10 +1,10 @@
 import uuid
 
 from twisted.internet import reactor
+from utils.messages import PayloadType, Payload
 
 from bracha import Bracha
 from mo14 import Mo14
-from utils.messages import PayloadType, Payload
 from utils.utils import Replay, Handled
 
 
