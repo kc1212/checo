@@ -3,7 +3,7 @@ from twisted.internet import reactor
 from bracha import Bracha
 from mo14 import Mo14
 from messages import PayloadType, Payload
-from utils import Replay
+from utils import Replay, Handled
 
 
 class ACS:
@@ -58,7 +58,7 @@ class ACS:
         """
         if self.done:
             print "ACS: we're done, doing nothing", msg, sender_uuid
-            return None
+            return Handled()
 
         instance = uuid.UUID(msg["instance"])
         ty = msg["ty"]
@@ -73,9 +73,9 @@ class ACS:
 
         if ty == PayloadType.bracha.value:
             res = self.brachas[instance].handle(body)
-            if res is not None:
-                print "ACS: Bracha delivered", instance, res
-                self.bracha_results[instance] = res
+            if isinstance(res, Handled) and res.m is not None:
+                print "ACS: Bracha delivered", instance, res.m
+                self.bracha_results[instance] = res.m
                 if instance not in self.mo14_provided:
                     print "ACS: initiating BA", instance, 1
                     self.mo14_provided[instance] = 1
@@ -85,9 +85,11 @@ class ACS:
             if instance in self.mo14_provided:
                 print "ACS: forwarding Mo14"
                 res = self.mo14s[instance].handle(body, sender_uuid)
-                if res is not None:
-                    print "ACS: delivered Mo14", instance, res
-                    self.mo14_results[instance] = res
+                if isinstance(res, Handled) and res.m is not None:
+                    print "ACS: delivered Mo14", instance, res.m
+                    self.mo14_results[instance] = res.m
+                # elif isinstance(res, Replay):
+                #     return Replay()
 
             ones = [v for k, v in self.mo14_results.iteritems() if v == 1]
             if len(ones) >= n - t:
@@ -114,8 +116,8 @@ class ACS:
             assert n == len(self.mo14_results)
             self.done = True
             print "ACS: DONE", json.dumps(self.get_results())
-            return self.mo14_results
-        return None
+            return Handled(self.mo14_results)
+        return Handled()
 
     def get_results(self):
         res = {'set': {k.urn: v for k, v in self.mo14_results.iteritems()},

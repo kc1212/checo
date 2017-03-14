@@ -1,6 +1,7 @@
 from twisted.internet.endpoints import TCP4ClientEndpoint, connectProtocol
 from twisted.internet.protocol import Factory
 from twisted.internet import reactor
+from twisted.internet.task import LoopingCall
 from twisted.internet.error import CannotListenError
 import sys
 import uuid
@@ -13,7 +14,7 @@ from acs import ACS
 from discovery import Discovery, got_discovery
 from messages import Payload, PayloadType
 from jsonreceiver import JsonReceiver
-from utils import Replay
+from utils import Replay, Handled
 
 
 class MyProto(JsonReceiver):
@@ -27,6 +28,16 @@ class MyProto(JsonReceiver):
         self.peers = factory.peers  # NOTE does not include myself
         self.remote_id = None
         self.state = 'SERVER'
+
+        # start looping call on the queue
+        self.lc = LoopingCall(self.process_queue)
+        self.lc.start(5)
+
+    def process_queue(self):
+        print "processing {} items in queue".format(self.q.qsize())
+        while not self.q.empty():
+            m = self.factory.q.get()
+            self.json_received(m)
 
     def connection_lost(self, reason):
         print "deleting peer ", self.remote_id
@@ -46,11 +57,6 @@ class MyProto(JsonReceiver):
         :param obj:
         :return:
         """
-        print "received json, {} items in queue".format(self.q.qsize())
-        while not self.q.empty():
-            m = self.factory.q.get()
-            self.json_received(m)
-
         payload = Payload.from_dict(obj)
         ty = payload.payload_type
 
@@ -86,8 +92,9 @@ class MyProto(JsonReceiver):
             # self.print_info()
 
     def check_and_add_to_queue(self, o, m):
-        if o is None:
-            return
+        assert o is not None
+        assert isinstance(o, Handled) or isinstance(o, Replay)
+
         if isinstance(o, Replay):
             self.q.put(m)
 

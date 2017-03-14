@@ -54,3 +54,11 @@ class Replay:
     """
     def __init__(self):
         pass
+
+
+class Handled:
+    """
+    The Result type is the result of handling a message in the consensus algorithm
+    """
+    def __init__(self, m=None):
+        self.m = m

@@ -129,14 +129,14 @@ def check_mo14_files(n, t):
 
 
 @pytest.mark.parametrize("n,t", [
-    (4, 1),
-    # (7, 2),
-    (19, 6),
+    # (4, 1),
+    (7, 2),
+    # (19, 6),
 ])
 def test_acs(n, t, discover, folder):
     configs = []
     for i in range(n - t):
-        configs.append(node.Config(12345 + i, n, t, test='acs'))
+        configs.append(node.Config(12346 + i, n, t, test='acs'))
     for i in range(t):
         configs.append(node.Config(11111 + i, n, t, silent=True))
 

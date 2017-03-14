@@ -1,5 +1,7 @@
 from enum import Enum
 from messages import Payload
+from utils import Handled
+
 import random
 
 BrachaStep = Enum('BrachaStep', 'one two three')
@@ -36,7 +38,7 @@ class Bracha:
         """
         if self.done:
             print "Bracha: done, doing nothing"
-            return None
+            return Handled()
 
         print "Bracha: received", msg
         ty = msg["ty"]
@@ -70,9 +72,9 @@ class Bracha:
                 self.init_count = 0
                 self.done = True
                 print "Bracha: DELIVER", body
-                return body
+                return Handled(body)
 
-        return None
+        return Handled()
 
     def bcast_init(self, msg="some test msg!!"):
         print "Bracha: initiating with msg", msg

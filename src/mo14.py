@@ -2,6 +2,7 @@ import random
 from messages import Payload
 from enum import Enum
 from collections import defaultdict
+from utils import Replay, Handled
 
 Mo14Type = Enum('Mo14Type', 'EST AUX')
 Mo14State = Enum('Mo14State', 'stopped start est aux coin')
@@ -96,7 +97,7 @@ class Mo14:
 
         if self.state == Mo14State.stopped:
             print "Mo14: not processing due to stopped state"
-            return None
+            return Handled()
 
         ty = msg['ty']
         v = msg['v']
@@ -104,11 +105,15 @@ class Mo14:
         t = self.factory.config.t
         n = self.factory.config.n
 
-        self.store_msg(msg, sender_uuid)
         print "Mo14: stored msg", msg, sender_uuid
-        if r != self.r:
-            print "Mo14: not processing because r != self.r", r, self.r
-            return None
+        self.store_msg(msg, sender_uuid)
+
+        if r < self.r:
+            print "Mo14: not processing because {} < {}".format(r, self.r)
+            return Handled()
+        elif r > self.r:
+            print "Mo14: I'm not ready yet {} > {}, the message should be relayed".format(r, self.r)
+            return Replay()
 
         def update_bin_values():
             """
@@ -144,7 +149,7 @@ class Mo14:
             print "Mo14: reached aux state"
             if self.r not in self.aux_values:
                 print "Mo14: self.r not in self.aux_values", self.r, self.aux_values
-                return None
+                return Handled()
 
             def get_aux_vals(aux_value):
                 """
@@ -180,7 +185,7 @@ class Mo14:
                 if v == s:
                     print "Mo14: DECIDED", v
                     self.state = Mo14State.stopped
-                    return v
+                    return Handled(v)
                 else:
                     self.est = v
             else:
@@ -190,7 +195,7 @@ class Mo14:
             print "Mo14: starting again, est =", self.est
             self.start(self.est)
 
-        return None
+        return Handled()
 
     def bcast_aux(self, v):
         if self.factory.config.byzantine:
