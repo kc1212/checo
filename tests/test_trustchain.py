@@ -1,7 +1,7 @@
 import pytest
-import math
-from trustchain import *
 from typing import Tuple, List
+
+from trustchain.trustchain import *
 
 
 @pytest.fixture

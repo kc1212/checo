@@ -1,18 +1,17 @@
-
-import sys
-import os
-import time
-import subprocess
-import pickle
 import json
+import pickle
+import subprocess
+import sys
+import time
+
+import os
 import pytest
 
 import node
-from utils import value_and_tally
-
+from utils.utils import value_and_tally
 
 DIR = 'logs/'
-NODE_CMD_PREFIX = ['python2', '-u', 'src/node.py']  # -u forces stdin/stdout/stderr to be unbuffered
+NODE_CMD_PREFIX = ['python2', '-u', 'node.py']  # -u forces stdin/stdout/stderr to be unbuffered
 
 
 def wrap_stdout(config):
@@ -63,7 +62,7 @@ def run_subprocesses(prefix, cmds, outfs):
 
 @pytest.fixture
 def discover():
-    p = subprocess.Popen(['python2', 'src/discovery.py'])
+    p = subprocess.Popen(['python2', 'discovery.py'])
     time.sleep(1)  # wait for it to spin up
     yield None
     print "Test: tear down discovery"
@@ -129,14 +128,14 @@ def check_mo14_files(n, t):
 
 
 @pytest.mark.parametrize("n,t", [
-    # (4, 1),
+    (4, 1),
     (7, 2),
-    # (19, 6),
+    (19, 6),
 ])
 def test_acs(n, t, discover, folder):
     configs = []
     for i in range(n - t):
-        configs.append(node.Config(12346 + i, n, t, test='acs'))
+        configs.append(node.Config(12345 + i, n, t, test='acs'))
     for i in range(t):
         configs.append(node.Config(11111 + i, n, t, silent=True))
 
@@ -157,7 +156,7 @@ def test_acs(n, t, discover, folder):
 
 @pytest.mark.parametrize("n,t", [
     (4, 1),
-    # (7, 2),
+    (7, 2),
     (19, 6),
 ])
 def test_bracha(n, t, discover, folder):
@@ -184,7 +183,7 @@ def test_bracha(n, t, discover, folder):
 
 @pytest.mark.parametrize("n,t", [
     (4, 1),
-    # (7, 2),
+    (7, 2),
     (19, 6),
 ])
 def test_mo14(n, t, discover, folder):

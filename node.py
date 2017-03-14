@@ -1,20 +1,21 @@
-from twisted.internet.endpoints import TCP4ClientEndpoint, connectProtocol
-from twisted.internet.protocol import Factory
-from twisted.internet import reactor
-from twisted.internet.task import LoopingCall
-from twisted.internet.error import CannotListenError
+import Queue
+import argparse
 import sys
 import uuid
-import argparse
-import Queue
 
-from bracha import Bracha
-from mo14 import Mo14
-from acs import ACS
+from twisted.internet import reactor
+from twisted.internet.endpoints import TCP4ClientEndpoint, connectProtocol
+from twisted.internet.error import CannotListenError
+from twisted.internet.protocol import Factory
+from twisted.internet.task import LoopingCall
+
+from consensus.acs import ACS
+from consensus.bracha import Bracha
+from consensus.mo14 import Mo14
 from discovery import Discovery, got_discovery
-from messages import Payload, PayloadType
-from jsonreceiver import JsonReceiver
-from utils import Replay, Handled
+from utils.jsonreceiver import JsonReceiver
+from utils.messages import Payload, PayloadType
+from utils.utils import Replay, Handled
 
 
 class MyProto(JsonReceiver):
@@ -34,8 +35,14 @@ class MyProto(JsonReceiver):
         self.lc.start(5)
 
     def process_queue(self):
-        print "processing {} items in queue".format(self.q.qsize())
-        while not self.q.empty():
+        qsize = self.q.qsize()
+        print "processing {} items in queue".format(qsize)
+
+        # we use counter to stop this routine from running forever,
+        # because self.json_received can put item back into the queue
+        ctr = 0
+        while not self.q.empty() and ctr < qsize:
+            ctr += 1
             m = self.factory.q.get()
             self.json_received(m)
 
@@ -72,6 +79,9 @@ class MyProto(JsonReceiver):
             res = self.factory.acs.handle(payload.payload, self.remote_id)
             self.check_and_add_to_queue(res, obj)
 
+        elif ty == PayloadType.chain.value:
+            pass
+
         # messages below are for testing, bracha/mo14 is handled by acs
         elif ty == PayloadType.bracha.value:
             if self.factory.config.silent:
@@ -96,6 +106,7 @@ class MyProto(JsonReceiver):
         assert isinstance(o, Handled) or isinstance(o, Replay)
 
         if isinstance(o, Replay):
+            print "putting {} into msg queue".format(m)
             self.q.put(m)
 
     def send_ping(self):

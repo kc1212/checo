@@ -1,8 +1,10 @@
 import random
-from messages import Payload
-from enum import Enum
 from collections import defaultdict
-from utils import Replay, Handled
+
+from enum import Enum
+
+from utils.messages import Payload
+from utils.utils import Replay, Handled
 
 Mo14Type = Enum('Mo14Type', 'EST AUX')
 Mo14State = Enum('Mo14State', 'stopped start est aux coin')
@@ -129,6 +131,8 @@ class Mo14:
                 print "Mo14: adding to bin_values", v
                 self.bin_values[self.r].add(v)
                 return True
+
+            print "Mo14: no bin values"
             return False
 
         if ty == Mo14Type.EST.value:

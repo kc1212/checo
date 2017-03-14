@@ -1,9 +1,11 @@
 import uuid
+
 from twisted.internet import reactor
+
 from bracha import Bracha
 from mo14 import Mo14
-from messages import PayloadType, Payload
-from utils import Replay, Handled
+from utils.messages import PayloadType, Payload
+from utils.utils import Replay, Handled
 
 
 class ACS:
@@ -28,8 +30,8 @@ class ACS:
 
             # TODO when do we update the round?
             def acs_hdr_f_factory(instance, ty, round):
-                def f(msg):
-                    return Payload.make_acs({"instance": instance, "ty": ty, "round": round, "body": msg}).to_dict()
+                def f(_msg):
+                    return Payload.make_acs({"instance": instance, "ty": ty, "round": round, "body": _msg}).to_dict()
 
                 return f
 
@@ -88,13 +90,16 @@ class ACS:
                 if isinstance(res, Handled) and res.m is not None:
                     print "ACS: delivered Mo14", instance, res.m
                     self.mo14_results[instance] = res.m
-                # elif isinstance(res, Replay):
-                #     return Replay()
+                elif isinstance(res, Replay):
+                    # raise AssertionError("Impossible, our Mo14 instance already instantiated")
+                    return Replay()
 
             ones = [v for k, v in self.mo14_results.iteritems() if v == 1]
             if len(ones) >= n - t:
                 print "ACS: got n - t 1s"
+                print "keys = {}, provided keys = {}".format(self.mo14s.keys(), self.mo14_provided.keys())
                 difference = set(self.mo14s.keys()) - set(self.mo14_provided.keys())
+                print "difference =", difference
                 for d in list(difference):
                     print "ACS: initiating BA", d, 0
                     self.mo14_provided[d] = 0
@@ -107,8 +112,7 @@ class ACS:
                 return Replay()
 
         else:
-            print "ACS: invalid payload type", ty
-            raise AssertionError
+            raise AssertionError("ACS: invalid payload type - {}".format(ty))
 
         if len(self.mo14_results) >= n:
             import json

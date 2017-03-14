@@ -1,8 +1,9 @@
-from enum import Enum
-from messages import Payload
-from utils import Handled
-
 import random
+
+from enum import Enum
+
+from utils.messages import Payload
+from utils.utils import Handled
 
 BrachaStep = Enum('BrachaStep', 'one two three')
 MsgType = Enum('MsgType', 'init echo ready')

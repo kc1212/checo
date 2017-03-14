@@ -1,7 +1,7 @@
 import json
 from enum import Enum
 
-PayloadType = Enum('PayloadType', 'discover discover_reply ping pong bracha mo14 coin coin_reply acs dummy')
+PayloadType = Enum('PayloadType', 'discover discover_reply ping pong bracha mo14 coin coin_reply acs chain dummy')
 
 
 class Payload:

@@ -264,14 +264,12 @@ class Chain:
 
     def new_tx(self, tx):
         # type: (TxBlock) -> None
-        assert tx.get_h() == len(self.chain)
         assert tx.get_prev() == self.chain[-1].hash()
 
         self.chain.append(tx)
 
     def new_cp(self, cp):
         # type: (CpBlock) -> None
-        assert cp.get_h() == len(self.chain)
         assert cp.get_prev() == self.chain[-1].hash()
 
         prev_cp = self.previous_cp()
@@ -298,22 +296,32 @@ class TrustChain:
     """
 
     def __init__(self):
+        # type: () -> None
         self.sign_vk, self.sign_sk = libnacl.crypto_sign_keypair()
         self.chains = {self.sign_vk: Chain(self.sign_vk, self.sign_sk)}  # HashMap<Node, Chain>
+        self.my_chain = self.chains[self.sign_vk]
 
     def new_tx(self, tx):
+        # type: (TxBlock) -> None
         """
-        Verify tx, follow the rule and mutates the state to add it
+        Verify tx, follow the rules and mutates the state to add it
         :return: None
         """
-        pass
+        assert tx.get_h() == len(self.my_chain.chain)
+        self.my_chain.new_tx(tx)
 
     def new_cp(self, cp):
+        # type: (CpBlock) -> None
         """
-        Verify the cp, follow the rule a nd mutate the state to add it
+        Verify the cp, follow the rules and mutate the state to add it
         :return: None
         """
-        pass
+        assert cp.get_h() == len(self.my_chain.chain)
+        self.my_chain.new_cp(cp)
+
+    def get_h(self):
+        # type: () -> int
+        return len(self.my_chain.chain)
 
     def pieces(self, tx):
         """
@@ -321,7 +329,7 @@ class TrustChain:
         :param tx:
         :return: List<Block>
         """
-        pass
+        raise NotImplementedError
 
     def verify(self, tx, resp):
         """
@@ -330,7 +338,7 @@ class TrustChain:
         :param resp:
         :return:
         """
-        pass
+        raise NotImplementedError
 
     def _enclosure(self, tx):
         """
@@ -338,4 +346,4 @@ class TrustChain:
         :param tx:
         :return: (CpBlock, CpBlock)
         """
-        pass
+        raise NotImplementedError
