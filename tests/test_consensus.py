@@ -6,6 +6,7 @@ import time
 import os
 import pytest
 
+from src import node
 from src.utils.utils import value_and_tally
 
 DIR = 'logs/'

@@ -31,8 +31,11 @@ class ACS:
             # TODO when do we update the round?
             def acs_hdr_f_factory(instance, ty, round):
                 def f(_msg):
-                    return Payload.make_acs({"instance": instance, "ty": ty, "round": round, "body": _msg}).to_dict()
-
+                    return Payload.make_acs({"instance": instance,
+                                             "ty": ty,
+                                             "round": round,
+                                             "body": _msg['payload']
+                                             }).to_dict()
                 return f
 
             self.brachas[peer] = Bracha(self.factory, acs_hdr_f_factory(peer.urn, PayloadType.bracha.value, self.round))

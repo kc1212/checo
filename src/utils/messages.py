@@ -43,6 +43,10 @@ class Payload:
         return cls(PayloadType.discover.value, payload)
 
     @classmethod
+    def make_chain(cls, payload):
+        return cls(PayloadType.chain.value, payload)
+
+    @classmethod
     def make_discover_reply(cls, payload):
         return cls(PayloadType.discover_reply.value, payload)
 

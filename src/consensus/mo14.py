@@ -33,7 +33,7 @@ class Mo14:
     Mostefaoui et el. '14
     Implemented using a state machine
     """
-    def __init__(self, factory, acs_hdr_f=None):
+    def __init__(self, factory, acs_hdr_f=lambda _x: _x):
         self.factory = factory
         self.r = 0
         self.est = -1
@@ -217,15 +217,11 @@ class Mo14:
 
     def bcast(self, msg):
         """
-        Broadcasts a Mo14 message, hacked to switch the normal header for an ACS header
+        Broadcasts a Mo14 message, modify the message according to self.acs_hdr_f
         :param msg:
         :return:
         """
-        if self.acs_hdr_f is None:
-            self.factory.bcast(msg)
-        else:
-            # we don't need the extra 'payload_type' field
-            self.factory.bcast(self.acs_hdr_f(msg['payload']))
+        self.factory.bcast(self.acs_hdr_f(msg))
 
 
 def make_est(r, v):
