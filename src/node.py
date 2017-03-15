@@ -3,6 +3,7 @@ import argparse
 import sys
 import uuid
 
+from twisted.python import log
 from twisted.internet import reactor
 from twisted.internet.endpoints import TCP4ClientEndpoint, connectProtocol
 from twisted.internet.error import CannotListenError
@@ -27,14 +28,14 @@ class MyProto(JsonReceiver):
     def __init__(self, factory):
         self.factory = factory
         self.config = factory.config
-        self.q = factory.q
-        self.peers = factory.peers  # NOTE does not include myself
+        self.q = Queue.Queue()  # used for replaying un-handled messages
+        self.peers = factory.peers
         self.remote_id = None
         self.state = 'SERVER'
 
         # start looping call on the queue
         self.lc = LoopingCall(self.process_queue)
-        self.lc.start(5)
+        self.lc.start(5).addErrback(log.err)
 
     def process_queue(self):
         qsize = self.q.qsize()
@@ -45,7 +46,7 @@ class MyProto(JsonReceiver):
         ctr = 0
         while not self.q.empty() and ctr < qsize:
             ctr += 1
-            m = self.factory.q.get()
+            m = self.q.get()
             self.json_received(m)
 
     def connection_lost(self, reason):
@@ -153,7 +154,6 @@ class MyFactory(Factory):
         self.bracha = Bracha(self)  # just for testing
         self.mo14 = Mo14(self)  # just for testing
         self.acs = ACS(self)
-        self.q = Queue.Queue()  # used for replaying un-handled messages
 
     def buildProtocol(self, addr):
         return MyProto(self)
@@ -172,7 +172,7 @@ class MyFactory(Factory):
         point = TCP4ClientEndpoint(reactor, host, port)
         proto = MyProto(self)
         d = connectProtocol(point, proto)
-        d.addCallback(got_protocol)  # .addErrback(error_back)
+        d.addCallback(got_protocol).addErrback(log.err)
 
     def bcast(self, msg):
         """
@@ -241,12 +241,12 @@ def run(config):
     # connect to discovery server
     point = TCP4ClientEndpoint(reactor, "localhost", 8123)
     d = connectProtocol(point, Discovery({}, f))
-    d.addCallback(got_discovery, config.id.urn, config.port)  # .addErrback(error_back)
+    d.addCallback(got_discovery, config.id.urn, config.port).addErrback(log.err)
 
     # connect to myself
     point = TCP4ClientEndpoint(reactor, "localhost", config.port)
     d = connectProtocol(point, MyProto(f))
-    d.addCallback(got_protocol)  # .addErrback(error_back)
+    d.addCallback(got_protocol).addErrback(log.err)
 
     # optionally run tests, args.test == None implies reactive node
     if config.test == 'dummy':

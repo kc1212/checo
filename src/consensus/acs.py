@@ -84,7 +84,7 @@ class ACS:
                 if instance not in self.mo14_provided:
                     print "ACS: initiating BA", instance, 1
                     self.mo14_provided[instance] = 1
-                    self.mo14s[instance].delayed_start(1)
+                    self.mo14s[instance].start(1)
 
         elif ty == PayloadType.mo14.value:
             if instance in self.mo14_provided:
@@ -99,14 +99,13 @@ class ACS:
 
             ones = [v for k, v in self.mo14_results.iteritems() if v == 1]
             if len(ones) >= n - t:
-                print "ACS: got n - t 1s"
-                print "keys = {}, provided keys = {}".format(self.mo14s.keys(), self.mo14_provided.keys())
                 difference = set(self.mo14s.keys()) - set(self.mo14_provided.keys())
+                print "ACS: got n - t 1s"
                 print "difference =", difference
                 for d in list(difference):
                     print "ACS: initiating BA", d, 0
                     self.mo14_provided[d] = 0
-                    self.mo14s[d].delayed_start(0)
+                    self.mo14s[d].start(0)
 
             if instance not in self.mo14_provided:
                 print "ACS: got BA before RBC..."
