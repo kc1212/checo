@@ -77,7 +77,7 @@ class MyProto(JsonReceiver):
             self.handle_pong(payload.payload)
 
         elif ty == PayloadType.acs.value:
-            if self.factory.config.silent:
+            if self.factory.config.failure == 'omission':
                 return
             res = self.factory.acs.handle(payload.payload, self.remote_id)
             self.check_and_add_to_queue(res, obj)
@@ -85,14 +85,14 @@ class MyProto(JsonReceiver):
         elif ty == PayloadType.chain.value:
             pass
 
-        # messages below are for testing, bracha/mo14 is handled by acs
+        # messages below are for testing, bracha/mo14 is normally handled by acs
         elif ty == PayloadType.bracha.value:
-            if self.factory.config.silent:
+            if self.factory.config.failure == 'omission':
                 return
             self.factory.bracha.handle(payload.payload)
 
         elif ty == PayloadType.mo14.value:
-            if self.factory.config.silent:
+            if self.factory.config.failure == 'omission':
                 return
             self.factory.mo14.handle(payload.payload, self.remote_id)
 
@@ -194,25 +194,18 @@ class Config:
     All the static settings, used in Factory
     Should be singleton
     """
-    def __init__(self, port, n, t, test=None, value=None, byzantine=None, silent=None):
+    def __init__(self, port, n, t, test=None, value=0, failure=None):
         self.port = port
         self.n = n
         self.t = t
         self.id = uuid.uuid4()
         self.test = test
 
-        self.value = value
-        if self.value is not None:
-            self.value = int(self.value)
-            assert self.value in (0, 1)
+        assert int(value) in (0, 1)
+        self.value = int(value)
 
-        self.byzantine = False
-        if byzantine:
-            self.byzantine = True
-
-        self.silent = False
-        if silent:
-            self.silent = True
+        assert failure == 'byzantine' or failure == 'omission' or failure is None
+        self.failure = failure
 
     def make_args(self):
         res = [str(self.port), str(self.n), str(self.t)]
@@ -222,10 +215,9 @@ class Config:
         if self.value is not None:
             res.append('--value')
             res.append(str(self.value))
-        if self.byzantine:
-            res.append('--byzantine')
-        if self.silent:
-            res.append('--silent')
+        if self.failure is not None:
+            res.append('--failure')
+            res.append(self.failure)
         return res
 
 
@@ -269,11 +261,9 @@ if __name__ == '__main__':
     parser.add_argument('--test', choices=['dummy', 'bracha', 'mo14', 'acs'],
                         help='[for testing] choose an algorithm to initialise')
     parser.add_argument('--value', choices=['0', '1'], default='1',
-                        help='[for testing] the initial input for BA')
-    parser.add_argument('--byzantine', action="store_true",
-                        help='[for testing] whether the node is Byzantine')
-    parser.add_argument('--silent', action="store_true",
-                        help='[for testing] whether the node is silent (omission)')
+                        help='[testing] the initial input for BA')
+    parser.add_argument('--failure', choices=['byzantine', 'omission'],
+                        help='[testing] the mode of failure')
     args = parser.parse_args()
 
-    run(Config(args.port, args.n, args.t, args.test, args.value, args.byzantine, args.silent))
+    run(Config(args.port, args.n, args.t, args.test, args.value, args.failure))

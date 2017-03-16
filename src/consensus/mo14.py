@@ -202,14 +202,14 @@ class Mo14:
         return Handled()
 
     def bcast_aux(self, v):
-        if self.factory.config.byzantine:
+        if self.factory.config.failure == 'byzantine':
             v = random.choice([0, 1])
         assert v in (0, 1)
         print "Mo14: broadcast aux:", v, self.r
         self.bcast(make_aux(self.r, v))
 
     def bcast_est(self, v):
-        if self.factory.config.byzantine:
+        if self.factory.config.failure == 'byzantine':
             v = random.choice([0, 1])
         assert v in (0, 1)
         print "Mo14: broadcast est:", v, self.r

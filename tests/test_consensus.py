@@ -2,6 +2,7 @@ import json
 import pickle
 import subprocess
 import time
+import random
 
 import os
 import pytest
@@ -119,24 +120,26 @@ def check_mo14_files(n, t):
     assert tally >= n - t, "Mo14 incorrect tally! tally = {}, n = {}, t = {}, v = {}".format(tally, n, t, v)
 
 
-@pytest.mark.parametrize("n,t", [
-    (4, 1),
-    (7, 2),
-    (19, 6),
-    # (50, 0),
+@pytest.mark.parametrize("n,t,f", [
+    (4, 1, 'omission'),
+    (7, 2, 'omission'),
+    (19, 6, 'omission'),
+    (4, 1, 'byzantine'),
+    (7, 2, 'byzantine'),
+    (19, 6, 'byzantine'),
 ])
-def test_acs(n, t, discover, folder):
+def test_acs(n, t, f, discover, folder):
     configs = []
     for i in range(n - t):
         configs.append(node.Config(12345 + i, n, t, test='acs'))
     for i in range(t):
-        configs.append(node.Config(11111 + i, n, t, silent=True))
+        configs.append(node.Config(11111 + i, n, t, failure=f))
 
     ps = run_subprocesses(NODE_CMD_PREFIX,
                           [cfg.make_args() for cfg in configs],
                           [str(cfg.port) + '.out' for cfg in configs])
 
-    time.sleep(30)
+    time.sleep(20)
     for p in ps:
         p.terminate()
 
@@ -147,23 +150,23 @@ def test_acs(n, t, discover, folder):
     print "Test: ACS test passed"
 
 
-@pytest.mark.parametrize("n,t", [
-    (4, 1),
-    (7, 2),
-    (19, 6),
+@pytest.mark.parametrize("n,t,f", [
+    (4, 1, 'omission'),
+    (7, 2, 'omission'),
+    (19, 6, 'omission'),
 ])
-def test_bracha(n, t, discover, folder):
+def test_bracha(n, t, f, discover, folder):
     configs = [node.Config(12345, n, t, test='bracha')]
     for i in range(n - t - 1):
         configs.append(node.Config(12345 + 1 + i, n, t))
     for i in range(t):
-        configs.append(node.Config(11111 + i, n, t, silent=True))
+        configs.append(node.Config(11111 + i, n, t, failure=f))
 
     ps = run_subprocesses(NODE_CMD_PREFIX,
                           [cfg.make_args() for cfg in configs],
                           [str(cfg.port) + '.out' for cfg in configs])
 
-    time.sleep(30)
+    time.sleep(20)
     for p in ps:
         p.terminate()
 
@@ -174,23 +177,27 @@ def test_bracha(n, t, discover, folder):
     print "Test: Bracha test passed"
 
 
-@pytest.mark.parametrize("n,t", [
-    (4, 1),
-    (7, 2),
-    (19, 6),
+@pytest.mark.parametrize("n,t,v,f", [
+    (4, 1, 1, 'byzantine'),
+    (7, 2, 1, 'byzantine'),
+    (19, 6, 1, 'byzantine'),
+    (4, 1, 1, 'omission'),
+    (7, 2, 1, 'omission'),
+    (19, 6, 1, 'omission'),
 ])
-def test_mo14(n, t, discover, folder):
+def test_mo14(n, t, v, f, discover, folder):
     configs = []
     for i in range(n - t):
-        configs.append(node.Config(12345 + i, n, t, test='mo14'))
+        configs.append(node.Config(12345 + i, n, t, test='mo14', value=v))
     for i in range(t):
-        configs.append(node.Config(11111 + i, n, t, test='mo14', byzantine=True))
+        randv = random.randint(0, 1)
+        configs.append(node.Config(11111 + i, n, t, test='mo14', value=randv, failure=f))
 
     ps = run_subprocesses(NODE_CMD_PREFIX,
                           [cfg.make_args() for cfg in configs],
                           [str(cfg.port) + '.out' for cfg in configs])
 
-    time.sleep(30)
+    time.sleep(20)
     for p in ps:
         p.terminate()
 
