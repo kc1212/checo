@@ -107,7 +107,7 @@ def check_bracha_files(n, t):
     assert tally >= n - t, "Bracha incorrect tally! tally = {}, n = {}, t = {}, m = {}".format(tally, n, t, m)
 
 
-def check_mo14_files(n, t):
+def check_mo14_files(n, t, expected_v):
     # TODO check expected value v
     target = 'Mo14: DECIDED'
     mo14_decides = search_for_string_in_dir(DIR, target)
@@ -118,6 +118,7 @@ def check_mo14_files(n, t):
     v, tally = value_and_tally(vs)
 
     assert tally >= n - t, "Mo14 incorrect tally! tally = {}, n = {}, t = {}, v = {}".format(tally, n, t, v)
+    assert int(v) == expected_v
 
 
 @pytest.mark.parametrize("n,t,f", [
@@ -177,15 +178,16 @@ def test_bracha(n, t, f, discover, folder):
     print "Test: Bracha test passed"
 
 
-@pytest.mark.parametrize("n,t,v,f", [
-    (4, 1, 1, 'byzantine'),
-    (7, 2, 1, 'byzantine'),
-    (19, 6, 1, 'byzantine'),
-    (4, 1, 1, 'omission'),
-    (7, 2, 1, 'omission'),
-    (19, 6, 1, 'omission'),
+@pytest.mark.parametrize("n,t,f", [
+    (4, 1, 'byzantine'),
+    (7, 2, 'byzantine'),
+    (19, 6, 'byzantine'),
+    (4, 1, 'omission'),
+    (7, 2, 'omission'),
+    (19, 6, 'omission'),
 ])
-def test_mo14(n, t, v, f, discover, folder):
+def test_mo14(n, t, f, discover, folder):
+    v = random.randint(0, 1)
     configs = []
     for i in range(n - t):
         configs.append(node.Config(12345 + i, n, t, test='mo14', value=v))
@@ -204,7 +206,7 @@ def test_mo14(n, t, v, f, discover, folder):
     # TODO not sure where to flush, so use sleep for now...
     time.sleep(1)
     print "Test: Mo14 nodes terminates"
-    check_mo14_files(n, t)
+    check_mo14_files(n, t, v)
     print "Test: Mo14 test passed"
 
 if __name__ == '__main__':
