@@ -192,3 +192,5 @@ def test_tx_chain(m):
         chain_s.new_tx(block_s)
         chain_r.new_tx(block_r)
 
+        assert chain_s.latest_hash() == block_s.hash()
+        assert chain_r.latest_hash() == block_r.hash()

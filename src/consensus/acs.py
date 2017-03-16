@@ -19,7 +19,6 @@ class ACS:
         self.bracha_results = {}
         self.mo14_results = {}
         self.mo14_provided = {}
-        self.unprocessed = []
 
     def start(self, msg):
         # initialise our RBC and BA instances

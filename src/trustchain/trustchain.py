@@ -277,6 +277,10 @@ class Chain:
 
         self.chain.append(cp)
 
+    def latest_hash(self):
+        # type: () -> str
+        return self.chain[-1].hash()
+
     def previous_cp(self):
         # type: () -> CpBlock
         for b in reversed(self.chain):
@@ -322,6 +326,10 @@ class TrustChain:
     def get_h(self):
         # type: () -> int
         return len(self.my_chain.chain)
+
+    def latest_hash(self):
+        # type () -> str
+        return self.my_chain.latest_hash()
 
     def pieces(self, tx):
         """

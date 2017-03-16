@@ -18,6 +18,8 @@ from src.consensus.bracha import Bracha
 from src.consensus.acs import ACS
 from src.consensus.mo14 import Mo14
 
+from src.trustchain.trustchain_runner import TrustChainRunner
+
 from .discovery import Discovery, got_discovery
 
 
@@ -30,7 +32,7 @@ class MyProto(JsonReceiver):
         self.config = factory.config
         self.q = Queue.Queue()  # used for replaying un-handled messages
         self.peers = factory.peers
-        self.remote_id = None
+        self.remote_id = None  # TODO need to be public key
         self.state = 'SERVER'
 
         # start looping call on the queue
@@ -83,6 +85,7 @@ class MyProto(JsonReceiver):
             self.check_and_add_to_queue(res, obj)
 
         elif ty == PayloadType.chain.value:
+            self.factory.tc_runner.handle(payload.payload, self.remote_id)
             pass
 
         # messages below are for testing, bracha/mo14 is normally handled by acs
@@ -154,6 +157,7 @@ class MyFactory(Factory):
         self.bracha = Bracha(self)  # just for testing
         self.mo14 = Mo14(self)  # just for testing
         self.acs = ACS(self)
+        self.tc_runner = TrustChainRunner(self, lambda m: Payload.make_chain(m).to_dict())
 
     def buildProtocol(self, addr):
         return MyProto(self)
@@ -184,6 +188,10 @@ class MyFactory(Factory):
             proto = v[2]
             proto.send_json(msg)
 
+    def send(self, node, msg):
+        proto = self.peers[node][2]
+        proto.send_json(msg)
+
 
 def got_protocol(p):
     reactor.callLater(1, p.send_ping)
@@ -194,30 +202,42 @@ class Config:
     All the static settings, used in Factory
     Should be singleton
     """
-    def __init__(self, port, n, t, test=None, value=0, failure=None):
+    def __init__(self, port, n, t, test=None, value=0, failure=None, tx=0):
         self.port = port
         self.n = n
         self.t = t
-        self.id = uuid.uuid4()
+        self.id = uuid.uuid4()  # TODO need to be public/verification key
         self.test = test
 
-        assert int(value) in (0, 1)
-        self.value = int(value)
+        assert value in (0, 1)
+        self.value = value
 
+        # TODO use None or 'none' as default?
         assert failure == 'byzantine' or failure == 'omission' or failure is None
         self.failure = failure
 
+        assert isinstance(tx, int)
+        assert tx >= 0
+        self.tx = tx
+
     def make_args(self):
         res = [str(self.port), str(self.n), str(self.t)]
+
         if self.test is not None:
             res.append('--test')
             res.append(self.test)
+
         if self.value is not None:
             res.append('--value')
             res.append(str(self.value))
+
         if self.failure is not None:
             res.append('--failure')
             res.append(self.failure)
+
+        res.append('--tx')
+        res.append(str(self.tx))
+
         return res
 
 
@@ -249,6 +269,9 @@ def run(config):
         reactor.callLater(1, f.mo14.delayed_start, config.value)
     elif config.test == 'acs':
         reactor.callLater(5, f.acs.start, config.port)  # use port number (unique on local network) as test message
+    elif config.test == 'tc':
+        if config.tx > 0:
+            reactor.callLater(5, f.tc_runner.make_random_tx)
 
     reactor.run()
 
@@ -258,12 +281,14 @@ if __name__ == '__main__':
     parser.add_argument('port', type=int, help='the listener port')
     parser.add_argument('n', type=int, help='the total number of promoters')
     parser.add_argument('t', type=int, help='the total number of malicious nodes')
-    parser.add_argument('--test', choices=['dummy', 'bracha', 'mo14', 'acs'],
+    parser.add_argument('--test', choices=['dummy', 'bracha', 'mo14', 'acs', 'tc'],
                         help='[for testing] choose an algorithm to initialise')
-    parser.add_argument('--value', choices=['0', '1'], default='1',
+    parser.add_argument('--value', choices=[0, 1], default=0, type=int,
                         help='[testing] the initial input for BA')
     parser.add_argument('--failure', choices=['byzantine', 'omission'],
                         help='[testing] the mode of failure')
+    parser.add_argument('--tx', type=int, metavar='RATE', default=0,
+                        help='[testing] whether to initiate transaction RATE/sec')
     args = parser.parse_args()
 
-    run(Config(args.port, args.n, args.t, args.test, args.value, args.failure))
+    run(Config(args.port, args.n, args.t, args.test, args.value, args.failure, args.tx))
