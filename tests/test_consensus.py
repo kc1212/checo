@@ -133,13 +133,13 @@ def test_acs(n, t, f, discover, folder):
     for i in range(n - t):
         configs.append(node.Config(12345 + i, n, t, test='acs'))
     for i in range(t):
-        configs.append(node.Config(11111 + i, n, t, failure=f))
+        configs.append(node.Config(11111 + i, n, t, test='acs', failure=f))
 
     ps = run_subprocesses(NODE_CMD_PREFIX,
                           [cfg.make_args() for cfg in configs],
                           [str(cfg.port) + '.out' for cfg in configs])
 
-    time.sleep(20)
+    time.sleep(30)
     for p in ps:
         p.terminate()
 
