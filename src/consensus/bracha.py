@@ -20,7 +20,7 @@ class Bracha:
         self.init_count = 0
         self.echo_count = 0
         self.ready_count = 0
-        self.body = None  # TODO make sure the bodies match
+        self.body = None
         self.peers_state = {}  # TODO make sure peers do not replay messages
         self.done = False
         self.acs_hdr_f = acs_hdr_f
@@ -46,6 +46,13 @@ class Bracha:
         body = msg["body"]
 
         assert isinstance(ty, int)
+        assert body is not None
+
+        if self.body is None:
+            # if body is None, we must be in the initial state
+            assert self.init_count == 0 and self.echo_count == 0 and self.ready_count == 0
+            self.body = body
+        assert self.body == body
 
         if ty == MsgType.init.value:
             self.init_count += 1
