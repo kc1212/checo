@@ -35,15 +35,7 @@ class Signature:
         if vk != self.vk:
             raise ValueError("Mismatch verification key")
         expected_msg = libnacl.crypto_sign_open(self.sig, self.vk)
-        if expected_msg[:-20] != msg[:-20]:  # TODO why are the last few bytes off?!
-            # import difflib
-            # for i, s in enumerate(difflib.ndiff(b64encode(expected_msg), b64encode(msg))):
-            #     if s[0] == ' ':
-            #         continue
-            #     elif s[0] == '-':
-            #         print 'Delete "{}" from position {}'.format(s[-1], i)
-            #     elif s[0] == '+':
-            #         print 'Add "{}" to position {}'.format(s[-1], i)
+        if expected_msg != msg:
             raise ValueError("Mismatch message")
 
     def dumps(self):
@@ -342,7 +334,7 @@ class TrustChain:
         Verify tx, follow the rules and mutates the state to add it
         :return: None
         """
-        assert tx.get_h() == len(self.my_chain.chain)
+        assert tx.get_h() == self.next_h()
         self.my_chain.new_tx(tx)
 
     def new_cp(self, cp):
@@ -354,7 +346,7 @@ class TrustChain:
         assert cp.get_h() == len(self.my_chain.chain)
         self.my_chain.new_cp(cp)
 
-    def get_h(self):
+    def next_h(self):
         # type: () -> int
         return len(self.my_chain.chain)
 

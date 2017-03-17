@@ -140,7 +140,7 @@ class TrustChainRunner:
             m, node = self.send_q.get()
 
             tx_id = random.randint(0, 2**31 - 1)
-            msg = make_syn(tx_id, b64encode(self.chain.latest_hash()), self.chain.get_h() + 1, m)
+            msg = make_syn(tx_id, b64encode(self.chain.latest_hash()), self.chain.next_h(), m)
 
             self.update_state(True, None, tx_id, node, None, m, None)
             self.send(node, msg)
@@ -180,7 +180,7 @@ class TrustChainRunner:
 
         # make sure we're in the initial state
         self.assert_unlocked_state()
-        block = TxBlock(self.chain.latest_hash(), self.chain.get_h(), h_r, m)  # generate s_s from this
+        block = TxBlock(self.chain.latest_hash(), self.chain.next_h(), h_r, m)  # generate s_s from this
         self.update_state(True,
                           block,
                           tx_id,
@@ -196,13 +196,13 @@ class TrustChainRunner:
         assert not self.block_r.is_sealed()
         msg = make_synack(self.tx_id,
                           b64encode(self.chain.latest_hash()),
-                          self.chain.get_h() + 1,
+                          self.chain.next_h(),
                           self.s_s.to_dict())
         self.send(self.src, msg)
 
     def process_synack(self, msg, src):
         """
-        I should have all the information to make and seal a tx new block
+        I should have all the information to make and seal a new tx block
         :param msg:
         :param src:
         :return:
@@ -220,7 +220,7 @@ class TrustChainRunner:
         assert src == self.src
 
         print "TC: synack"
-        self.block_r = TxBlock(self.chain.latest_hash(), self.chain.get_h(), h_r, self.m)
+        self.block_r = TxBlock(self.chain.latest_hash(), self.chain.next_h(), h_r, self.m)
         s_s = self.block_r.sign(self.chain.vk, self.chain.sk)
         self.block_r.seal(self.chain.vk, s_s, src, s_r, prev_r)
         self.chain.new_tx(self.block_r)
