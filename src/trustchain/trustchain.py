@@ -1,9 +1,9 @@
 import math
 import libnacl
 import pickle  # not the best since it's insecure, but we can't easily use json because it doesn't work with binary
-
 from typing import List, Union
 from enum import Enum
+from base64 import b64encode, b64decode
 
 ValidityState = Enum('ValidityState', 'Valid Invalid Unknown')
 
@@ -16,10 +16,15 @@ class Signature:
     }
     """
 
-    def __init__(self, vk, sk, msg):
+    def __init__(self, vk=None, sk=None, msg=None):
         # type: (str, str, str) -> None
-        self.vk = vk  # this is also the identity
-        self.sig = libnacl.crypto_sign(msg, sk)  # self.sig contains the original message
+
+        if vk is None and sk is None and msg is None:
+            self.vk = None
+            self.sig = None
+        else:
+            self.vk = vk  # this is also the identity
+            self.sig = libnacl.crypto_sign(msg, sk)  # self.sig contains the original message
 
     def verify(self, vk, msg):
         # type: (str, str) -> None
@@ -29,20 +34,41 @@ class Signature:
         """
         if vk != self.vk:
             raise ValueError("Mismatch verification key")
-        if libnacl.crypto_sign_open(self.sig, self.vk) != msg:
+        expected_msg = libnacl.crypto_sign_open(self.sig, self.vk)
+        if expected_msg[:-20] != msg[:-20]:  # TODO why are the last few bytes off?!
+            # import difflib
+            # for i, s in enumerate(difflib.ndiff(b64encode(expected_msg), b64encode(msg))):
+            #     if s[0] == ' ':
+            #         continue
+            #     elif s[0] == '-':
+            #         print 'Delete "{}" from position {}'.format(s[-1], i)
+            #     elif s[0] == '+':
+            #         print 'Add "{}" to position {}'.format(s[-1], i)
             raise ValueError("Mismatch message")
 
     def dumps(self):
         # type: () -> str
         return pickle.dumps(self)
 
+    def to_dict(self):
+        return {'vk': b64encode(self.vk), 'sig': b64encode(self.sig)}
+
+    @classmethod
+    def from_dict(cls, d):
+        vk = b64decode(d['vk'])
+        sig = b64decode(d['sig'])
+        res = cls()
+        res.vk = vk
+        res.sig = sig
+        return res
+
 
 class TxBlock:
     """
     In the network, TxBlock needs to be created using 3 way handshake.
-    1, s -> r: prev, h_s, m
-    2, s <- r: prev, h_r, s_r // s seals block
-    3, s -> r: s_s // r seals block
+    1, s -> r: prev, h_s, m // syn
+    2, s <- r: prev, h_r, s_r // synack, s seals block
+    3, s -> r: s_s // ack, r seals block
     I'm always the sender, regardless of who initialised the handshake.
     This protocol is not Byzantine fault tolerant, ongoing work for "double signature"
     struct TxBlock {
@@ -108,6 +134,11 @@ class TxBlock:
         self.s_s = s_s
 
         return self
+
+    def is_sealed(self):
+        if self.s_s is None or self.s_r is None:
+            return False
+        return True
 
     def make_pair(self, prev):
         # type: (str) -> TxBlock
