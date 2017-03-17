@@ -38,16 +38,15 @@ class MyProto(JsonReceiver):
 
         # start looping call on the queue
         self.lc = LoopingCall(self.process_queue)
-        self.lc.start(5).addErrback(log.err)
+        self.lc.start(1).addErrback(log.err)
 
     def process_queue(self):
-        qsize = self.q.qsize()
-        print "processing {} items in queue".format(qsize)
-
         # we use counter to stop this routine from running forever,
         # because self.json_received can put item back into the queue
+        qsize = self.q.qsize()
         ctr = 0
         while not self.q.empty() and ctr < qsize:
+            print "NODE: processing item in queue"
             ctr += 1
             m = self.q.get()
             self.json_received(m)
@@ -191,6 +190,7 @@ class MyFactory(Factory):
 
 
 def got_protocol(p):
+    # this needs to be lower than the callLater in `run`
     reactor.callLater(1, p.send_ping)
 
 
@@ -257,12 +257,13 @@ def run(config):
     d.addCallback(got_protocol).addErrback(log.err)
 
     # optionally run tests, args.test == None implies reactive node
+    # we use call later to wait until the nodes are registered
     if config.test == 'dummy':
         reactor.callLater(5, f.bcast, Payload.make_dummy("z").to_dict())
     elif config.test == 'bracha':
         reactor.callLater(5, f.bracha.bcast_init)
     elif config.test == 'mo14':
-        reactor.callLater(1, f.mo14.delayed_start, config.value)
+        reactor.callLater(5, f.mo14.start, config.value)
     elif config.test == 'acs':
         reactor.callLater(5, f.acs.start, config.port)  # use port number (unique on local network) as test message
     elif config.test == 'tc':

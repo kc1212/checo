@@ -24,7 +24,7 @@ class ACS:
         # assume all the peers are connected
         assert len(self.factory.peers) == self.factory.config.n
         for peer in self.factory.peers.keys():
-            print "ACS: adding peer", peer, type(peer)
+            print "ACS: adding peer", b64encode(peer)
 
             # TODO when do we update the round?
             def acs_hdr_f_factory(instance, ty, round):
@@ -45,7 +45,7 @@ class ACS:
 
         # send the first RBC, assume all nodes have connected
         print "ACS: initiating...", b64encode(my_vk), msg
-        reactor.callLater(5, self.brachas[my_vk].bcast_init, msg)
+        self.brachas[my_vk].bcast_init(msg)
 
     def handle(self, msg, sender_vk):
         """
@@ -75,12 +75,15 @@ class ACS:
         print "ACS: got msg", msg, "from", b64encode(sender_vk)
 
         if ty == PayloadType.bracha.value:
+            if instance not in self.brachas:
+                print "instance {} not in self.brachas".format(b64encode(instance))
+                return Replay()
             res = self.brachas[instance].handle(body)
             if isinstance(res, Handled) and res.m is not None:
-                print "ACS: Bracha delivered", instance, res.m
+                print "ACS: Bracha delivered", b64encode(instance), res.m
                 self.bracha_results[instance] = res.m
                 if instance not in self.mo14_provided:
-                    print "ACS: initiating BA", instance, 1
+                    print "ACS: initiating BA", b64encode(instance), 1
                     self.mo14_provided[instance] = 1
                     self.mo14s[instance].start(1)
 
@@ -89,7 +92,7 @@ class ACS:
                 print "ACS: forwarding Mo14"
                 res = self.mo14s[instance].handle(body, sender_vk)
                 if isinstance(res, Handled) and res.m is not None:
-                    print "ACS: delivered Mo14", instance, res.m
+                    print "ACS: delivered Mo14", b64encode(instance), res.m
                     self.mo14_results[instance] = res.m
                 elif isinstance(res, Replay):
                     # raise AssertionError("Impossible, our Mo14 instance already instantiated")

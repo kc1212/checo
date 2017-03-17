@@ -1,5 +1,6 @@
 import random
 from collections import defaultdict
+from base64 import b64encode
 
 from enum import Enum
 from src.utils.messages import Payload
@@ -52,20 +53,6 @@ class Mo14:
         self.state = Mo14State.start
         print "Mo14: initial message broadcasted", v
 
-    def delayed_start(self, v):
-        """
-        We need this because all nodes should have the same self.r before performing bcast_est
-        :param v:
-        :return:
-        """
-        from twisted.internet import reactor
-        assert v in (0, 1)
-
-        self.r += 1
-        reactor.callLater(5, self.bcast_est, v)
-        self.state = Mo14State.start
-        print "Mo14: delayed message broadcasted", v
-
     def store_msg(self, msg, sender_vk):
         ty = msg['ty']
         v = msg['v']
@@ -107,14 +94,14 @@ class Mo14:
         t = self.factory.config.t
         n = self.factory.config.n
 
-        print "Mo14: stored msg", msg, sender_vk
+        print "Mo14: stored msg", msg, b64encode(sender_vk)
         self.store_msg(msg, sender_vk)
 
         if r < self.r:
             print "Mo14: not processing because {} < {}".format(r, self.r)
             return Handled()
         elif r > self.r:
-            print "Mo14: I'm not ready yet {} > {}, the message should be relayed".format(r, self.r)
+            print "Mo14: I'm not ready yet {} > {}, the message should be replayed".format(r, self.r)
             return Replay()
 
         def update_bin_values():
