@@ -1,10 +1,9 @@
 from twisted.internet.task import LoopingCall
 from twisted.python import log
-
-import random
-import base64
+from base64 import b64encode, b64decode
 from Queue import Queue
 from enum import Enum
+import random
 
 from trustchain import TrustChain, TxBlock, CpBlock
 from src.utils.utils import Replay, Handled
@@ -22,7 +21,7 @@ class TrustChainRunner:
     }
 
     struct Syn {
-        id: u32,
+        tx_id: u32,
         prev: Digest,  // encode to base64 before sending
         h_s: u32,
         m: String,
@@ -50,7 +49,6 @@ class TrustChainRunner:
 
     def handle(self, msg, src):
         print "TC: got message", msg
-        # TODO src need to be vk rather than uuid
         self.recv_q.put((msg, src))
 
     def process_recv_q(self):
@@ -86,7 +84,7 @@ class TrustChainRunner:
         # we're not locked, so proceed
         print "TC: not locked, proceeding"
         tx_id = msg['tx_id']
-        prev_r = base64.b64decode(msg['prev'])
+        prev_r = b64decode(msg['prev'])
         h = msg['h']  # height of receiver
         m = msg['m']
 
@@ -132,7 +130,7 @@ class TrustChainRunner:
             m, node = self.send_q.get()
 
             tx_id = random.randint(0, 2**31 - 1)
-            msg = make_syn(tx_id, base64.b64encode(self.chain.latest_hash()), self.chain.get_h(), m)
+            msg = make_syn(tx_id, b64encode(self.chain.latest_hash()), self.chain.get_h(), m)
 
             self.tx_locked = True
             self.tx_id = tx_id
@@ -165,7 +163,7 @@ class TrustChainRunner:
         node = random.choice(self.factory.peers.keys())
 
         # cannot be myself
-        while node == self.factory.config.id:
+        while node == self.factory.vk:
             node = random.choice(self.factory.peers.keys())
 
         m = 'test' + str(random.random())

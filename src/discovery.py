@@ -1,5 +1,3 @@
-import uuid
-
 from twisted.internet import reactor
 from twisted.internet.protocol import Factory
 from src.utils.jsonreceiver import JsonReceiver
@@ -12,18 +10,23 @@ class Discovery(JsonReceiver):
     """
 
     def __init__(self, nodes, node_factory=None):
-        self.nodes = nodes
-        self.id = None
+        self.nodes = nodes  # key: vk, val: ip:port
+        self.vk = None
         self.addr = None
         self.state = 'SERVER'
         self.factory = node_factory
 
     def connection_lost(self, reason):
-        if self.id in self.nodes:
-            del self.nodes[self.id]
-            print "Discovery: deleted", self.id
+        if self.vk in self.nodes:
+            del self.nodes[self.vk]
+            print "Discovery: deleted", self.vk
 
     def json_received(self, msg):
+        """
+        we don't bother with decoding vk here, since we don't use vk in any crypto functions
+        :param msg:
+        :return:
+        """
         print "Discovery: received", msg
 
         payload = Payload.from_dict(msg)
@@ -31,14 +34,14 @@ class Discovery(JsonReceiver):
 
         if self.state == 'SERVER':
             if ty == PayloadType.discover.value:
-                (_id, _port) = payload.payload
-                self.id = uuid.UUID(_id).urn
+                (_vk, _port) = payload.payload
+                self.vk = _vk  # NOTE storing base64 form as is
                 self.addr = self.transport.getPeer().host + ":" + str(_port)
 
                 # TODO check addr to be in the form host:port
-                if self.id not in self.nodes:
-                    print "Discovery: added node", self.id, self.addr
-                    self.nodes[self.id] = self.addr
+                if self.vk not in self.nodes:
+                    print "Discovery: added node", self.vk, self.addr
+                    self.nodes[self.vk] = self.addr
 
                 self.send_json(Payload.make_discover_reply(self.nodes).to_dict())
 
@@ -59,18 +62,17 @@ class Discovery(JsonReceiver):
                 raise NotImplementedError
 
             else:
-                print "Discovery: invalid payload type on CLIENT", ty
-                raise AssertionError
+                raise AssertionError("Discovery: invalid payload type {} on CLIENT".format(ty))
 
-    def say_hello(self, uuid, port):
+    def say_hello(self, vk, port):
         self.state = 'CLIENT'
-        self.send_json(Payload.make_discover((uuid, port)).to_dict())
-        print "Discovery: discovery sent", uuid, port
+        self.send_json(Payload.make_discover((vk, port)).to_dict())
+        print "Discovery: discovery sent", vk, port
 
 
 class DiscoveryFactory(Factory):
     def __init__(self):
-        self.nodes = {}  # key = uuid, val = addr
+        self.nodes = {}  # key = vk, val = addr
 
     def buildProtocol(self, addr):
         return Discovery(self.nodes)

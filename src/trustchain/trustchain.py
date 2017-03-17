@@ -301,9 +301,9 @@ class TrustChain:
 
     def __init__(self):
         # type: () -> None
-        self.sign_vk, self.sign_sk = libnacl.crypto_sign_keypair()
-        self.chains = {self.sign_vk: Chain(self.sign_vk, self.sign_sk)}  # HashMap<Node, Chain>
-        self.my_chain = self.chains[self.sign_vk]
+        self.vk, self.sk = libnacl.crypto_sign_keypair()
+        self.chains = {self.vk: Chain(self.vk, self.sk)}  # HashMap<Node, Chain>
+        self.my_chain = self.chains[self.vk]
 
     def new_tx(self, tx):
         # type: (TxBlock) -> None

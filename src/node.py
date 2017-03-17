@@ -1,7 +1,7 @@
 import Queue
 import argparse
 import sys
-import uuid
+from base64 import b64encode, b64decode
 
 from twisted.python import log
 from twisted.internet import reactor
@@ -30,9 +30,10 @@ class MyProto(JsonReceiver):
     def __init__(self, factory):
         self.factory = factory
         self.config = factory.config
+        self.vk = factory.vk
         self.q = Queue.Queue()  # used for replaying un-handled messages
         self.peers = factory.peers
-        self.remote_id = None  # TODO need to be public key
+        self.remote_vk = None
         self.state = 'SERVER'
 
         # start looping call on the queue
@@ -52,11 +53,11 @@ class MyProto(JsonReceiver):
             self.json_received(m)
 
     def connection_lost(self, reason):
-        print "deleting peer ", self.remote_id
+        print "deleting peer ", b64encode(self.remote_vk)
         try:
-            del self.peers[self.remote_id]
+            del self.peers[self.remote_vk]
         except KeyError:
-            print "peer already deleted", self.remote_id, "my id is", self.config.id
+            print "peer {} already deleted".format(b64encode(self.remote_vk))
 
     def json_received(self, obj):
         """
@@ -81,12 +82,11 @@ class MyProto(JsonReceiver):
         elif ty == PayloadType.acs.value:
             if self.factory.config.failure == 'omission':
                 return
-            res = self.factory.acs.handle(payload.payload, self.remote_id)
+            res = self.factory.acs.handle(payload.payload, self.remote_vk)
             self.check_and_add_to_queue(res, obj)
 
         elif ty == PayloadType.chain.value:
-            self.factory.tc_runner.handle(payload.payload, self.remote_id)
-            pass
+            self.factory.tc_runner.handle(payload.payload, self.remote_vk)
 
         # messages below are for testing, bracha/mo14 is normally handled by acs
         elif ty == PayloadType.bracha.value:
@@ -97,15 +97,12 @@ class MyProto(JsonReceiver):
         elif ty == PayloadType.mo14.value:
             if self.factory.config.failure == 'omission':
                 return
-            self.factory.mo14.handle(payload.payload, self.remote_id)
+            self.factory.mo14.handle(payload.payload, self.remote_vk)
 
         elif ty == PayloadType.dummy.value:
-            print "got dummy message from", self.remote_id
+            print "got dummy message from", b64encode(self.remote_vk)
         else:
-            print "invalid message type"
-            raise AssertionError
-
-            # self.print_info()
+            raise AssertionError("invalid message type")
 
     def check_and_add_to_queue(self, o, m):
         assert o is not None
@@ -116,35 +113,34 @@ class MyProto(JsonReceiver):
             self.q.put(m)
 
     def send_ping(self):
-        self.send_json(Payload.make_ping((self.config.id.urn, self.config.port)).to_dict())
+        self.send_json(Payload.make_ping((b64encode(self.vk), self.config.port)).to_dict())
         print "sent ping"
         self.state = 'CLIENT'
 
     def handle_ping(self, msg):
         print "got ping", msg
         assert (self.state == 'SERVER')
-        _id, _port = msg
-        if uuid.UUID(_id) in self.peers.keys():
+        _vk, port = msg
+        vk = b64decode(_vk)
+        if vk in self.peers.keys():
             print "ping found myself in peers.keys"
             # self.transport.loseConnection()
-        self.peers[uuid.UUID(_id)] = (self.transport.getPeer().host, _port, self)
-        self.send_json(Payload.make_pong((self.config.id.urn, self.config.port)).to_dict())
-        self.remote_id = uuid.UUID(_id)
+        self.peers[vk] = (self.transport.getPeer().host, port, self)
+        self.send_json(Payload.make_pong((b64encode(self.vk), self.config.port)).to_dict())
+        self.remote_vk = vk
         print "sent pong"
 
     def handle_pong(self, msg):
         print "got pong", msg
         assert (self.state == 'CLIENT')
-        _id, _port = msg
-        if uuid.UUID(_id) in self.peers.keys():
+        _vk, port = msg
+        vk = b64decode(_vk)
+        if vk in self.peers.keys():
             print "pong: found myself in peers.keys"
             # self.transport.loseConnection()
-        self.peers[uuid.UUID(_id)] = (self.transport.getPeer().host, _port, self)
-        self.remote_id = uuid.UUID(_id)
+        self.peers[vk] = (self.transport.getPeer().host, port, self)
+        self.remote_vk = vk
         print "done pong"
-
-    def print_info(self):
-        print "info: me: {}, remote: {}, peers: {}".format(self.config.id, self.remote_id, self.peers.keys())
 
 
 class MyFactory(Factory):
@@ -152,24 +148,25 @@ class MyFactory(Factory):
     The Twisted Factory with a broadcast functionality, should be singleton
     """
     def __init__(self, config):
-        self.peers = {}  # key: uuid, value: (host: str, port: int, self: MyProto)
+        self.peers = {}  # key: vk, value: (host: str, port: int, self: MyProto)
         self.config = config
         self.bracha = Bracha(self)  # just for testing
         self.mo14 = Mo14(self)  # just for testing
         self.acs = ACS(self)
         self.tc_runner = TrustChainRunner(self, lambda m: Payload.make_chain(m).to_dict())
+        self.vk = self.tc_runner.chain.vk
 
     def buildProtocol(self, addr):
         return MyProto(self)
 
     def new_connection_if_not_exist(self, nodes):
-        for id, addr in nodes.iteritems():
-            id = uuid.UUID(id)
-            if id not in self.peers.keys() and id != self.config.id:
+        for _vk, addr in nodes.iteritems():
+            vk = b64decode(_vk)
+            if vk not in self.peers.keys() and vk != self.vk:
                 host, port = addr.split(":")
                 self.make_new_connection(host, int(port))
             else:
-                print "client already exist", id, addr
+                print "client already exist", b64encode(vk), addr
 
     def make_new_connection(self, host, port):
         print "making client connection", host, port
@@ -206,7 +203,6 @@ class Config:
         self.port = port
         self.n = n
         self.t = t
-        self.id = uuid.uuid4()  # TODO need to be public/verification key
         self.test = test
 
         assert value in (0, 1)
@@ -253,7 +249,7 @@ def run(config):
     # connect to discovery server
     point = TCP4ClientEndpoint(reactor, "localhost", 8123)
     d = connectProtocol(point, Discovery({}, f))
-    d.addCallback(got_discovery, config.id.urn, config.port).addErrback(log.err)
+    d.addCallback(got_discovery, b64encode(f.vk), config.port).addErrback(log.err)
 
     # connect to myself
     point = TCP4ClientEndpoint(reactor, "localhost", config.port)

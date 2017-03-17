@@ -38,8 +38,8 @@ class Mo14:
         self.r = 0
         self.est = -1
         self.state = Mo14State.start
-        self.est_values = {}  # key: r, val: [set(), set()], sets are uuid
-        self.aux_values = {}  # key: r, val: [set(), set()], sets are uuid
+        self.est_values = {}  # key: r, val: [set(), set()], sets are vk
+        self.aux_values = {}  # key: r, val: [set(), set()], sets are vk
         self.broadcasted = defaultdict(bool)  # key: r, val: boolean
         self.bin_values = defaultdict(set)  # key: r, val: binary set()
         self.acs_hdr_f = acs_hdr_f
@@ -66,7 +66,7 @@ class Mo14:
         self.state = Mo14State.start
         print "Mo14: delayed message broadcasted", v
 
-    def store_msg(self, msg, sender_uuid):
+    def store_msg(self, msg, sender_vk):
         ty = msg['ty']
         v = msg['v']
         r = msg['r']
@@ -74,14 +74,14 @@ class Mo14:
         if ty == Mo14Type.EST.value:
             if r not in self.est_values:
                 self.est_values[r] = [set(), set()]
-            self.est_values[r][v].add(sender_uuid)
+            self.est_values[r][v].add(sender_vk)
 
         elif ty == Mo14Type.AUX.value:
             if r not in self.aux_values:
                 self.aux_values[r] = [set(), set()]
-            self.aux_values[r][v].add(sender_uuid)
+            self.aux_values[r][v].add(sender_vk)
 
-    def handle(self, msg, sender_uuid):
+    def handle(self, msg, sender_vk):
         """
         We expect messages of type:
         Msg {
@@ -91,7 +91,7 @@ class Mo14:
         }
         This function moves the state machine forward when new messages are received
         :param msg: the new messages
-        :param sender_uuid: UUID of the sender (type uuid.UUID)
+        :param sender_vk: verification key of the sender (type str)
         :return:
         """
 
@@ -107,8 +107,8 @@ class Mo14:
         t = self.factory.config.t
         n = self.factory.config.n
 
-        print "Mo14: stored msg", msg, sender_uuid
-        self.store_msg(msg, sender_uuid)
+        print "Mo14: stored msg", msg, sender_vk
+        self.store_msg(msg, sender_vk)
 
         if r < self.r:
             print "Mo14: not processing because {} < {}".format(r, self.r)
@@ -158,7 +158,7 @@ class Mo14:
             def get_aux_vals(aux_value):
                 """
 
-                :param aux_value: [set(), set()], the sets are of uuid
+                :param aux_value: [set(), set()], the sets are of vk
                 :return: accepted values_i, otherwise None
                 """
                 if len(self.bin_values[self.r]) == 1:
