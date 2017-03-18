@@ -11,15 +11,12 @@ from twisted.internet.protocol import Factory
 from twisted.internet.task import LoopingCall
 
 from src.utils.jsonreceiver import JsonReceiver
-from src.utils.messages import Payload, PayloadType
+from src.utils.messages import DummyMsg, PingMsg, PongMsg, BrachaMsg, Mo14Msg, ACSMsg, ChainMsg
 from src.utils.utils import Replay, Handled
-
 from src.consensus.bracha import Bracha
 from src.consensus.acs import ACS
 from src.consensus.mo14 import Mo14
-
 from src.trustchain.trustchain_runner import TrustChainRunner
-
 from .discovery import Discovery, got_discovery
 
 
@@ -49,7 +46,7 @@ class MyProto(JsonReceiver):
             print "NODE: processing item in queue"
             ctr += 1
             m = self.q.get()
-            self.json_received(m)
+            self.obj_received(m)
 
     def connection_lost(self, reason):
         print "deleting peer ", b64encode(self.remote_vk)
@@ -58,48 +55,43 @@ class MyProto(JsonReceiver):
         except KeyError:
             print "peer {} already deleted".format(b64encode(self.remote_vk))
 
-    def json_received(self, obj):
+    def obj_received(self, obj):
         """
         first we handle the items in the queue
         then we handle the received message
-        struct Payload {
-            payload_type: u32,
-            payload: Msg, // any type, passed directly to sub system
-        }
         :param obj:
         :return:
         """
-        payload = Payload.from_dict(obj)
-        ty = payload.payload_type
 
-        if ty == PayloadType.ping.value:
-            self.handle_ping(payload.payload)
+        if isinstance(obj, PingMsg):
+            self.handle_ping(obj)
 
-        elif ty == PayloadType.pong.value:
-            self.handle_pong(payload.payload)
+        elif isinstance(obj, PongMsg):
+            self.handle_pong(obj)
 
-        elif ty == PayloadType.acs.value:
+        elif isinstance(obj, ACSMsg):
             if self.factory.config.failure == 'omission':
                 return
-            res = self.factory.acs.handle(payload.payload, self.remote_vk)
+            res = self.factory.acs.handle(obj, self.remote_vk)
             self.check_and_add_to_queue(res, obj)
 
-        elif ty == PayloadType.chain.value:
-            self.factory.tc_runner.handle(payload.payload, self.remote_vk)
+        elif isinstance(obj, ChainMsg):
+            self.factory.tc_runner.handle(obj.body, self.remote_vk)
 
-        # messages below are for testing, bracha/mo14 is normally handled by acs
-        elif ty == PayloadType.bracha.value:
+        # NOTE messages below are for testing, bracha/mo14 is normally handled by acs
+        elif isinstance(obj, BrachaMsg):
             if self.factory.config.failure == 'omission':
                 return
-            self.factory.bracha.handle(payload.payload)
+            self.factory.bracha.handle(obj)
 
-        elif ty == PayloadType.mo14.value:
+        elif isinstance(obj, Mo14Msg):
             if self.factory.config.failure == 'omission':
                 return
-            self.factory.mo14.handle(payload.payload, self.remote_vk)
+            self.factory.mo14.handle(obj, self.remote_vk)
 
-        elif ty == PayloadType.dummy.value:
+        elif isinstance(obj, DummyMsg):
             print "got dummy message from", b64encode(self.remote_vk)
+
         else:
             raise AssertionError("invalid message type")
 
@@ -112,33 +104,31 @@ class MyProto(JsonReceiver):
             self.q.put(m)
 
     def send_ping(self):
-        self.send_json(Payload.make_ping((b64encode(self.vk), self.config.port)).to_dict())
+        self.send_obj(PingMsg(self.vk, self.config.port))
         print "sent ping"
         self.state = 'CLIENT'
 
     def handle_ping(self, msg):
+        # type: (PingMsg) -> None
         print "got ping", msg
         assert (self.state == 'SERVER')
-        _vk, port = msg
-        vk = b64decode(_vk)
-        if vk in self.peers.keys():
+        if msg.vk in self.peers.keys():
             print "ping found myself in peers.keys"
             # self.transport.loseConnection()
-        self.peers[vk] = (self.transport.getPeer().host, port, self)
-        self.send_json(Payload.make_pong((b64encode(self.vk), self.config.port)).to_dict())
-        self.remote_vk = vk
+        self.peers[msg.vk] = (self.transport.getPeer().host, msg.port, self)
+        self.remote_vk = msg.vk
+        self.send_obj(PongMsg(self.vk, self.config.port))
         print "sent pong"
 
     def handle_pong(self, msg):
+        # type: (PongMsg) -> None
         print "got pong", msg
         assert (self.state == 'CLIENT')
-        _vk, port = msg
-        vk = b64decode(_vk)
-        if vk in self.peers.keys():
+        if msg.vk in self.peers.keys():
             print "pong: found myself in peers.keys"
             # self.transport.loseConnection()
-        self.peers[vk] = (self.transport.getPeer().host, port, self)
-        self.remote_vk = vk
+        self.peers[msg.vk] = (self.transport.getPeer().host, msg.port, self)
+        self.remote_vk = msg.vk
         print "done pong"
 
 
@@ -152,7 +142,7 @@ class MyFactory(Factory):
         self.bracha = Bracha(self)  # just for testing
         self.mo14 = Mo14(self)  # just for testing
         self.acs = ACS(self)
-        self.tc_runner = TrustChainRunner(self, lambda m: Payload.make_chain(m).to_dict())
+        self.tc_runner = TrustChainRunner(self, lambda m: ChainMsg(m))
         self.vk = self.tc_runner.chain.vk
 
     def buildProtocol(self, addr):
@@ -182,11 +172,11 @@ class MyFactory(Factory):
         """
         for k, v in self.peers.iteritems():
             proto = v[2]
-            proto.send_json(msg)
+            proto.send_obj(msg)
 
     def send(self, node, msg):
         proto = self.peers[node][2]
-        proto.send_json(msg)
+        proto.send_obj(msg)
 
 
 def got_protocol(p):
@@ -259,7 +249,7 @@ def run(config):
     # optionally run tests, args.test == None implies reactive node
     # we use call later to wait until the nodes are registered
     if config.test == 'dummy':
-        reactor.callLater(5, f.bcast, Payload.make_dummy("z").to_dict())
+        reactor.callLater(5, f.bcast, DummyMsg('z'))
     elif config.test == 'bracha':
         reactor.callLater(5, f.bracha.bcast_init)
     elif config.test == 'mo14':

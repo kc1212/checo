@@ -1,15 +1,14 @@
 from twisted.internet.task import LoopingCall
 from twisted.python import log
-from base64 import b64encode, b64decode
+from base64 import b64encode
 from Queue import Queue
 from enum import Enum
-import pickle
+from typing import Union
 import random
 
 from trustchain import TrustChain, TxBlock, CpBlock, Signature
 from src.utils.utils import Replay, Handled
-
-MsgType = Enum('MsgType', 'syn synack ack con con_ss')
+from src.utils.messages import SynMsg, SynAckMsg, AckMsg
 
 
 class TrustChainRunner:
@@ -98,6 +97,7 @@ class TrustChainRunner:
         self.prev_r = prev_r
 
     def handle(self, msg, src):
+        # type: (Union[SynMsg, SynAckMsg, AckMsg]) -> None
         print "TC: got message", msg
         self.recv_q.put((msg, src))
 
@@ -108,26 +108,24 @@ class TrustChainRunner:
         while not self.recv_q.empty() and cnt < qsize:
             cnt += 1
             msg, src = self.recv_q.get()
-            ty = msg['ty']
-            body = msg['body']
 
-            if ty == MsgType.syn.value:
-                res = self.process_syn(body, src)
+            if isinstance(msg, SynMsg):
+                res = self.process_syn(msg, src)
                 if isinstance(res, Replay):
                     self.recv_q.put((msg, src))
 
-            elif ty == MsgType.synack.value:
-                res = self.process_synack(body, src)
+            elif isinstance(msg, SynAckMsg):
+                res = self.process_synack(msg, src)
                 if isinstance(res, Replay):
                     self.recv_q.put((msg, src))
 
-            elif ty == MsgType.ack.value:
-                res = self.process_ack(body, src)
+            elif isinstance(msg, AckMsg):
+                res = self.process_ack(msg, src)
                 if isinstance(res, Replay):
                     self.recv_q.put((msg, src))
 
             else:
-                raise AssertionError("Incorrect message type {}".format(ty))
+                raise AssertionError("Incorrect message type")
 
     def process_send_q(self):
         qsize = self.send_q.qsize()
@@ -140,7 +138,7 @@ class TrustChainRunner:
             m, node = self.send_q.get()
 
             tx_id = random.randint(0, 2**31 - 1)
-            msg = make_syn(tx_id, b64encode(self.chain.latest_hash()), self.chain.next_h(), m)
+            msg = SynMsg(tx_id, self.chain.latest_hash(), self.chain.next_h(), m)
 
             self.update_state(True, None, tx_id, node, None, m, None)
             self.send(node, msg)
@@ -159,6 +157,7 @@ class TrustChainRunner:
         self.send_q.put((m, node))
 
     def process_syn(self, msg, src):
+        # type: (SynMsg, str) -> Union[Handled, Replay]
         """
         I receive a syn, so I can initiate a block, but cannot seal it (missing signature)
         :param msg: message
@@ -173,10 +172,10 @@ class TrustChainRunner:
 
         # we're not locked, so proceed
         print "TC: not locked, proceeding"
-        tx_id = msg['tx_id']
-        prev_r = b64decode(msg['prev'])
-        h_r = msg['h']  # height of receiver
-        m = msg['m']
+        tx_id = msg.tx_id
+        prev_r = msg.prev
+        h_r = msg.h  # height of receiver
+        m = msg.m
 
         # make sure we're in the initial state
         self.assert_unlocked_state()
@@ -194,13 +193,14 @@ class TrustChainRunner:
     def send_synack(self):
         self.assert_full_state()
         assert not self.block_r.is_sealed()
-        msg = make_synack(self.tx_id,
-                          b64encode(self.chain.latest_hash()),
-                          self.chain.next_h(),
-                          self.s_s.to_dict())
+        msg = SynAckMsg(self.tx_id,
+                        self.chain.latest_hash(),
+                        self.chain.next_h(),
+                        self.s_s)
         self.send(self.src, msg)
 
     def process_synack(self, msg, src):
+        # type: (SynAckMsg, str) -> Union[Handled, Replay]
         """
         I should have all the information to make and seal a new tx block
         :param msg:
@@ -208,10 +208,10 @@ class TrustChainRunner:
         :return:
         """
         print "TC: processing synack {} from {}".format(msg, b64encode(src))
-        tx_id = msg['tx_id']
-        prev_r = b64decode(msg['prev'])
-        h_r = msg['h']
-        s_r = Signature.from_dict(msg['s'])
+        tx_id = msg.tx_id
+        prev_r = msg.prev
+        h_r = msg.h
+        s_r = msg.s
         if tx_id != self.tx_id:
             print "TC: not the tx_id we're expecting, putting it back to queue"
             return Replay()
@@ -230,14 +230,16 @@ class TrustChainRunner:
         return Handled()
 
     def send_ack(self, s_s):
-        msg = make_ack(self.tx_id, s_s.to_dict())
+        # type: (Signature) -> None
+        msg = AckMsg(self.tx_id, s_s)
         self.send(self.src, msg)
         self.reset_state()
 
     def process_ack(self, msg, src):
+        # type: (AckMsg, str) -> Union[Handled, Replay]
         print "TC: processing ack {} from {}".format(msg, b64encode(src))
-        tx_id = msg['tx_id']
-        s_r = Signature.from_dict(msg['s'])
+        tx_id = msg.tx_id
+        s_r = msg.s
         if tx_id != self.tx_id:
             print "TC: not the tx_id we're expecting, putting it back to queue"
             return Replay()
@@ -267,16 +269,3 @@ class TrustChainRunner:
         m = 'test' + str(random.random())
         print "TC: making random tx to", b64encode(node)
         self.send_syn(node, m)
-
-
-def make_syn(tx_id, prev, h, m):
-    return {'ty': MsgType.syn.value, 'body': {'tx_id': tx_id, 'prev': prev, 'h': h, 'm': m}}
-
-
-def make_synack(tx_id, prev, h, s):
-    return {'ty': MsgType.synack.value, 'body': {'tx_id': tx_id, 'prev': prev, 'h': h, 's': s}}
-
-
-def make_ack(tx_id, s):
-    return {'ty': MsgType.ack.value, 'body': {'tx_id': tx_id, 's': s}}
-

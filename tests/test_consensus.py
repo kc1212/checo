@@ -140,7 +140,11 @@ def test_acs(n, t, f, discover, folder):
                           [cfg.make_args() for cfg in configs],
                           [str(cfg.port) + '.out' for cfg in configs])
 
-    time.sleep(30)
+    if n > 10:
+        time.sleep(35)
+    else:
+        time.sleep(25)
+
     for p in ps:
         p.terminate()
 

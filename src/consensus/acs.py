@@ -1,9 +1,10 @@
-from base64 import b64encode, b64decode
-from twisted.internet import reactor
+from base64 import b64encode
+from typing import Dict, Union
+import json
 
 from .bracha import Bracha
 from .mo14 import Mo14
-from src.utils.messages import PayloadType, Payload
+from src.utils.messages import ACSMsg, BrachaMsg, Mo14Msg
 from src.utils.utils import Replay, Handled
 
 
@@ -13,11 +14,11 @@ class ACS:
         self.round = 0
         self.done = False
         # the following are initialised at start
-        self.brachas = {}  # key: vk, value: Bracha (aka RBC)
-        self.mo14s = {}  # key: vk, value: Mo14 (aka BA)
-        self.bracha_results = {}
-        self.mo14_results = {}
-        self.mo14_provided = {}
+        self.brachas = {}  # type: Dict[str, Bracha]
+        self.mo14s = {}  # type: Dict[str, Mo14]
+        self.bracha_results = {}  # type: Dict[str, str]
+        self.mo14_results = {}  # type: Dict[str, int]
+        self.mo14_provided = {}  # type: Dict[str, int]
 
     def start(self, msg):
         # initialise our RBC and BA instances
@@ -27,17 +28,13 @@ class ACS:
             print "ACS: adding peer", b64encode(peer)
 
             # TODO when do we update the round?
-            def acs_hdr_f_factory(instance, ty, round):
+            def msg_wrapper_f_factory(instance, round):
                 def f(_msg):
-                    return Payload.make_acs({"instance": b64encode(instance),
-                                             "ty": ty,
-                                             "round": round,
-                                             "body": _msg['payload']
-                                             }).to_dict()
+                    return ACSMsg(instance, round, _msg)
                 return f
 
-            self.brachas[peer] = Bracha(self.factory, acs_hdr_f_factory(peer, PayloadType.bracha.value, self.round))
-            self.mo14s[peer] = Mo14(self.factory, acs_hdr_f_factory(peer, PayloadType.mo14.value, self.round))
+            self.brachas[peer] = Bracha(self.factory, msg_wrapper_f_factory(peer, self.round))
+            self.mo14s[peer] = Mo14(self.factory, msg_wrapper_f_factory(peer, self.round))
 
         my_vk = self.factory.vk
         assert my_vk in self.brachas
@@ -48,6 +45,7 @@ class ACS:
         self.brachas[my_vk].bcast_init(msg)
 
     def handle(self, msg, sender_vk):
+        # type: (ACSMsg, str) -> Union[Handled, Replay]
         """
         Msg {
             instance: String // vk
@@ -63,18 +61,16 @@ class ACS:
             print "ACS: we're done, doing nothing", msg, sender_vk
             return Handled()
 
-        instance = b64decode(msg["instance"])
-        ty = msg["ty"]
-        # TODO check round
-        round = msg["round"]
+        instance = msg.instance
+        round = msg.round
         assert round == self.round
-        body = msg["body"]
+        body = msg.body
         t = self.factory.config.t
         n = self.factory.config.n
 
-        print "ACS: got msg", msg, "from", b64encode(sender_vk)
+        print "ACS: got msg (instance: {}, round: {}) from {}".format(b64encode(instance), round, b64encode(sender_vk))
 
-        if ty == PayloadType.bracha.value:
+        if isinstance(body, BrachaMsg):
             if instance not in self.brachas:
                 print "instance {} not in self.brachas".format(b64encode(instance))
                 return Replay()
@@ -87,7 +83,7 @@ class ACS:
                     self.mo14_provided[instance] = 1
                     self.mo14s[instance].start(1)
 
-        elif ty == PayloadType.mo14.value:
+        elif isinstance(body, Mo14Msg):
             if instance in self.mo14_provided:
                 print "ACS: forwarding Mo14"
                 res = self.mo14s[instance].handle(body, sender_vk)
@@ -115,12 +111,12 @@ class ACS:
                 return Replay()
 
         else:
-            raise AssertionError("ACS: invalid payload type - {}".format(ty))
+            raise AssertionError("ACS: invalid payload type")
 
         if len(self.mo14_results) >= n:
-            import json
             # return the result if we're done, otherwise return None
             assert n == len(self.mo14_results)
+
             self.done = True
             print "ACS: DONE", json.dumps(self.get_results())
             return Handled(self.mo14_results)

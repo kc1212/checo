@@ -1,9 +1,8 @@
 import math
 import libnacl
-import pickle  # not the best since it's insecure, but we can't easily use json because it doesn't work with binary
+import jsonpickle  # not the best since it's insecure, but we can't easily use json because it doesn't work with binary
 from typing import List, Union
 from enum import Enum
-from base64 import b64encode, b64decode
 
 ValidityState = Enum('ValidityState', 'Valid Invalid Unknown')
 
@@ -40,19 +39,7 @@ class Signature:
 
     def dumps(self):
         # type: () -> str
-        return pickle.dumps(self)
-
-    def to_dict(self):
-        return {'vk': b64encode(self.vk), 'sig': b64encode(self.sig)}
-
-    @classmethod
-    def from_dict(cls, d):
-        vk = b64decode(d['vk'])
-        sig = b64decode(d['sig'])
-        res = cls()
-        res.vk = vk
-        res.sig = sig
-        return res
+        return jsonpickle.encode(self)
 
 
 class TxBlock:
@@ -86,7 +73,7 @@ class TxBlock:
 
         def dumps(self):
             # type: () -> str
-            return pickle.dumps(self)
+            return jsonpickle.encode(self)
 
     def __init__(self, prev, h_s, h_r, m):
         # type: (str, int, int, str) -> None
@@ -181,7 +168,7 @@ class CpBlock:
 
         def dumps(self):
             # type: () -> str
-            return pickle.dumps(self)
+            return jsonpickle.encode(self)
 
     def __init__(self, prev, h, cons, p, vk, sk, ss, vks):
         # type: (str, int, Cons, int, str, str, List[Signature], List[str]) -> None
@@ -256,7 +243,7 @@ class Cons:
 
     def dumps(self):
         # type: () -> str
-        return pickle.dumps(self)
+        return jsonpickle.encode(self)
 
     def hash(self):
         # type: () -> str

@@ -1,7 +1,7 @@
 from twisted.internet import reactor
 from twisted.internet.protocol import Factory
 from src.utils.jsonreceiver import JsonReceiver
-from src.utils.messages import Payload, PayloadType
+from src.utils.messages import DiscoverMsg, DiscoverReplyMsg, CoinMsg, CoinReplyMsg
 
 
 class Discovery(JsonReceiver):
@@ -21,44 +21,38 @@ class Discovery(JsonReceiver):
             del self.nodes[self.vk]
             print "Discovery: deleted", self.vk
 
-    def json_received(self, msg):
+    def obj_received(self, obj):
         """
         we don't bother with decoding vk here, since we don't use vk in any crypto functions
-        :param msg:
+        :param obj:
         :return:
         """
-        print "Discovery: received", msg
-
-        payload = Payload.from_dict(msg)
-        ty = payload.payload_type
+        print "Discovery: received", obj
 
         if self.state == 'SERVER':
-            if ty == PayloadType.discover.value:
-                (_vk, _port) = payload.payload
-                self.vk = _vk  # NOTE storing base64 form as is
-                self.addr = self.transport.getPeer().host + ":" + str(_port)
+            if isinstance(obj, DiscoverMsg):
+                self.vk = obj.vk  # NOTE storing base64 form as is
+                self.addr = self.transport.getPeer().host + ":" + str(obj.port)
 
                 # TODO check addr to be in the form host:port
                 if self.vk not in self.nodes:
                     print "Discovery: added node", self.vk, self.addr
                     self.nodes[self.vk] = self.addr
 
-                self.send_json(Payload.make_discover_reply(self.nodes).to_dict())
+                self.send_obj(DiscoverReplyMsg(self.nodes))
 
-            elif ty == PayloadType.coin.value:
+            elif isinstance(obj, CoinMsg):
                 raise NotImplementedError
 
             else:
-                print "Discovery: invalid payload type on SERVER", ty
-                raise AssertionError
+                raise AssertionError("Discovery: invalid payload type on SERVER")
 
         elif self.state == 'CLIENT':
-            if ty == PayloadType.discover_reply.value:
-                nodes = payload.payload
-                print "Discovery: making new clients...", nodes
-                self.factory.new_connection_if_not_exist(nodes)
+            if isinstance(obj, DiscoverReplyMsg):
+                print "Discovery: making new clients...", obj.nodes
+                self.factory.new_connection_if_not_exist(obj.nodes)
 
-            elif ty == PayloadType.coin_reply.value:
+            elif isinstance(obj, CoinReplyMsg):
                 raise NotImplementedError
 
             else:
@@ -66,7 +60,7 @@ class Discovery(JsonReceiver):
 
     def say_hello(self, vk, port):
         self.state = 'CLIENT'
-        self.send_json(Payload.make_discover((vk, port)).to_dict())
+        self.send_obj(DiscoverMsg(vk, port))
         print "Discovery: discovery sent", vk, port
 
 

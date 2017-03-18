@@ -1,10 +1,10 @@
 import random
 from collections import defaultdict
 from base64 import b64encode
-
 from enum import Enum
-from src.utils.messages import Payload
+from typing import Union
 
+from src.utils.messages import Mo14Msg
 from src.utils.utils import Replay, Handled
 
 Mo14Type = Enum('Mo14Type', 'EST AUX')
@@ -34,7 +34,7 @@ class Mo14:
     Mostefaoui et el. '14
     Implemented using a state machine
     """
-    def __init__(self, factory, acs_hdr_f=lambda _x: _x):
+    def __init__(self, factory, msg_wrapper_f=lambda _x: _x):
         self.factory = factory
         self.r = 0
         self.est = -1
@@ -43,7 +43,7 @@ class Mo14:
         self.aux_values = {}  # key: r, val: [set(), set()], sets are vk
         self.broadcasted = defaultdict(bool)  # key: r, val: boolean
         self.bin_values = defaultdict(set)  # key: r, val: binary set()
-        self.acs_hdr_f = acs_hdr_f
+        self.msg_wrapper_f = msg_wrapper_f
 
     def start(self, v):
         assert v in (0, 1)
@@ -54,9 +54,9 @@ class Mo14:
         print "Mo14: initial message broadcasted", v
 
     def store_msg(self, msg, sender_vk):
-        ty = msg['ty']
-        v = msg['v']
-        r = msg['r']
+        ty = msg.ty
+        v = msg.v
+        r = msg.r
 
         if ty == Mo14Type.EST.value:
             if r not in self.est_values:
@@ -69,6 +69,7 @@ class Mo14:
             self.aux_values[r][v].add(sender_vk)
 
     def handle(self, msg, sender_vk):
+        # type: (Mo14Msg, str) -> Union[Handled, Replay]
         """
         We expect messages of type:
         Msg {
@@ -88,13 +89,13 @@ class Mo14:
             print "Mo14: not processing due to stopped state"
             return Handled()
 
-        ty = msg['ty']
-        v = msg['v']
-        r = msg['r']
+        ty = msg.ty
+        v = msg.v
+        r = msg.r
         t = self.factory.config.t
         n = self.factory.config.n
 
-        print "Mo14: stored msg", msg, b64encode(sender_vk)
+        print "Mo14: stored msg (ty: {}, v: {}, r: {}), from {}".format(ty, v, r, b64encode(sender_vk))
         self.store_msg(msg, sender_vk)
 
         if r < self.r:
@@ -193,38 +194,20 @@ class Mo14:
             v = random.choice([0, 1])
         assert v in (0, 1)
         print "Mo14: broadcast aux:", v, self.r
-        self.bcast(make_aux(self.r, v))
+        self.bcast(Mo14Msg(Mo14Type.AUX.value, self.r, v))
 
     def bcast_est(self, v):
         if self.factory.config.failure == 'byzantine':
             v = random.choice([0, 1])
         assert v in (0, 1)
         print "Mo14: broadcast est:", v, self.r
-        self.bcast(make_est(self.r, v))
+        self.bcast(Mo14Msg(Mo14Type.EST.value, self.r, v))
 
     def bcast(self, msg):
         """
-        Broadcasts a Mo14 message, modify the message according to self.acs_hdr_f
+        Broadcasts a Mo14 message, modify the message according to self.msg_wrapper_f
         :param msg:
         :return:
         """
-        self.factory.bcast(self.acs_hdr_f(msg))
+        self.factory.bcast(self.msg_wrapper_f(msg))
 
-
-def make_est(r, v):
-    """
-    Make a message of type EST
-    :param r: round number
-    :param v: binary value
-    :return: the message of dict type
-    """
-    return _make_msg(Mo14Type.EST.value, r, v)
-
-
-def make_aux(r, v):
-    return _make_msg(Mo14Type.AUX.value, r, v)
-
-
-def _make_msg(ty, r, v):
-    # TODO need to include ACS header
-    return Payload.make_mo14({"ty": ty, "r": r, "v": v}).to_dict()

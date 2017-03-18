@@ -1,8 +1,6 @@
-import json
+import jsonpickle
 
 from twisted.protocols.basic import LineOnlyReceiver
-
-from utils import byteify
 
 
 class JsonReceiver(LineOnlyReceiver):
@@ -10,16 +8,16 @@ class JsonReceiver(LineOnlyReceiver):
         self.connection_lost(reason)
 
     def lineReceived(self, line):
-        obj = byteify(json.loads(line))
-        self.json_received(obj)
+        obj = jsonpickle.decode(line)
+        self.obj_received(obj)
 
-    def json_received(self, obj):
+    def obj_received(self, obj):
         # we also expect a dict or list
         raise NotImplementedError
 
     def connection_lost(self, reason):
         raise NotImplementedError
 
-    def send_json(self, obj):
+    def send_obj(self, obj):
         # we expect dict or list
-        self.sendLine(json.dumps(obj))
+        self.sendLine(jsonpickle.encode(obj))
