@@ -57,8 +57,9 @@ class ACS:
         :param sender_vk: the vk of the sender
         :return: the agreed subset on completion otherwise None
         """
+        print "ACS: got msg (instance: {}, round: {}) from {}".format(b64encode(msg.instance), msg.round, b64encode(sender_vk))
         if self.done:
-            print "ACS: we're done, doing nothing", msg, sender_vk
+            print "ACS: we're done, doing nothing"
             return Handled()
 
         instance = msg.instance
@@ -67,8 +68,6 @@ class ACS:
         body = msg.body
         t = self.factory.config.t
         n = self.factory.config.n
-
-        print "ACS: got msg (instance: {}, round: {}) from {}".format(b64encode(instance), round, b64encode(sender_vk))
 
         if isinstance(body, BrachaMsg):
             if instance not in self.brachas:

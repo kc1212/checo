@@ -1,5 +1,7 @@
 from twisted.internet import reactor
 from twisted.internet.protocol import Factory
+from base64 import b64encode
+from typing import Union, Dict
 from src.utils.jsonreceiver import JsonReceiver
 from src.utils.messages import DiscoverMsg, DiscoverReplyMsg, CoinMsg, CoinReplyMsg
 
@@ -10,7 +12,7 @@ class Discovery(JsonReceiver):
     """
 
     def __init__(self, nodes, node_factory=None):
-        self.nodes = nodes  # key: vk, val: ip:port
+        self.nodes = nodes  # type: Dict[str, str]
         self.vk = None
         self.addr = None
         self.state = 'SERVER'
@@ -22,12 +24,13 @@ class Discovery(JsonReceiver):
             print "Discovery: deleted", self.vk
 
     def obj_received(self, obj):
+        # type: (Union[DiscoverMsg, DiscoverReplyMsg]) -> None
         """
         we don't bother with decoding vk here, since we don't use vk in any crypto functions
         :param obj:
         :return:
         """
-        print "Discovery: received", obj
+        print "Discovery: received msg", obj
 
         if self.state == 'SERVER':
             if isinstance(obj, DiscoverMsg):
@@ -56,7 +59,7 @@ class Discovery(JsonReceiver):
                 raise NotImplementedError
 
             else:
-                raise AssertionError("Discovery: invalid payload type {} on CLIENT".format(ty))
+                raise AssertionError("Discovery: invalid payload type on CLIENT")
 
     def say_hello(self, vk, port):
         self.state = 'CLIENT'

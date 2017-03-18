@@ -140,16 +140,14 @@ def test_acs(n, t, f, discover, folder):
                           [cfg.make_args() for cfg in configs],
                           [str(cfg.port) + '.out' for cfg in configs])
 
-    if n > 10:
-        time.sleep(35)
-    else:
-        time.sleep(25)
+    time.sleep(30)
 
     for p in ps:
         p.terminate()
 
     # TODO not sure where to flush, so use sleep for now...
-    time.sleep(1)
+    assert 0 == subprocess.call('sync', shell=True)
+    time.sleep(5)
     print "Test: ACS nodes terminated"
     check_acs_files(n, t)
     print "Test: ACS test passed"
@@ -176,7 +174,8 @@ def test_bracha(n, t, f, discover, folder):
         p.terminate()
 
     # TODO not sure where to flush, so use sleep for now...
-    time.sleep(1)
+    assert 0 == subprocess.call('sync', shell=True)
+    time.sleep(2)
     print "Test: Bracha nodes terminated"
     check_bracha_files(n, t)
     print "Test: Bracha test passed"
@@ -208,7 +207,8 @@ def test_mo14(n, t, f, discover, folder):
         p.terminate()
 
     # TODO not sure where to flush, so use sleep for now...
-    time.sleep(1)
+    assert 0 == subprocess.call('sync', shell=True)
+    time.sleep(2)
     print "Test: Mo14 nodes terminates"
     check_mo14_files(n, t, v)
     print "Test: Mo14 test passed"
