@@ -128,7 +128,7 @@ def check_mo14_files(n, t, expected_v):
     (7, 2, 'byzantine'),
     (19, 6, 'byzantine'),
 ])
-def test_acs(n, t, f, discover, folder):
+def test_acs(n, t, f, folder, discover):
     configs = []
     for i in range(n - t):
         port = 12345 + i
@@ -146,7 +146,7 @@ def test_acs(n, t, f, discover, folder):
 
     # TODO not sure where to flush, so use sleep for now...
     assert 0 == subprocess.call('sync', shell=True)
-    time.sleep(1)
+    time.sleep(5)
     print "Test: ACS nodes terminated"
     check_acs_files(n, t)
     print "Test: ACS test passed"
@@ -157,7 +157,7 @@ def test_acs(n, t, f, discover, folder):
     (7, 2, 'omission'),
     (19, 6, 'omission'),
 ])
-def test_bracha(n, t, f, discover, folder):
+def test_bracha(n, t, f, folder, discover):
     configs = [node.Config(12345, n, t, test='bracha', output=DIR + '12345.out')]
     for i in range(n - t - 1):
         port = 12345 + 1 + i
@@ -188,7 +188,7 @@ def test_bracha(n, t, f, discover, folder):
     (7, 2, 'omission'),
     (19, 6, 'omission'),
 ])
-def test_mo14(n, t, f, discover, folder):
+def test_mo14(n, t, f, folder, discover):
     v = random.randint(0, 1)
     configs = []
     for i in range(n - t):
