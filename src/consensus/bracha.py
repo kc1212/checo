@@ -1,4 +1,5 @@
 import random
+import logging
 from enum import Enum
 
 from src.utils.messages import BrachaMsg
@@ -38,12 +39,12 @@ class Bracha:
         :return: the delivered message when completed, otherwise None
         """
         if self.done:
-            print "Bracha: done, doing nothing"
+            logging.debug("Bracha: done, doing nothing")
             return Handled()
 
         ty = msg.ty
         body = msg.body
-        print "Bracha: received (ty: {}, body: {})".format(ty, body)
+        logging.debug("Bracha: received (ty: {}, body: {})".format(ty, body))
 
         assert isinstance(ty, int)
         assert body is not None
@@ -61,8 +62,7 @@ class Bracha:
         elif ty == MsgType.ready.value:
             self.ready_count += 1
         else:
-            print "Bracha: unexpected msg type", ty
-            raise AssertionError
+            raise AssertionError("Bracha: unexpected msg type")
 
         assert (self.init_count == 0 or self.init_count == 1)
 
@@ -79,21 +79,21 @@ class Bracha:
                 self.step = BrachaStep.one
                 self.init_count = 0
                 self.done = True
-                print "Bracha: DELIVER", body
+                logging.info("Bracha: DELIVER {}".format(body))
                 return Handled(body)
 
         return Handled()
 
     def bcast_init(self, msg="some test msg!!"):
-        print "Bracha: initiating with msg", msg
+        logging.info("Bracha: initiating with msg {}".format(msg))
         self.bcast(BrachaMsg(MsgType.init.value, msg))
 
     def bcast_echo(self, body):
-        print "Bracha: broadcast echo", body
+        logging.debug("Bracha: broadcast echo {}".format(body))
         self.bcast(BrachaMsg(MsgType.echo.value, body))
 
     def bcast_ready(self, body):
-        print "Bracha: broadcast ready", body
+        logging.debug("Bracha: broadcast ready {}".format(body))
         self.bcast(BrachaMsg(MsgType.ready.value, body))
 
     def ok_to_send(self):

@@ -12,6 +12,7 @@ from src.utils.utils import value_and_tally
 
 DIR = 'logs/'
 NODE_CMD_PREFIX = ['python2', '-u', '-m', 'src.node']  # -u forces stdin/stdout/stderr to be unbuffered
+# NODE_CMD_PREFIX = ['python2', '-u', '-m', 'src.node', '--debug']
 
 
 def delete_contents_of_dir(dname):
@@ -36,20 +37,18 @@ def search_for_string_in_dir(folder, target, f=lambda x: x):
     for fname in os.listdir(folder):
         msg = search_for_string(folder + fname, target)
         if msg is not None:
-            msg = msg.replace(target, '').strip()
+            msg = msg.split(target)[-1].strip()
             print 'Test: found', f(msg)
             res.append(f(msg))
     return res
 
 
-def run_subprocesses(prefix, cmds, outfs):
-    assert len(cmds) == len(outfs)
+def run_subprocesses(prefix, cmds):
     ps = []
-    for cmd, outf in zip(cmds, outfs):
+    for cmd in cmds:
         print "Test: running subprocess", prefix + cmd
-        with open(DIR + outf, 'wb') as fd:
-            p = subprocess.Popen(prefix + cmd, stdout=fd)
-            ps.append(p)
+        p = subprocess.Popen(prefix + cmd)
+        ps.append(p)
     return ps
 
 
@@ -132,13 +131,13 @@ def check_mo14_files(n, t, expected_v):
 def test_acs(n, t, f, discover, folder):
     configs = []
     for i in range(n - t):
-        configs.append(node.Config(12345 + i, n, t, test='acs'))
+        port = 12345 + i
+        configs.append(node.Config(port, n, t, test='acs', output=DIR + str(port) + '.out'))
     for i in range(t):
-        configs.append(node.Config(11111 + i, n, t, test='acs', failure=f))
+        port = 11111 + i
+        configs.append(node.Config(port, n, t, test='acs', failure=f, output=DIR + str(port) + '.out'))
 
-    ps = run_subprocesses(NODE_CMD_PREFIX,
-                          [cfg.make_args() for cfg in configs],
-                          [str(cfg.port) + '.out' for cfg in configs])
+    ps = run_subprocesses(NODE_CMD_PREFIX, [cfg.make_args() for cfg in configs])
 
     time.sleep(30)
 
@@ -147,7 +146,7 @@ def test_acs(n, t, f, discover, folder):
 
     # TODO not sure where to flush, so use sleep for now...
     assert 0 == subprocess.call('sync', shell=True)
-    time.sleep(5)
+    time.sleep(1)
     print "Test: ACS nodes terminated"
     check_acs_files(n, t)
     print "Test: ACS test passed"
@@ -159,15 +158,15 @@ def test_acs(n, t, f, discover, folder):
     (19, 6, 'omission'),
 ])
 def test_bracha(n, t, f, discover, folder):
-    configs = [node.Config(12345, n, t, test='bracha')]
+    configs = [node.Config(12345, n, t, test='bracha', output=DIR + '12345.out')]
     for i in range(n - t - 1):
-        configs.append(node.Config(12345 + 1 + i, n, t))
+        port = 12345 + 1 + i
+        configs.append(node.Config(port, n, t, output=DIR + str(port) + '.out'))
     for i in range(t):
-        configs.append(node.Config(11111 + i, n, t, failure=f))
+        port = 11111 + i
+        configs.append(node.Config(port, n, t, failure=f, output=DIR + str(port) + '.out'))
 
-    ps = run_subprocesses(NODE_CMD_PREFIX,
-                          [cfg.make_args() for cfg in configs],
-                          [str(cfg.port) + '.out' for cfg in configs])
+    ps = run_subprocesses(NODE_CMD_PREFIX, [cfg.make_args() for cfg in configs])
 
     time.sleep(20)
     for p in ps:
@@ -175,7 +174,7 @@ def test_bracha(n, t, f, discover, folder):
 
     # TODO not sure where to flush, so use sleep for now...
     assert 0 == subprocess.call('sync', shell=True)
-    time.sleep(2)
+    time.sleep(1)
     print "Test: Bracha nodes terminated"
     check_bracha_files(n, t)
     print "Test: Bracha test passed"
@@ -193,14 +192,14 @@ def test_mo14(n, t, f, discover, folder):
     v = random.randint(0, 1)
     configs = []
     for i in range(n - t):
-        configs.append(node.Config(12345 + i, n, t, test='mo14', value=v))
+        port = 12345 + i
+        configs.append(node.Config(port, n, t, test='mo14', value=v, output=DIR + str(port) + '.out'))
     for i in range(t):
+        port = 11111 + i
         randv = random.randint(0, 1)
-        configs.append(node.Config(11111 + i, n, t, test='mo14', value=randv, failure=f))
+        configs.append(node.Config(port, n, t, test='mo14', value=randv, failure=f, output=DIR + str(port) + '.out'))
 
-    ps = run_subprocesses(NODE_CMD_PREFIX,
-                          [cfg.make_args() for cfg in configs],
-                          [str(cfg.port) + '.out' for cfg in configs])
+    ps = run_subprocesses(NODE_CMD_PREFIX, [cfg.make_args() for cfg in configs])
 
     time.sleep(20)
     for p in ps:
@@ -208,7 +207,7 @@ def test_mo14(n, t, f, discover, folder):
 
     # TODO not sure where to flush, so use sleep for now...
     assert 0 == subprocess.call('sync', shell=True)
-    time.sleep(2)
+    time.sleep(1)
     print "Test: Mo14 nodes terminates"
     check_mo14_files(n, t, v)
     print "Test: Mo14 test passed"

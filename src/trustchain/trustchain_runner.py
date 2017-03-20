@@ -2,9 +2,9 @@ from twisted.internet.task import LoopingCall
 from twisted.python import log
 from base64 import b64encode
 from Queue import Queue
-from enum import Enum
 from typing import Union
 import random
+import logging
 
 from trustchain import TrustChain, TxBlock, CpBlock, Signature
 from src.utils.utils import Replay, Handled
@@ -98,7 +98,7 @@ class TrustChainRunner:
 
     def handle(self, msg, src):
         # type: (Union[SynMsg, SynAckMsg, AckMsg]) -> None
-        print "TC: got message", msg
+        logging.debug("TC: got message".format(msg))
         self.recv_q.put((msg, src))
 
     def process_recv_q(self):
@@ -143,7 +143,7 @@ class TrustChainRunner:
             self.update_state(True, None, tx_id, node, None, m, None)
             self.send(node, msg)
 
-            print "TC: sent {} to node {}".format(msg, b64encode(node))
+            logging.info("TC: sent {} to node {}".format(msg, b64encode(node)))
 
     def send_syn(self, node, m):
         """
@@ -153,7 +153,7 @@ class TrustChainRunner:
         :param m:
         :return:
         """
-        print "TC: putting ({}, {}) in send_q".format(b64encode(node), m)
+        logging.debug("TC: putting ({}, {}) in send_q".format(b64encode(node), m))
         self.send_q.put((m, node))
 
     def process_syn(self, msg, src):
@@ -164,14 +164,14 @@ class TrustChainRunner:
         :param src: source/sender of the message
         :return:
         """
-        print "TC: processing syn message", msg
+        logging.debug("TC: processing syn msg {}".format(msg))
         # put the processing in queue if I'm locked
         if self.tx_locked:
-            print "TC: we're locked, putting syn message in queue"
+            logging.debug("TC: we're locked, putting syn message in queue")
             return Replay()
 
         # we're not locked, so proceed
-        print "TC: not locked, proceeding"
+        logging.debug("TC: not locked, proceeding")
         tx_id = msg.tx_id
         prev_r = msg.prev
         h_r = msg.h  # height of receiver
@@ -207,24 +207,24 @@ class TrustChainRunner:
         :param src:
         :return:
         """
-        print "TC: processing synack {} from {}".format(msg, b64encode(src))
+        logging.debug("TC: processing synack {} from {}".format(msg, b64encode(src)))
         tx_id = msg.tx_id
         prev_r = msg.prev
         h_r = msg.h
         s_r = msg.s
         if tx_id != self.tx_id:
-            print "TC: not the tx_id we're expecting, putting it back to queue"
+            logging.debug("TC: not the tx_id we're expecting, putting it back to queue")
             return Replay()
 
         self.assert_after_syn_state()  # we initiated the syn
         assert src == self.src
 
-        print "TC: synack"
+        logging.debug("TC: synack")
         self.block_r = TxBlock(self.chain.latest_hash(), self.chain.next_h(), h_r, self.m)
         s_s = self.block_r.sign(self.chain.vk, self.chain.sk)
         self.block_r.seal(self.chain.vk, s_s, src, s_r, prev_r)
         self.chain.new_tx(self.block_r)
-        print "TC: added tx"
+        logging.info("TC: added tx {}".format(str(self.block_r)))
 
         self.send_ack(s_s)
         return Handled()
@@ -237,26 +237,26 @@ class TrustChainRunner:
 
     def process_ack(self, msg, src):
         # type: (AckMsg, str) -> Union[Handled, Replay]
-        print "TC: processing ack {} from {}".format(msg, b64encode(src))
+        logging.debug("TC: processing ack {} from {}".format(msg, b64encode(src)))
         tx_id = msg.tx_id
         s_r = msg.s
         if tx_id != self.tx_id:
-            print "TC: not the tx_id we're expecting, putting it back to queue"
+            logging.debug("TC: not the tx_id we're expecting, putting it back to queue")
             return Replay()
 
         assert src == self.src
         assert not self.block_r.is_sealed()
 
-        print "TC: ack"
+        logging.debug("TC: ack")
         self.block_r.seal(self.chain.vk, self.s_s, src, s_r, self.prev_r)
         self.chain.new_tx(self.block_r)
         self.reset_state()
-        print "TC: added tx"
+        logging.info("TC: added tx {}".format(str(self.block_r)))
 
         return Handled()
 
     def send(self, node, msg):
-        print "TC: sending {} to {}".format(self.msg_wrapper_f(msg), b64encode(node))
+        logging.debug("TC: sending {} to {}".format(self.msg_wrapper_f(msg), b64encode(node)))
         self.factory.send(node, self.msg_wrapper_f(msg))
 
     def make_random_tx(self):
@@ -267,5 +267,5 @@ class TrustChainRunner:
             node = random.choice(self.factory.peers.keys())
 
         m = 'test' + str(random.random())
-        print "TC: making random tx to", b64encode(node)
+        logging.debug("TC: {} making random tx to".format(b64encode(node)))
         self.send_syn(node, m)

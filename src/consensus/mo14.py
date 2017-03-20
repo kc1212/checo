@@ -1,4 +1,5 @@
 import random
+import logging
 from collections import defaultdict
 from base64 import b64encode
 from enum import Enum
@@ -51,7 +52,7 @@ class Mo14:
         self.r += 1
         self.bcast_est(v)
         self.state = Mo14State.start
-        print "Mo14: initial message broadcasted", v
+        logging.info("Mo14: initial message broadcasted {}".format(v))
 
     def store_msg(self, msg, sender_vk):
         ty = msg.ty
@@ -86,7 +87,7 @@ class Mo14:
         # TODO is there a way to start a new round of the algorithm implicitly?
 
         if self.state == Mo14State.stopped:
-            print "Mo14: not processing due to stopped state"
+            logging.debug("Mo14: not processing due to stopped state")
             return Handled()
 
         ty = msg.ty
@@ -95,14 +96,14 @@ class Mo14:
         t = self.factory.config.t
         n = self.factory.config.n
 
-        print "Mo14: stored msg (ty: {}, v: {}, r: {}), from {}".format(ty, v, r, b64encode(sender_vk))
+        logging.debug("Mo14: stored msg (ty: {}, v: {}, r: {}), from {}".format(ty, v, r, b64encode(sender_vk)))
         self.store_msg(msg, sender_vk)
 
         if r < self.r:
-            print "Mo14: not processing because {} < {}".format(r, self.r)
+            logging.debug("Mo14: not processing because {} < {}".format(r, self.r))
             return Handled()
         elif r > self.r:
-            print "Mo14: I'm not ready yet {} > {}, the message should be replayed".format(r, self.r)
+            logging.debug("Mo14: I'm not ready yet {} > {}, the message should be replayed".format(r, self.r))
             return Replay()
 
         def update_bin_values():
@@ -111,16 +112,16 @@ class Mo14:
             :return:
             """
             if len(self.est_values[self.r][v]) >= t + 1 and not self.broadcasted[self.r]:
-                print "Mo14: relaying v", v
+                logging.debug("Mo14: relaying v {}".format(v))
                 self.bcast_est(v)
                 self.broadcasted[self.r] = True
 
             if len(self.est_values[self.r][v]) >= 2 * t + 1:
-                print "Mo14: adding to bin_values", v
+                logging.debug("Mo14: adding to bin_values".format(v))
                 self.bin_values[self.r].add(v)
                 return True
 
-            print "Mo14: no bin values"
+            logging.debug("Mo14: no bin values")
             return False
 
         if ty == Mo14Type.EST.value:
@@ -131,16 +132,16 @@ class Mo14:
 
         if self.state == Mo14State.est:
             # broadcast aux when we have something in bin_values
-            print "Mo14: reached est state"
+            logging.debug("Mo14: reached est state")
             w = tuple(self.bin_values[self.r])[0]
-            print "Mo14: relaying w", w
+            logging.debug("Mo14: relaying w {}".format(w))
             self.bcast_aux(w)
             self.state = Mo14State.aux
 
         if self.state == Mo14State.aux:
-            print "Mo14: reached aux state"
+            logging.debug("Mo14: reached aux state")
             if self.r not in self.aux_values:
-                print "Mo14: self.r not in self.aux_values", self.r, self.aux_values
+                logging.debug("Mo14: self.r {} not in self.aux_values {}".format(self.r, self.aux_values))
                 return Handled()
 
             def get_aux_vals(aux_value):
@@ -161,7 +162,7 @@ class Mo14:
                     elif len(aux_value[1]) >= n - t:
                         return set([1])
                     else:
-                        print "Mo14: impossible condition in get_aux_vals"
+                        logging.debug("Mo14: impossible condition in get_aux_vals")
                         raise AssertionError
                 return None
 
@@ -171,11 +172,11 @@ class Mo14:
 
         if self.state == Mo14State.coin:
             s = coins[self.r]
-            print "Mo14: reached coin state, s =", s, "v =", v
-            print "Mo14: vals =? set([v])", vals, set([v])
+            logging.debug("Mo14: reached coin state, s =", s, "v =", v)
+            logging.debug("Mo14: vals =? set([v]), {} =? {}".format(vals, set([v])))
             if vals == set([v]):
                 if v == s:
-                    print "Mo14: DECIDED", v
+                    logging.info("Mo14: DECIDED {}".format(v))
                     self.state = Mo14State.stopped
                     return Handled(v)
                 else:
@@ -184,7 +185,7 @@ class Mo14:
                 self.est = s
 
             # start again after round completion
-            print "Mo14: starting again, est =", self.est
+            logging.debug("Mo14: starting again, est = {}".format(self.est))
             self.start(self.est)
 
         return Handled()
@@ -193,14 +194,14 @@ class Mo14:
         if self.factory.config.failure == 'byzantine':
             v = random.choice([0, 1])
         assert v in (0, 1)
-        print "Mo14: broadcast aux:", v, self.r
+        logging.debug("Mo14: broadcast aux: v = {}, r = {}".format(v, self.r))
         self.bcast(Mo14Msg(Mo14Type.AUX.value, self.r, v))
 
     def bcast_est(self, v):
         if self.factory.config.failure == 'byzantine':
             v = random.choice([0, 1])
         assert v in (0, 1)
-        print "Mo14: broadcast est:", v, self.r
+        logging.debug("Mo14: broadcast est: v = {}, r = {}".format(v, self.r))
         self.bcast(Mo14Msg(Mo14Type.EST.value, self.r, v))
 
     def bcast(self, msg):

@@ -1,6 +1,7 @@
 import Queue
 import argparse
 import sys
+import logging
 from base64 import b64encode, b64decode
 
 from twisted.python import log
@@ -12,7 +13,7 @@ from twisted.internet.task import LoopingCall
 
 from src.utils.jsonreceiver import JsonReceiver
 from src.utils.messages import DummyMsg, PingMsg, PongMsg, BrachaMsg, Mo14Msg, ACSMsg, ChainMsg
-from src.utils.utils import Replay, Handled
+from src.utils.utils import Replay, Handled, set_logging
 from src.consensus.bracha import Bracha
 from src.consensus.acs import ACS
 from src.consensus.mo14 import Mo14
@@ -43,17 +44,17 @@ class MyProto(JsonReceiver):
         qsize = self.q.qsize()
         ctr = 0
         while not self.q.empty() and ctr < qsize:
-            print "NODE: processing item in queue"
+            logging.debug("NODE: processing item in queue")
             ctr += 1
             m = self.q.get()
             self.obj_received(m)
 
     def connection_lost(self, reason):
-        print "deleting peer ", b64encode(self.remote_vk)
+        logging.debug("deleting peer {}".format(b64encode(self.remote_vk)))
         try:
             del self.peers[self.remote_vk]
         except KeyError:
-            print "peer {} already deleted".format(b64encode(self.remote_vk))
+            logging.warning("peer {} already deleted".format(b64encode(self.remote_vk)))
 
     def obj_received(self, obj):
         """
@@ -90,7 +91,7 @@ class MyProto(JsonReceiver):
             self.factory.mo14.handle(obj, self.remote_vk)
 
         elif isinstance(obj, DummyMsg):
-            print "got dummy message from", b64encode(self.remote_vk)
+            logging.info("got dummy message from {}".format(b64encode(self.remote_vk)))
 
         else:
             raise AssertionError("invalid message type")
@@ -100,36 +101,36 @@ class MyProto(JsonReceiver):
         assert isinstance(o, Handled) or isinstance(o, Replay)
 
         if isinstance(o, Replay):
-            print "putting {} into msg queue".format(m)
+            logging.debug("putting {} into msg queue".format(m))
             self.q.put(m)
 
     def send_ping(self):
         self.send_obj(PingMsg(self.vk, self.config.port))
-        print "sent ping"
+        logging.debug("sent ping")
         self.state = 'CLIENT'
 
     def handle_ping(self, msg):
         # type: (PingMsg) -> None
-        print "got ping", msg
+        logging.debug("got ping, {}".format(msg))
         assert (self.state == 'SERVER')
         if msg.vk in self.peers.keys():
-            print "ping found myself in peers.keys"
+            logging.debug("ping found myself in peers.keys")
             # self.transport.loseConnection()
         self.peers[msg.vk] = (self.transport.getPeer().host, msg.port, self)
         self.remote_vk = msg.vk
         self.send_obj(PongMsg(self.vk, self.config.port))
-        print "sent pong"
+        logging.debug("sent pong")
 
     def handle_pong(self, msg):
         # type: (PongMsg) -> None
-        print "got pong", msg
+        logging.debug("got pong, {}".format(msg))
         assert (self.state == 'CLIENT')
         if msg.vk in self.peers.keys():
-            print "pong: found myself in peers.keys"
+            logging.debug("pong: found myself in peers.keys")
             # self.transport.loseConnection()
         self.peers[msg.vk] = (self.transport.getPeer().host, msg.port, self)
         self.remote_vk = msg.vk
-        print "done pong"
+        logging.debug("done pong")
 
 
 class MyFactory(Factory):
@@ -155,10 +156,10 @@ class MyFactory(Factory):
                 host, port = addr.split(":")
                 self.make_new_connection(host, int(port))
             else:
-                print "client already exist", b64encode(vk), addr
+                logging.debug("client {},{} already exist".format(b64encode(vk), addr))
 
     def make_new_connection(self, host, port):
-        print "making client connection", host, port
+        logging.debug("making client connection {}:{}".format(host, port))
         point = TCP4ClientEndpoint(reactor, host, port)
         proto = MyProto(self)
         d = connectProtocol(point, proto)
@@ -189,7 +190,7 @@ class Config:
     All the static settings, used in Factory
     Should be singleton
     """
-    def __init__(self, port, n, t, test=None, value=0, failure=None, tx=0):
+    def __init__(self, port, n, t, output, loglevel=logging.INFO, test=None, value=0, failure=None, tx=0):
         self.port = port
         self.n = n
         self.t = t
@@ -205,6 +206,10 @@ class Config:
         assert isinstance(tx, int)
         assert tx >= 0
         self.tx = tx
+
+        self.output = output
+        self.loglevel = loglevel
+        set_logging(output, loglevel)
 
     def make_args(self):
         res = [str(self.port), str(self.n), str(self.t)]
@@ -224,6 +229,14 @@ class Config:
         res.append('--tx')
         res.append(str(self.tx))
 
+        if self.loglevel == logging.DEBUG:
+            res.append('--debug')
+        elif self.loglevel == logging.INFO:
+            res.append('-v')
+
+        res.append('-o')
+        res.append(self.output)
+
         return res
 
 
@@ -233,7 +246,7 @@ def run(config):
     try:
         reactor.listenTCP(config.port, f)
     except CannotListenError:
-        print("cannot listen on ", config.port)
+        logging.warning("cannot listen on {}".format(config.port))
         sys.exit(1)
 
     # connect to discovery server
@@ -265,17 +278,60 @@ def run(config):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('port', type=int, help='the listener port')
-    parser.add_argument('n', type=int, help='the total number of promoters')
-    parser.add_argument('t', type=int, help='the total number of malicious nodes')
-    parser.add_argument('--test', choices=['dummy', 'bracha', 'mo14', 'acs', 'tc'],
-                        help='[for testing] choose an algorithm to initialise')
-    parser.add_argument('--value', choices=[0, 1], default=0, type=int,
-                        help='[testing] the initial input for BA')
-    parser.add_argument('--failure', choices=['byzantine', 'omission'],
-                        help='[testing] the mode of failure')
-    parser.add_argument('--tx', type=int, metavar='RATE', default=0,
-                        help='[testing] whether to initiate transaction RATE/sec')
+    parser.add_argument(
+        'port',
+        type=int, help='the listener port'
+    )
+    parser.add_argument(
+        'n',
+        type=int, help='the total number of promoters'
+    )
+    parser.add_argument(
+        't',
+        type=int, help='the total number of malicious nodes'
+    )
+    parser.add_argument(
+        '-d', '--debug',
+        help="log at debug level",
+        action="store_const", dest="loglevel", const=logging.DEBUG,
+        default=logging.WARNING
+    )
+    parser.add_argument(
+        '-v', '--verbose',
+        help="log at info level",
+        action="store_const", dest="loglevel", const=logging.INFO
+    )
+    parser.add_argument(
+        "-o", "--output",
+        # type=argparse.FileType('w'),
+        metavar='NAME',
+        default='logs/node.log',
+        help="location for the output file"
+    )
+    parser.add_argument(
+        '--test',
+        choices=['dummy', 'bracha', 'mo14', 'acs', 'tc'],
+        help='[testing] choose an algorithm to initialise'
+    )
+    parser.add_argument(
+        '--value',
+        choices=[0, 1],
+        default=0,
+        type=int,
+        help='[testing] the initial input for BA'
+    )
+    parser.add_argument(
+        '--failure',
+        choices=['byzantine', 'omission'],
+        help='[testing] the mode of failure'
+    )
+    parser.add_argument(
+        '--tx',
+        type=int,
+        metavar='RATE',
+        default=0,
+        help='[testing] whether to initiate transaction RATE/sec'
+    )
     args = parser.parse_args()
 
-    run(Config(args.port, args.n, args.t, args.test, args.value, args.failure, args.tx))
+    run(Config(args.port, args.n, args.t, args.output, args.loglevel, args.test, args.value, args.failure, args.tx))

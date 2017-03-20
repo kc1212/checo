@@ -1,4 +1,5 @@
 import json
+import logging
 from collections import Counter
 
 
@@ -62,3 +63,7 @@ class Handled:
     """
     def __init__(self, m=None):
         self.m = m
+
+
+def set_logging(fname, lvl):
+    logging.basicConfig(filename=fname, level=lvl, format='%(asctime)s - %(levelname)s - %(message)s')

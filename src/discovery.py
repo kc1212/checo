@@ -2,8 +2,11 @@ from twisted.internet import reactor
 from twisted.internet.protocol import Factory
 from base64 import b64encode
 from typing import Union, Dict
+import logging
+
 from src.utils.jsonreceiver import JsonReceiver
 from src.utils.messages import DiscoverMsg, DiscoverReplyMsg, CoinMsg, CoinReplyMsg
+from src.utils.utils import set_logging
 
 
 class Discovery(JsonReceiver):
@@ -21,7 +24,7 @@ class Discovery(JsonReceiver):
     def connection_lost(self, reason):
         if self.vk in self.nodes:
             del self.nodes[self.vk]
-            print "Discovery: deleted", self.vk
+            logging.debug("Discovery: deleted {}".format(b64encode(self.vk)))
 
     def obj_received(self, obj):
         # type: (Union[DiscoverMsg, DiscoverReplyMsg]) -> None
@@ -30,7 +33,7 @@ class Discovery(JsonReceiver):
         :param obj:
         :return:
         """
-        print "Discovery: received msg", obj
+        logging.debug("Discovery: received msg {}".format(obj))
 
         if self.state == 'SERVER':
             if isinstance(obj, DiscoverMsg):
@@ -39,7 +42,7 @@ class Discovery(JsonReceiver):
 
                 # TODO check addr to be in the form host:port
                 if self.vk not in self.nodes:
-                    print "Discovery: added node", self.vk, self.addr
+                    logging.debug("Discovery: added node {} {}".format(b64encode(self.vk), self.addr))
                     self.nodes[self.vk] = self.addr
 
                 self.send_obj(DiscoverReplyMsg(self.nodes))
@@ -52,7 +55,7 @@ class Discovery(JsonReceiver):
 
         elif self.state == 'CLIENT':
             if isinstance(obj, DiscoverReplyMsg):
-                print "Discovery: making new clients...", obj.nodes
+                logging.debug("Discovery: making new clients...")
                 self.factory.new_connection_if_not_exist(obj.nodes)
 
             elif isinstance(obj, CoinReplyMsg):
@@ -64,7 +67,7 @@ class Discovery(JsonReceiver):
     def say_hello(self, vk, port):
         self.state = 'CLIENT'
         self.send_obj(DiscoverMsg(vk, port))
-        print "Discovery: discovery sent", vk, port
+        logging.debug("Discovery: discovery sent {} {}".format(vk, port))
 
 
 class DiscoveryFactory(Factory):
@@ -80,9 +83,11 @@ def got_discovery(p, id, port):
 
 
 def run():
-    reactor.listenTCP(8123, DiscoveryFactory())
-    print "Discovery server running..."
+    port = 8123
+    reactor.listenTCP(port, DiscoveryFactory())
+    logging.info("Discovery server running on {}".format(port))
     reactor.run()
 
 if __name__ == '__main__':
+    set_logging('logs/discovery.log', logging.DEBUG)
     run()

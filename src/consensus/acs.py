@@ -1,6 +1,7 @@
 from base64 import b64encode
 from typing import Dict, Union
 import json
+import logging
 
 from .bracha import Bracha
 from .mo14 import Mo14
@@ -25,7 +26,7 @@ class ACS:
         # assume all the peers are connected
         assert len(self.factory.peers) == self.factory.config.n
         for peer in self.factory.peers.keys():
-            print "ACS: adding peer", b64encode(peer)
+            logging.debug("ACS: adding peer {}".format(b64encode(peer)))
 
             # TODO when do we update the round?
             def msg_wrapper_f_factory(instance, round):
@@ -41,7 +42,7 @@ class ACS:
         assert my_vk in self.mo14s
 
         # send the first RBC, assume all nodes have connected
-        print "ACS: initiating...", b64encode(my_vk), msg
+        logging.info("ACS: initiating {} with {}".format(b64encode(my_vk), msg))
         self.brachas[my_vk].bcast_init(msg)
 
     def handle(self, msg, sender_vk):
@@ -57,9 +58,10 @@ class ACS:
         :param sender_vk: the vk of the sender
         :return: the agreed subset on completion otherwise None
         """
-        print "ACS: got msg (instance: {}, round: {}) from {}".format(b64encode(msg.instance), msg.round, b64encode(sender_vk))
+        logging.debug("ACS: got msg (instance: {}, round: {}) from {}".format(b64encode(msg.instance),
+                                                                              msg.round, b64encode(sender_vk)))
         if self.done:
-            print "ACS: we're done, doing nothing"
+            logging.debug("ACS: we're done, doing nothing")
             return Handled()
 
         instance = msg.instance
@@ -71,23 +73,23 @@ class ACS:
 
         if isinstance(body, BrachaMsg):
             if instance not in self.brachas:
-                print "instance {} not in self.brachas".format(b64encode(instance))
+                logging.debug("instance {} not in self.brachas".format(b64encode(instance)))
                 return Replay()
             res = self.brachas[instance].handle(body)
             if isinstance(res, Handled) and res.m is not None:
-                print "ACS: Bracha delivered", b64encode(instance), res.m
+                logging.debug("ACS: Bracha delivered for {}, {}".format(b64encode(instance), res.m))
                 self.bracha_results[instance] = res.m
                 if instance not in self.mo14_provided:
-                    print "ACS: initiating BA", b64encode(instance), 1
+                    logging.debug("ACS: initiating BA for {}, {}".format(b64encode(instance), 1))
                     self.mo14_provided[instance] = 1
                     self.mo14s[instance].start(1)
 
         elif isinstance(body, Mo14Msg):
             if instance in self.mo14_provided:
-                print "ACS: forwarding Mo14"
+                logging.debug("ACS: forwarding Mo14")
                 res = self.mo14s[instance].handle(body, sender_vk)
                 if isinstance(res, Handled) and res.m is not None:
-                    print "ACS: delivered Mo14", b64encode(instance), res.m
+                    logging.debug("ACS: delivered Mo14 for {}, {}".format(b64encode(instance), res.m))
                     self.mo14_results[instance] = res.m
                 elif isinstance(res, Replay):
                     # raise AssertionError("Impossible, our Mo14 instance already instantiated")
@@ -96,15 +98,15 @@ class ACS:
             ones = [v for k, v in self.mo14_results.iteritems() if v == 1]
             if len(ones) >= n - t:
                 difference = set(self.mo14s.keys()) - set(self.mo14_provided.keys())
-                print "ACS: got n - t 1s"
-                print "difference =", difference
+                logging.debug("ACS: got n - t 1s")
+                logging.debug("difference = {}".format(difference))
                 for d in list(difference):
-                    print "ACS: initiating BA", d, 0
+                    logging.debug("ACS: initiating BA for {}, v".format(b64encode(d), 0))
                     self.mo14_provided[d] = 0
                     self.mo14s[d].start(0)
 
             if instance not in self.mo14_provided:
-                print "ACS: got BA before RBC..."
+                logging.debug("ACS: got BA before RBC...")
                 # if we got a BA instance, but we haven't deliver its corresponding RBC,
                 # we instruct the caller to replay the message
                 return Replay()
@@ -117,8 +119,9 @@ class ACS:
             assert n == len(self.mo14_results)
 
             self.done = True
-            print "ACS: DONE", json.dumps(self.get_results())
-            return Handled(self.mo14_results)
+            res = self.get_results()
+            logging.info("ACS: DONE {}".format(json.dumps(res)))
+            return Handled(res)
         return Handled()
 
     def get_results(self):

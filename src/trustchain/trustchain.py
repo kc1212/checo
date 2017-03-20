@@ -1,6 +1,7 @@
 import math
 import libnacl
 import jsonpickle  # not the best since it's insecure, but we can't easily use json because it doesn't work with binary
+from base64 import b64encode
 from typing import List, Union
 from enum import Enum
 
@@ -24,6 +25,9 @@ class Signature:
         else:
             self.vk = vk  # this is also the identity
             self.sig = libnacl.crypto_sign(msg, sk)  # self.sig contains the original message
+
+    def __str__(self):
+        return "({}, <sig>)".format(b64encode(self.vk))
 
     def verify(self, vk, msg):
         # type: (str, str) -> None
@@ -81,6 +85,12 @@ class TxBlock:
         self.s_s = None
         self.s_r = None
         self.validity = ValidityState.Unknown
+
+    def __str__(self):
+        return "(prev: {}, h_s: {}, h_r: {}, s_s: {}, s_r: {}, m: {})"\
+            .format(b64encode(self.get_prev()),
+                    self.inner.h_s, self.inner.h_r,
+                    str(self.s_s), str(self.s_r), self.inner.m)
 
     def sign(self, vk, sk):
         # type: (str, str) -> Signature
@@ -194,6 +204,11 @@ class CpBlock:
             pass
         self.s = Signature(vk, sk, self.inner.dumps())
 
+    def __str__(self):
+        return "(prev: {}, cons: {}, h: {}, r: {}, p: {}, s: {})"\
+            .format(b64encode(self.get_prev()), str(self.inner.cons),
+                    self.get_h(), self.inner.round, self.inner.p, str(self.s))
+
     def hash(self):
         # type: () -> str
         msg = self.inner.dumps() + self.s.dumps()
@@ -240,6 +255,10 @@ class Cons:
         """
         self.round = round
         self.blocks = blocks
+
+    def __str__(self):
+        # TODO what to print?
+        return "<cons>"
 
     def dumps(self):
         # type: () -> str
