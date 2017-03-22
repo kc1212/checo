@@ -11,4 +11,4 @@ before_install:
   - tar -xzvf libsodium-1.0.11.tar.gz
   - pushd libsodium-1.0.11 && ./configure && make && make check && sudo make install && popd
 install: "pip install -r requirements.txt"
-script: pytest -s
+script: pytest -x -s

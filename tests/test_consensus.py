@@ -1,3 +1,4 @@
+import re
 import json
 import pickle
 import subprocess
@@ -10,6 +11,8 @@ import pytest
 from src import node
 from src.utils.utils import value_and_tally
 
+GOOD_PORT = 30000
+BAD_PORT = 10000
 DIR = 'logs/'
 NODE_CMD_PREFIX = ['python2', '-u', '-m', 'src.node']  # -u forces stdin/stdout/stderr to be unbuffered
 # NODE_CMD_PREFIX = ['python2', '-u', '-m', 'src.node', '--debug']
@@ -35,6 +38,11 @@ def search_for_string(fname, target):
 def search_for_string_in_dir(folder, target, f=lambda x: x):
     res = []
     for fname in os.listdir(folder):
+
+        # we only care about output of honest nodes
+        if not re.match("^3.*\.out$", fname):
+            continue
+
         msg = search_for_string(folder + fname, target)
         if msg is not None:
             msg = msg.split(target)[-1].strip()
@@ -78,22 +86,26 @@ def check_acs_files(n, t):
     assert len(acs_dones) >= n - t, "ACS incorrect length! len = {}, n = {}, t = {}".format(len(acs_dones), n, t)
 
     # first find the agreed set and check there's majority
-    # NOTE: dictionary are unhashable, so we cheat and use pickle to convert it to a string, and then reload it
-    s, tally_s = value_and_tally([pickle.dumps(x['set']) for x in acs_dones])
+    # NOTE: we can't use value_and_tally because dictionary is unhashable
+    s = acs_dones[0]['set']
+    tally_s = 0
+    for x in acs_dones:
+        if s == x['set']:
+            tally_s += 1
     assert tally_s >= n - t
-    s = pickle.loads(s)
 
     # filter the messages that is not in the agreed set
     key_of_ones = [k for k, v in s.iteritems() if v == 1]
-    print key_of_ones
+    print "key of ones", key_of_ones
     assert len(key_of_ones) >= n - t
 
-    # NOTE: we use the same trick with pickle
-    _msgs, tally_msgs = value_and_tally([pickle.dumps(x['msgs']) for x in acs_dones])
-    msgs = {k: pickle.loads(_msgs)[k] for k in key_of_ones}
-
-    # check that we have enough messages
-    assert len(msgs) >= n - t
+    # NOTE: we manually do this too because dictionary is unhashable
+    msgs = {k: acs_dones[0]['msgs'][k] for k in key_of_ones}
+    tally_msgs = 0
+    for x in acs_dones:
+        if msgs == {k: x['msgs'][k] for k in key_of_ones}:
+            tally_msgs += 1
+    assert tally_msgs >= n - t
 
 
 def check_bracha_files(n, t):
@@ -142,28 +154,28 @@ def poll_check_f(to, tick, ps, f, *args, **kwargs):
             f(*args, **kwargs)
             terminate_ps(ps)
             return
-        except AssertionError:
-            print "poll not ready"
+        except AssertionError as e:
+            print "poll not ready", e
 
     f(*args, **kwargs)
     terminate_ps(ps)
 
 
 @pytest.mark.parametrize("n,t,f", [
-    (4, 1, 'omission'),
-    (7, 2, 'omission'),
-    (19, 6, 'omission'),
-    (4, 1, 'byzantine'),
-    (7, 2, 'byzantine'),
+    # (4, 1, 'omission'),
+    # (7, 2, 'omission'),
+    # (19, 6, 'omission'),
+    # (4, 1, 'byzantine'),
+    # (7, 2, 'byzantine'),
     (19, 6, 'byzantine'),
 ])
 def test_acs(n, t, f, folder, discover):
     configs = []
     for i in range(n - t):
-        port = 12345 + i
+        port = GOOD_PORT + i
         configs.append(node.Config(port, n, t, test='acs', output=DIR + str(port) + '.out'))
     for i in range(t):
-        port = 11111 + i
+        port = BAD_PORT + i
         configs.append(node.Config(port, n, t, test='acs', failure=f, output=DIR + str(port) + '.out'))
 
     ps = run_subprocesses(NODE_CMD_PREFIX, [cfg.make_args() for cfg in configs])
@@ -179,12 +191,12 @@ def test_acs(n, t, f, folder, discover):
     (19, 6, 'omission'),
 ])
 def test_bracha(n, t, f, folder, discover):
-    configs = [node.Config(12345, n, t, test='bracha', output=DIR + '12345.out')]
+    configs = [node.Config(GOOD_PORT, n, t, test='bracha', output=DIR + str(GOOD_PORT) + '.out')]
     for i in range(n - t - 1):
-        port = 12345 + 1 + i
+        port = GOOD_PORT + 1 + i
         configs.append(node.Config(port, n, t, output=DIR + str(port) + '.out'))
     for i in range(t):
-        port = 11111 + i
+        port = BAD_PORT + i
         configs.append(node.Config(port, n, t, failure=f, output=DIR + str(port) + '.out'))
 
     ps = run_subprocesses(NODE_CMD_PREFIX, [cfg.make_args() for cfg in configs])
@@ -206,10 +218,10 @@ def test_mo14(n, t, f, folder, discover):
     v = random.randint(0, 1)
     configs = []
     for i in range(n - t):
-        port = 12345 + i
+        port = BAD_PORT + i
         configs.append(node.Config(port, n, t, test='mo14', value=v, output=DIR + str(port) + '.out'))
     for i in range(t):
-        port = 11111 + i
+        port = GOOD_PORT + i
         randv = random.randint(0, 1)
         configs.append(node.Config(port, n, t, test='mo14', value=randv, failure=f, output=DIR + str(port) + '.out'))
 
@@ -221,4 +233,4 @@ def test_mo14(n, t, f, folder, discover):
 
 
 if __name__ == '__main__':
-    check_acs_files(4, 1)
+    check_acs_files(19, 6)
