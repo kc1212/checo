@@ -119,7 +119,6 @@ def check_bracha_files(n, t):
 
 
 def check_mo14_files(n, t, expected_v):
-    # TODO check expected value v
     target = 'Mo14: DECIDED'
     mo14_decides = search_for_string_in_dir(DIR, target)
 
@@ -218,10 +217,10 @@ def test_mo14(n, t, f, folder, discover):
     v = random.randint(0, 1)
     configs = []
     for i in range(n - t):
-        port = BAD_PORT + i
+        port = GOOD_PORT + i
         configs.append(node.Config(port, n, t, test='mo14', value=v, output=DIR + str(port) + '.out'))
     for i in range(t):
-        port = GOOD_PORT + i
+        port = BAD_PORT + i
         randv = random.randint(0, 1)
         configs.append(node.Config(port, n, t, test='mo14', value=randv, failure=f, output=DIR + str(port) + '.out'))
 
