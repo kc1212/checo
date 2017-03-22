@@ -120,6 +120,35 @@ def check_mo14_files(n, t, expected_v):
     assert int(v) == expected_v
 
 
+def poll_check_f(to, tick, ps, f, *args, **kwargs):
+    """
+    Runs f with parameters *args and **kwargs once every `tick` seconds and time out at `to`
+    :param to: timeout
+    :param tick: clock tick
+    :param ps: processes to terminate upon completion
+    :param f:
+    :param args:
+    :param kwargs:
+    :return:
+    """
+    def terminate_ps(_ps):
+        for _p in _ps:
+            _p.terminate()
+
+    while to > 0:
+        to -= tick
+        time.sleep(tick)
+        try:
+            f(*args, **kwargs)
+            terminate_ps(ps)
+            return
+        except AssertionError:
+            print "poll not ready"
+
+    f(*args, **kwargs)
+    terminate_ps(ps)
+
+
 @pytest.mark.parametrize("n,t,f", [
     (4, 1, 'omission'),
     (7, 2, 'omission'),
@@ -139,16 +168,8 @@ def test_acs(n, t, f, folder, discover):
 
     ps = run_subprocesses(NODE_CMD_PREFIX, [cfg.make_args() for cfg in configs])
 
-    time.sleep(30)
-
-    for p in ps:
-        p.terminate()
-
-    # TODO not sure where to flush, so use sleep for now...
-    assert 0 == subprocess.call('sync', shell=True)
-    time.sleep(5)
-    print "Test: ACS nodes terminated"
-    check_acs_files(n, t)
+    print "Test: ACS polling"
+    poll_check_f(120, 5, ps, check_acs_files, n, t)
     print "Test: ACS test passed"
 
 
@@ -168,15 +189,8 @@ def test_bracha(n, t, f, folder, discover):
 
     ps = run_subprocesses(NODE_CMD_PREFIX, [cfg.make_args() for cfg in configs])
 
-    time.sleep(20)
-    for p in ps:
-        p.terminate()
-
-    # TODO not sure where to flush, so use sleep for now...
-    assert 0 == subprocess.call('sync', shell=True)
-    time.sleep(1)
-    print "Test: Bracha nodes terminated"
-    check_bracha_files(n, t)
+    print "Test: Bracha polling"
+    poll_check_f(20, 5, ps, check_bracha_files, n, t)
     print "Test: Bracha test passed"
 
 
@@ -201,16 +215,10 @@ def test_mo14(n, t, f, folder, discover):
 
     ps = run_subprocesses(NODE_CMD_PREFIX, [cfg.make_args() for cfg in configs])
 
-    time.sleep(20)
-    for p in ps:
-        p.terminate()
-
-    # TODO not sure where to flush, so use sleep for now...
-    assert 0 == subprocess.call('sync', shell=True)
-    time.sleep(1)
-    print "Test: Mo14 nodes terminates"
-    check_mo14_files(n, t, v)
+    print "Test: Mo14 polling"
+    poll_check_f(20, 5, ps, check_mo14_files, n, t, v)
     print "Test: Mo14 test passed"
+
 
 if __name__ == '__main__':
     check_acs_files(4, 1)
