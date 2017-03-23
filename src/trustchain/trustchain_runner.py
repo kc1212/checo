@@ -2,12 +2,12 @@ from twisted.internet.task import LoopingCall
 from twisted.python import log
 from base64 import b64encode
 from Queue import Queue
-from typing import Union, Dict, List
+from typing import Union, Dict, List, Tuple
 import random
 import logging
 
 from trustchain import TrustChain, TxBlock, CpBlock, Signature, Cons
-from src.utils.utils import Replay, Handled
+from src.utils.utils import Replay, Handled, dict_to_list_by_key
 from src.utils.messages import SynMsg, SynAckMsg, AckMsg, CpMsg, SigMsg
 
 
@@ -89,11 +89,33 @@ class TrustChainRunner:
         self.m = m
         self.prev_r = prev_r
 
-    def handle_cons(self, cons):
-        pass
+    def handle_cons(self, msg):
+        logging.debug("TC: handling cons {}".format(msg))
+        bs, r = msg
 
-    def handle_sig(self, sig):
-        pass
+        if isinstance(bs, dict):
+            assert len(bs) > 0
+            assert isinstance(bs.values()[0], CpBlock)
+            cons = Cons(r, dict_to_list_by_key(bs))
+            if r in self.received_cons:
+                logging.debug("TC: cons exists, doing nothing")
+                assert self.received_cons[r] == cons
+            else:
+                logging.debug("TC: cons does not exist, adding it")
+                self.received_cons[r] = cons
+        else:
+            logging.debug("TC: not a list in handle_cons, doing nothing")
+
+    def handle_sig(self, msg):
+        # type: (SigMsg) -> None
+        assert isinstance(msg, SigMsg)
+
+        if msg.r in self.received_sigs:
+            self.received_sigs[msg.r].append(msg.s)
+        else:
+            self.received_sigs[msg.r] = [msg.s]
+
+        # TODO check for number of signature and add CP block
 
     def handle(self, msg, src):
         # type: (Union[SynMsg, SynAckMsg, AckMsg]) -> None

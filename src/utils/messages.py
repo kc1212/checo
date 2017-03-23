@@ -104,7 +104,7 @@ class CpMsg:
 
 
 class SigMsg:
-    def __init__(self, s):
-        # type: (Signature) -> None
+    def __init__(self, s, r):
+        # type: (Signature, int) -> None
         self.s = s
-
+        self.r = r

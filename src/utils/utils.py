@@ -103,3 +103,8 @@ def dictionary_hash(d):
     return digest
 
 
+def dict_to_list_by_key(d):
+    res = []
+    for key in sorted(d):
+        res.append(d[key])
+    return res

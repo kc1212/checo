@@ -294,6 +294,8 @@ class Cons:
         :param round: consensus round
         :param blocks: list of agreed checkpoint blocks
         """
+        # assert len(blocks) > 0
+        # assert isinstance(blocks[0], CpBlock)
         self.round = round
         self.blocks = blocks
 
@@ -307,6 +309,12 @@ class Cons:
     def __ne__(self, other):
         return not self.__eq__(other)
 
+    def get_promoters(self, n):
+        # type: () -> List[str]
+        registered = filter(lambda cp: cp.inner.p == 1, self.blocks)
+        registered.sort(key=lambda x: x.luck)
+        return [b.s.vk for b in registered][:n]
+
     @property
     def dumps(self):
         # type: () -> str
@@ -316,12 +324,6 @@ class Cons:
     def hash(self):
         # type: () -> str
         return libnacl.crypto_hash_sha256(self.dumps)
-
-    def get_promoters(self, n):
-        # type: () -> List[str]
-        registered = filter(lambda cp: cp.inner.p == 1, self.blocks)
-        registered.sort(key=lambda x: x.luck)
-        return [b.s.vk for b in registered][:n]
 
 
 def generate_genesis_block(vk, sk):

@@ -130,13 +130,11 @@ class ACS:
             self.done = True
             res = self.collate_results()
             # NOTE we just print the hash of the results and compare, the actual output is too much...
-            logging.info("ACS: DONE \"{}\"".format(b64encode(dictionary_hash(res))))
+            logging.info("ACS: DONE \"{}\"".format(b64encode(dictionary_hash(res[0]))))
             return Handled(res)
         return Handled()
 
     def collate_results(self):
         key_of_ones = [k for k, v in self.mo14_results.iteritems() if v == 1]
         res = {k: self.bracha_results[k] for k in key_of_ones}
-        return res
-
-
+        return res, self.round

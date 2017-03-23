@@ -81,6 +81,7 @@ class MyProto(JsonReceiver):
             self.factory.tc_runner.handle(obj.body, self.remote_vk)
 
         # NOTE messages below are for testing, bracha/mo14 is normally handled by acs
+
         elif isinstance(obj, BrachaMsg):
             if self.factory.config.failure == 'omission':
                 return
@@ -98,16 +99,23 @@ class MyProto(JsonReceiver):
             raise AssertionError("invalid message type")
 
     def process_acs_res(self, o, m):
+        """
+
+        :param o: the object we're processing
+        :param m: the original message
+        :return:
+        """
         assert o is not None
 
         if isinstance(o, Replay):
             logging.debug("putting {} into msg queue".format(m))
             self.q.put(m)
         elif isinstance(o, Handled):
+            if self.factory.config.test == 'acs':
+                # NOTE we don't do anything when testing only ACS
+                return
             if o.m is not None:
-
-                pass
-            pass
+                self.factory.tc_runner.handle_cons(o.m)
         else:
             raise AssertionError("instance is not Replay or Handled")
 
