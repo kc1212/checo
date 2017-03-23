@@ -155,6 +155,7 @@ class MyFactory(Factory):
     def __init__(self, config):
         # type: (Config) -> None
         self.peers = {}  # type: Dict[str, Tuple[str, int, MyProto]]
+        self.promoters = {}
         self.config = config
         self.bracha = Bracha(self)  # just for testing
         self.mo14 = Mo14(self)  # just for testing
@@ -191,9 +192,20 @@ class MyFactory(Factory):
             proto = v[2]
             proto.send_obj(msg)
 
+    def promoter_cast(self, msg):
+        for promoter in self.promoters:
+            self.send(promoter, msg)
+
     def send(self, node, msg):
         proto = self.peers[node][2]
         proto.send_obj(msg)
+
+    def overwrite_promoters(self):
+        """
+        sets all peers to promoters, only use this method for testing
+        :return:
+        """
+        self.promoters = self.peers.keys()
 
 
 def got_protocol(p):
@@ -250,11 +262,14 @@ def run(config):
     if config.test == 'dummy':
         reactor.callLater(5, f.bcast, DummyMsg('z'))
     elif config.test == 'bracha':
-        reactor.callLater(5, f.bracha.bcast_init)
+        reactor.callLater(5, f.overwrite_promoters)
+        reactor.callLater(6, f.bracha.bcast_init)
     elif config.test == 'mo14':
-        reactor.callLater(5, f.mo14.start, config.value)
+        reactor.callLater(5, f.overwrite_promoters)
+        reactor.callLater(6, f.mo14.start, config.value)
     elif config.test == 'acs':
-        reactor.callLater(5, f.acs.start, config.port)  # use port number (unique on local network) as test message
+        reactor.callLater(5, f.overwrite_promoters)
+        reactor.callLater(6, f.acs.start, config.port)  # use port number (unique on local network) as test message
     elif config.test == 'tc':
         if config.tx > 0:
             reactor.callLater(5, f.tc_runner.make_random_tx)

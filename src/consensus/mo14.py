@@ -210,5 +210,5 @@ class Mo14:
         :param msg:
         :return:
         """
-        self.factory.bcast(self.msg_wrapper_f(msg))
+        self.factory.promoter_cast(self.msg_wrapper_f(msg))
 

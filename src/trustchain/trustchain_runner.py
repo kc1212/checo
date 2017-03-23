@@ -103,6 +103,10 @@ class TrustChainRunner:
             else:
                 logging.debug("TC: cons does not exist, adding it")
                 self.received_cons[r] = cons
+
+                # TODO eventually we'd like to use gossip
+                # TODO handle the result
+                self.factory.bcast(cons)
         else:
             logging.debug("TC: not a list in handle_cons, doing nothing")
 
@@ -298,6 +302,6 @@ class TrustChainRunner:
         :param n: number of promoters
         :return:
         """
-        promoters = sorted(self.factory.peers.keys())[:n]
-        if self.factory.vk in promoters:
+        self.factory.promoters = sorted(self.factory.peers.keys())[:n]
+        if self.factory.vk in self.factory.promoters:
             self.factory.acs.start(self.tc.genesis)
