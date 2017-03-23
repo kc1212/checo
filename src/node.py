@@ -207,37 +207,7 @@ class Config:
         assert tx >= 0
         self.tx = tx
 
-        self.output = output
-        self.loglevel = loglevel
-        set_logging(output, loglevel)
-
-    def make_args(self):
-        res = [str(self.port), str(self.n), str(self.t)]
-
-        if self.test is not None:
-            res.append('--test')
-            res.append(self.test)
-
-        if self.value is not None:
-            res.append('--value')
-            res.append(str(self.value))
-
-        if self.failure is not None:
-            res.append('--failure')
-            res.append(self.failure)
-
-        res.append('--tx')
-        res.append(str(self.tx))
-
-        if self.loglevel == logging.DEBUG:
-            res.append('--debug')
-        elif self.loglevel == logging.INFO:
-            res.append('-v')
-
-        res.append('-o')
-        res.append(self.output)
-
-        return res
+        set_logging(loglevel, output)
 
 
 def run(config):
@@ -303,9 +273,8 @@ if __name__ == '__main__':
     )
     parser.add_argument(
         "-o", "--output",
-        # type=argparse.FileType('w'),
+        type=argparse.FileType('w'),
         metavar='NAME',
-        default='logs/node.log',
         help="location for the output file"
     )
     parser.add_argument(

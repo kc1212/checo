@@ -1,6 +1,5 @@
 import re
 import json
-import pickle
 import subprocess
 import time
 import random
@@ -8,8 +7,7 @@ import random
 import os
 import pytest
 
-from src import node
-from src.utils.utils import value_and_tally
+from src.utils.utils import value_and_tally, make_args
 
 GOOD_PORT = 30000
 BAD_PORT = 10000
@@ -172,12 +170,14 @@ def test_acs(n, t, f, folder, discover):
     configs = []
     for i in range(n - t):
         port = GOOD_PORT + i
-        configs.append(node.Config(port, n, t, test='acs', output=DIR + str(port) + '.out'))
+        configs.append(make_args(port, n, t, test='acs', output=DIR + str(port) + '.out'))
+        # configs.append(node.Config(port, n, t, test='acs', output=DIR + str(port) + '.out'))
     for i in range(t):
         port = BAD_PORT + i
-        configs.append(node.Config(port, n, t, test='acs', failure=f, output=DIR + str(port) + '.out'))
+        configs.append(make_args(port, n, t, test='acs', failure=f, output=DIR + str(port) + '.out'))
+        # configs.append(node.Config(port, n, t, test='acs', failure=f, output=DIR + str(port) + '.out'))
 
-    ps = run_subprocesses(NODE_CMD_PREFIX, [cfg.make_args() for cfg in configs])
+    ps = run_subprocesses(NODE_CMD_PREFIX, configs)
 
     print "Test: ACS polling"
     poll_check_f(120, 5, ps, check_acs_files, n, t)
@@ -190,15 +190,15 @@ def test_acs(n, t, f, folder, discover):
     (19, 6, 'omission'),
 ])
 def test_bracha(n, t, f, folder, discover):
-    configs = [node.Config(GOOD_PORT, n, t, test='bracha', output=DIR + str(GOOD_PORT) + '.out')]
+    configs = [make_args(GOOD_PORT, n, t, test='bracha', output=DIR + str(GOOD_PORT) + '.out')]
     for i in range(n - t - 1):
         port = GOOD_PORT + 1 + i
-        configs.append(node.Config(port, n, t, output=DIR + str(port) + '.out'))
+        configs.append(make_args(port, n, t, output=DIR + str(port) + '.out'))
     for i in range(t):
         port = BAD_PORT + i
-        configs.append(node.Config(port, n, t, failure=f, output=DIR + str(port) + '.out'))
+        configs.append(make_args(port, n, t, failure=f, output=DIR + str(port) + '.out'))
 
-    ps = run_subprocesses(NODE_CMD_PREFIX, [cfg.make_args() for cfg in configs])
+    ps = run_subprocesses(NODE_CMD_PREFIX, configs)
 
     print "Test: Bracha polling"
     poll_check_f(20, 5, ps, check_bracha_files, n, t)
@@ -218,13 +218,13 @@ def test_mo14(n, t, f, folder, discover):
     configs = []
     for i in range(n - t):
         port = GOOD_PORT + i
-        configs.append(node.Config(port, n, t, test='mo14', value=v, output=DIR + str(port) + '.out'))
+        configs.append(make_args(port, n, t, test='mo14', value=v, output=DIR + str(port) + '.out'))
     for i in range(t):
         port = BAD_PORT + i
         randv = random.randint(0, 1)
-        configs.append(node.Config(port, n, t, test='mo14', value=randv, failure=f, output=DIR + str(port) + '.out'))
+        configs.append(make_args(port, n, t, test='mo14', value=randv, failure=f, output=DIR + str(port) + '.out'))
 
-    ps = run_subprocesses(NODE_CMD_PREFIX, [cfg.make_args() for cfg in configs])
+    ps = run_subprocesses(NODE_CMD_PREFIX, configs)
 
     print "Test: Mo14 polling"
     poll_check_f(20, 5, ps, check_mo14_files, n, t, v)

@@ -89,5 +89,5 @@ def run():
     reactor.run()
 
 if __name__ == '__main__':
-    set_logging('logs/discovery.log', logging.DEBUG)
+    set_logging(logging.DEBUG)
     run()

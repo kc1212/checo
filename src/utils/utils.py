@@ -1,5 +1,6 @@
 import json
 import logging
+import sys
 from collections import Counter
 
 
@@ -65,5 +66,37 @@ class Handled:
         self.m = m
 
 
-def set_logging(fname, lvl):
-    logging.basicConfig(filename=fname, level=lvl, format='%(asctime)s - %(levelname)s - %(message)s')
+def set_logging(lvl, stream=sys.stdout):
+    logging.basicConfig(stream=stream, level=lvl, format='%(asctime)s - %(levelname)s - %(message)s')
+
+
+def make_args(port, n, t, test=None, value=0, failure=None, tx=0, loglevel=logging.INFO, output=None):
+    res = [str(port), str(n), str(t)]
+
+    if test is not None:
+        res.append('--test')
+        res.append(test)
+
+    res.append('--value')
+    res.append(str(value))
+
+    if failure is not None:
+        res.append('--failure')
+        res.append(failure)
+
+    res.append('--tx')
+    res.append(str(tx))
+
+    if loglevel == logging.DEBUG:
+        res.append('--debug')
+    elif loglevel == logging.INFO:
+        res.append('-v')
+
+    # None represents stdout
+    if output is not None:
+        res.append('-o')
+        res.append(output)
+
+    return res
+
+
