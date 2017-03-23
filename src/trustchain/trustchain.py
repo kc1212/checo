@@ -48,6 +48,7 @@ class Signature:
         if expected_msg != msg:
             raise ValueError("Mismatch message")
 
+    @property
     def dumps(self):
         # type: () -> str
         return jsonpickle.encode(self)
@@ -64,6 +65,7 @@ class TxBlockInner:
         self.h_r = h_r
         self.m = m
 
+    @property
     def dumps(self):
         # type: () -> str
         return jsonpickle.encode(self)
@@ -110,7 +112,7 @@ class TxBlock:
         :param sk:
         :return:
         """
-        return Signature(vk, sk, self.inner.dumps())
+        return Signature(vk, sk, self.inner.dumps)
 
     def seal(self, vk_s, s_s, vk_r, s_r, prev_r):
         # type: (str, Signature, str, Signature, str) -> TxBlock
@@ -126,10 +128,10 @@ class TxBlock:
         assert self.s_s is None
         assert self.s_r is None
 
-        s_r.verify(vk_r, self.make_pair(prev_r).inner.dumps())
+        s_r.verify(vk_r, self.make_pair(prev_r).inner.dumps)
         self.s_r = s_r
 
-        s_s.verify(vk_s, self.inner.dumps())
+        s_s.verify(vk_s, self.inner.dumps)
         self.s_s = s_s
 
         return self
@@ -151,7 +153,7 @@ class TxBlock:
     @property
     def hash(self):
         # type: () -> str
-        msg = self.inner.dumps() + self.s_s.dumps + self.s_r.dumps
+        msg = self.inner.dumps + self.s_s.dumps + self.s_r.dumps
         return libnacl.crypto_hash_sha256(msg)
 
     @property
@@ -186,6 +188,7 @@ class CpBlockInner:
     def __ne__(self, other):
         return not self.__eq__(other)
 
+    @property
     def dumps(self):
         # type: () -> str
         return jsonpickle.encode(self)
@@ -227,7 +230,7 @@ class CpBlock:
         else:
             # if this is executed, it means this is a genesis block
             pass
-        self.s = Signature(vk, sk, self.inner.dumps())
+        self.s = Signature(vk, sk, self.inner.dumps)
 
     def __str__(self):
         return "(prev: {}, cons: {}, h: {}, r: {}, p: {}, s: {})"\
@@ -243,7 +246,7 @@ class CpBlock:
     @property
     def hash(self):
         # type: () -> str
-        msg = self.inner.dumps() + self.s.dumps()
+        msg = self.inner.dumps + self.s.dumps
         return libnacl.crypto_hash_sha256(msg)
 
     @property
