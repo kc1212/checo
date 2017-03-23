@@ -24,6 +24,8 @@ class ACS:
         # initialise our RBC and BA instances
         # assume all the peers are connected
         assert len(self.factory.peers) == self.factory.config.n
+        self.round += 1
+
         for peer in self.factory.peers.keys():
             logging.debug("ACS: adding peer {}".format(b64encode(peer)))
 
@@ -62,6 +64,14 @@ class ACS:
         if self.done:
             logging.debug("ACS: we're done, doing nothing")
             return Handled()
+
+        if msg.round < self.round:
+            logging.debug("ACS: round already over, curr: {}, required: {}".format(self.round, msg.round))
+            return Handled()
+
+        if msg.round > self.round:
+            logging.debug("ACS: round is not ready, curr: {}, required: {}".format(self.round, msg.round))
+            return Replay()
 
         instance = msg.instance
         round = msg.round

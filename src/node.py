@@ -75,7 +75,7 @@ class MyProto(JsonReceiver):
             if self.factory.config.failure == 'omission':
                 return
             res = self.factory.acs.handle(obj, self.remote_vk)
-            self.check_and_add_to_queue(res, obj)
+            self.process_acs_res(res, obj)
 
         elif isinstance(obj, ChainMsg):
             self.factory.tc_runner.handle(obj.body, self.remote_vk)
@@ -97,13 +97,19 @@ class MyProto(JsonReceiver):
         else:
             raise AssertionError("invalid message type")
 
-    def check_and_add_to_queue(self, o, m):
+    def process_acs_res(self, o, m):
         assert o is not None
-        assert isinstance(o, Handled) or isinstance(o, Replay)
 
         if isinstance(o, Replay):
             logging.debug("putting {} into msg queue".format(m))
             self.q.put(m)
+        elif isinstance(o, Handled):
+            if o.m is not None:
+
+                pass
+            pass
+        else:
+            raise AssertionError("instance is not Replay or Handled")
 
     def send_ping(self):
         self.send_obj(PingMsg(self.vk, self.config.port))

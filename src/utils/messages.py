@@ -102,3 +102,9 @@ class CpMsg:
         # type: (CpBlock) -> None
         self.cp = cp
 
+
+class SigMsg:
+    def __init__(self, s):
+        # type: (Signature) -> None
+        self.s = s
+

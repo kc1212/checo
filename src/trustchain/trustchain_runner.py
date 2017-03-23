@@ -2,13 +2,13 @@ from twisted.internet.task import LoopingCall
 from twisted.python import log
 from base64 import b64encode
 from Queue import Queue
-from typing import Union
+from typing import Union, Dict, List
 import random
 import logging
 
-from trustchain import TrustChain, TxBlock, CpBlock, Signature
+from trustchain import TrustChain, TxBlock, CpBlock, Signature, Cons
 from src.utils.utils import Replay, Handled
-from src.utils.messages import SynMsg, SynAckMsg, AckMsg, CpMsg
+from src.utils.messages import SynMsg, SynAckMsg, AckMsg, CpMsg, SigMsg
 
 
 class TrustChainRunner:
@@ -31,12 +31,16 @@ class TrustChainRunner:
 
         # attributes below are states used for negotiating transaction
         self.tx_locked = False  # only process one transaction at a time, otherwise there'll be hash pointer collisions
-        self.block_r = None
-        self.tx_id = -1  # the id of the transaction that we're processing
-        self.src = None
-        self.s_s = None
-        self.m = None
-        self.prev_r = None
+        self.block_r = None  # type: TxBlock
+        self.tx_id = -1  # type: int
+        self.src = None  # type: str
+        self.s_s = None  # type: Signature
+        self.m = None  # type: str
+        self.prev_r = None  # type: str
+
+        # attributes below are states for building new CP blocks
+        self.received_cons = {}  # type: Dict[int, Cons]
+        self.received_sigs = {}  # type: Dict[int, List[Signature]]
 
         random.seed()
 
@@ -84,6 +88,12 @@ class TrustChainRunner:
         self.s_s = s_s
         self.m = m
         self.prev_r = prev_r
+
+    def handle_cons(self, cons):
+        pass
+
+    def handle_sig(self, sig):
+        pass
 
     def handle(self, msg, src):
         # type: (Union[SynMsg, SynAckMsg, AckMsg]) -> None
@@ -269,7 +279,3 @@ class TrustChainRunner:
         promoters = sorted(self.factory.peers.keys())[:n]
         if self.factory.vk in promoters:
             self.factory.acs.start(self.tc.genesis)
-
-
-
-
