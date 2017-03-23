@@ -1,8 +1,9 @@
 import math
 import libnacl
 import jsonpickle  # not the best since it's insecure, but we can't easily use json because it doesn't work with binary
+import copy
 from base64 import b64encode
-from typing import List, Union
+from typing import List, Union, Dict
 from enum import Enum
 
 ValidityState = Enum('ValidityState', 'Valid Invalid Unknown')
@@ -29,6 +30,12 @@ class Signature:
     def __str__(self):
         return "({}, <sig>)".format(b64encode(self.vk))
 
+    def __eq__(self, other):
+        return self.vk == other.vk and self.sig == other.sig
+
+    def __ne__(self, other):
+        return self.__eq__(other)
+
     def verify(self, vk, msg):
         # type: (str, str) -> None
         """
@@ -40,6 +47,22 @@ class Signature:
         expected_msg = libnacl.crypto_sign_open(self.sig, self.vk)
         if expected_msg != msg:
             raise ValueError("Mismatch message")
+
+    def dumps(self):
+        # type: () -> str
+        return jsonpickle.encode(self)
+
+
+class TxBlockInner:
+    """
+    Ideally this should be defined inside TxBlock, but jsonpickle won't decode correctly if we do that...
+    """
+    def __init__(self, prev, h_s, h_r, m):
+        # type: (str, int, int, str) -> None
+        self.prev = prev
+        self.h_s = h_s
+        self.h_r = h_r
+        self.m = m
 
     def dumps(self):
         # type: () -> str
@@ -66,29 +89,16 @@ class TxBlock:
         validity: Valid | Invalid | Unknown
     }
     """
-
-    class Inner:
-        def __init__(self, prev, h_s, h_r, m):
-            # type: (str, int, int, str) -> None
-            self.prev = prev
-            self.h_s = h_s
-            self.h_r = h_r
-            self.m = m
-
-        def dumps(self):
-            # type: () -> str
-            return jsonpickle.encode(self)
-
     def __init__(self, prev, h_s, h_r, m):
         # type: (str, int, int, str) -> None
-        self.inner = self.Inner(prev, h_s, h_r, m)
+        self.inner = TxBlockInner(prev, h_s, h_r, m)
         self.s_s = None
         self.s_r = None
         self.validity = ValidityState.Unknown
 
     def __str__(self):
         return "(prev: {}, h_s: {}, h_r: {}, s_s: {}, s_r: {}, m: {})"\
-            .format(b64encode(self.get_prev()),
+            .format(b64encode(self.prev),
                     self.inner.h_s, self.inner.h_r,
                     str(self.s_s), str(self.s_r), self.inner.m)
 
@@ -138,18 +148,47 @@ class TxBlock:
         """
         return TxBlock(prev=prev, h_s=self.inner.h_r, h_r=self.inner.h_s, m=self.inner.m)
 
+    @property
     def hash(self):
         # type: () -> str
-        msg = self.inner.dumps() + self.s_s.dumps() + self.s_r.dumps()
+        msg = self.inner.dumps() + self.s_s.dumps + self.s_r.dumps
         return libnacl.crypto_hash_sha256(msg)
 
-    def get_h(self):
+    @property
+    def h(self):
         # type: () -> int
         return self.inner.h_s
 
-    def get_prev(self):
+    @property
+    def prev(self):
         # type: () -> str
         return self.inner.prev
+
+
+class CpBlockInner:
+    def __init__(self, prev, h, cons, ss, p):
+        # type: (str, int, Cons, List[Signature], int) -> None
+        self.prev = prev
+        self.h_s = h
+        self.round = cons.round
+        self.cons = cons
+        self.ss = ss
+        self.p = p
+
+    def __eq__(self, other):
+        return self.prev == other.prev and \
+               self.h_s == other.h_s and \
+               self.round == other.round and \
+               self.cons == other.cons and \
+               self.ss == other.ss and \
+               self.p == other.p
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
+    def dumps(self):
+        # type: () -> str
+        return jsonpickle.encode(self)
 
 
 class CpBlock:
@@ -166,20 +205,6 @@ class CpBlock:
     }
     """
 
-    class Inner:
-        def __init__(self, prev, h, cons, ss, p):
-            # type: (str, int, Cons, List[Signature], int) -> None
-            self.prev = prev
-            self.h_s = h
-            self.round = cons.round
-            self.cons = cons
-            self.ss = ss
-            self.p = p
-
-        def dumps(self):
-            # type: () -> str
-            return jsonpickle.encode(self)
-
     def __init__(self, prev, h, cons, p, vk, sk, ss, vks):
         # type: (str, int, Cons, int, str, str, List[Signature], List[str]) -> None
         """
@@ -194,7 +219,7 @@ class CpBlock:
         :param vks: all verification keys of promoters
         """
         assert p in (0, 1)
-        self.inner = self.Inner(prev, h, cons, ss, p)
+        self.inner = CpBlockInner(prev, h, cons, ss, p)
 
         if cons.round != -1 or len(ss) != 0 or len(vks) != 0 or self.inner.h_s != 0:
             t = math.floor((len(vks) - 1) / 3.0)
@@ -206,13 +231,24 @@ class CpBlock:
 
     def __str__(self):
         return "(prev: {}, cons: {}, h: {}, r: {}, p: {}, s: {})"\
-            .format(b64encode(self.get_prev()), str(self.inner.cons),
-                    self.get_h(), self.inner.round, self.inner.p, str(self.s))
+            .format(b64encode(self.prev), str(self.inner.cons),
+                    self.h, self.inner.round, self.inner.p, str(self.s))
 
+    def __eq__(self, other):
+        return self.inner == other.inner and self.s == other.s
+
+    def __ne__(self, other):
+        return not self.__ne__(other)
+
+    @property
     def hash(self):
         # type: () -> str
         msg = self.inner.dumps() + self.s.dumps()
         return libnacl.crypto_hash_sha256(msg)
+
+    @property
+    def luck(self):
+        return libnacl.crypto_hash_sha256(self.hash + self.s.vk)
 
     def _verify_signatures(self, ss, vks, t):
         # type: (List[Signature], List[str], int) -> None
@@ -220,7 +256,7 @@ class CpBlock:
         _ss = [s for s in ss if s.vk in vks]  # only consider nodes that are promoters
         for _s in _ss:
             try:
-                _s.verify(_s.vk, self.inner.cons.hash())
+                _s.verify(_s.vk, self.inner.cons.hash)
                 oks += 1
             except ValueError:
                 print "verification failed for", _s.vk
@@ -228,11 +264,13 @@ class CpBlock:
         if not oks > t:
             raise ValueError("verification failed, oks = {}, t = {}".format(oks, t))
 
-    def get_h(self):
+    @property
+    def h(self):
         # type: () -> int
         return self.inner.h_s
 
-    def get_prev(self):
+    @property
+    def prev(self):
         # type: () -> str
         return self.inner.prev
 
@@ -260,13 +298,27 @@ class Cons:
         # TODO what to print?
         return "<cons>"
 
+    def __eq__(self, other):
+        return self.round == other.round and self.blocks == other.blocks
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
+    @property
     def dumps(self):
         # type: () -> str
         return jsonpickle.encode(self)
 
+    @property
     def hash(self):
         # type: () -> str
-        return libnacl.crypto_hash_sha256(self.dumps())
+        return libnacl.crypto_hash_sha256(self.dumps)
+
+    def get_promoters(self, n):
+        # type: () -> List[str]
+        registered = filter(lambda cp: cp.inner.p == 1, self.blocks)
+        registered.sort(key=lambda x: x.luck)
+        return [b.s.vk for b in registered][:n]
 
 
 def generate_genesis_block(vk, sk):
@@ -293,29 +345,36 @@ class Chain:
 
     def new_tx(self, tx):
         # type: (TxBlock) -> None
-        assert tx.get_prev() == self.chain[-1].hash()
+        assert tx.prev == self.chain[-1].hash
 
         self.chain.append(tx)
 
     def new_cp(self, cp):
         # type: (CpBlock) -> None
-        assert cp.get_prev() == self.chain[-1].hash()
+        assert cp.prev == self.chain[-1].hash
 
-        prev_cp = self.previous_cp()
+        prev_cp = self.previous_cp
         assert prev_cp.inner.round < cp.inner.round
 
         self.chain.append(cp)
 
+    @property
     def latest_hash(self):
         # type: () -> str
-        return self.chain[-1].hash()
+        return self.chain[-1].hash
 
+    @property
     def previous_cp(self):
         # type: () -> CpBlock
         for b in reversed(self.chain):
             if isinstance(b, CpBlock):
                 return b
         raise ValueError("No CpBlock in Chain")
+
+    @property
+    def genesis(self):
+        # type: () -> CpBlock
+        return self.chain[0]
 
 
 class TrustChain:
@@ -331,7 +390,7 @@ class TrustChain:
     def __init__(self):
         # type: () -> None
         self.vk, self.sk = libnacl.crypto_sign_keypair()
-        self.chains = {self.vk: Chain(self.vk, self.sk)}  # HashMap<Node, Chain>
+        self.chains = {self.vk: Chain(self.vk, self.sk)}  # type: Dict[str, Chain]
         self.my_chain = self.chains[self.vk]
 
     def new_tx(self, tx):
@@ -340,8 +399,8 @@ class TrustChain:
         Verify tx, follow the rules and mutates the state to add it
         :return: None
         """
-        assert tx.get_h() == self.next_h()
-        self.my_chain.new_tx(tx)
+        assert tx.h == self.next_h
+        self.my_chain.new_tx(copy.deepcopy(tx))
 
     def new_cp(self, cp):
         # type: (CpBlock) -> None
@@ -349,16 +408,22 @@ class TrustChain:
         Verify the cp, follow the rules and mutate the state to add it
         :return: None
         """
-        assert cp.get_h() == len(self.my_chain.chain)
-        self.my_chain.new_cp(cp)
+        assert cp.h == len(self.my_chain.chain)
+        self.my_chain.new_cp(copy.deepcopy(cp))
 
+    @property
     def next_h(self):
         # type: () -> int
         return len(self.my_chain.chain)
 
+    @property
     def latest_hash(self):
         # type () -> str
-        return self.my_chain.latest_hash()
+        return self.my_chain.latest_hash
+
+    @property
+    def genesis(self):
+        return self.my_chain.genesis
 
     def pieces(self, tx):
         """

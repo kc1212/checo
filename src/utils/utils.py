@@ -1,6 +1,7 @@
-import json
+import jsonpickle
 import logging
 import sys
+import libnacl
 from collections import Counter
 
 
@@ -42,11 +43,6 @@ class BColors:
     ENDC = '\033[0m'
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
-
-
-class JsonSerialisable:
-    def to_json(self):
-        return json.dumps(self, default=lambda o: o.__dict__)
 
 
 class Replay:
@@ -98,5 +94,12 @@ def make_args(port, n, t, test=None, value=0, failure=None, tx=0, loglevel=loggi
         res.append(output)
 
     return res
+
+
+def dictionary_hash(d):
+    digest = ''
+    for key in sorted(d):
+        digest = libnacl.crypto_hash_sha256(digest + jsonpickle.encode(key) + jsonpickle.encode(d[key]))
+    return digest
 
 

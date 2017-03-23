@@ -3,6 +3,7 @@ import argparse
 import sys
 import logging
 from base64 import b64encode, b64decode
+from typing import Dict, Tuple
 
 from twisted.python import log
 from twisted.internet import reactor
@@ -138,13 +139,14 @@ class MyFactory(Factory):
     The Twisted Factory with a broadcast functionality, should be singleton
     """
     def __init__(self, config):
-        self.peers = {}  # key: vk, value: (host: str, port: int, self: MyProto)
+        # type: (Config) -> None
+        self.peers = {}  # type: Dict[str, Tuple[str, int, MyProto]]
         self.config = config
         self.bracha = Bracha(self)  # just for testing
         self.mo14 = Mo14(self)  # just for testing
         self.acs = ACS(self)
         self.tc_runner = TrustChainRunner(self, lambda m: ChainMsg(m))
-        self.vk = self.tc_runner.chain.vk
+        self.vk = self.tc_runner.tc.vk
 
     def buildProtocol(self, addr):
         return MyProto(self)
@@ -242,6 +244,9 @@ def run(config):
     elif config.test == 'tc':
         if config.tx > 0:
             reactor.callLater(5, f.tc_runner.make_random_tx)
+    elif config.test == 'bootstrap':
+        # TODO for now everybody is a promoter
+        reactor.callLater(5, f.tc_runner.bootstrap_promoters, config.n)
 
     reactor.run()
 
@@ -279,7 +284,7 @@ if __name__ == '__main__':
     )
     parser.add_argument(
         '--test',
-        choices=['dummy', 'bracha', 'mo14', 'acs', 'tc'],
+        choices=['dummy', 'bracha', 'mo14', 'acs', 'tc', 'bootstrap'],
         help='[testing] choose an algorithm to initialise'
     )
     parser.add_argument(

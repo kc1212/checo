@@ -1,12 +1,11 @@
 from base64 import b64encode
 from typing import Dict, Union
-import json
 import logging
 
 from .bracha import Bracha
 from .mo14 import Mo14
 from src.utils.messages import ACSMsg, BrachaMsg, Mo14Msg
-from src.utils.utils import Replay, Handled
+from src.utils.utils import Replay, Handled, dictionary_hash
 
 
 class ACS:
@@ -119,12 +118,15 @@ class ACS:
             assert n == len(self.mo14_results)
 
             self.done = True
-            res = self.get_results()
-            logging.info("ACS: DONE {}".format(json.dumps(res)))
+            res = self.collate_results()
+            # NOTE we just print the hash of the results and compare, the actual output is too much...
+            logging.info("ACS: DONE \"{}\"".format(b64encode(dictionary_hash(res))))
             return Handled(res)
         return Handled()
 
-    def get_results(self):
-        res = {'set': {b64encode(k): v for k, v in self.mo14_results.iteritems()},
-               'msgs': {b64encode(k): v for k, v in self.bracha_results.iteritems()}}
+    def collate_results(self):
+        key_of_ones = [k for k, v in self.mo14_results.iteritems() if v == 1]
+        res = {k: self.bracha_results[k] for k in key_of_ones}
         return res
+
+

@@ -53,7 +53,7 @@ class Bracha:
             # if body is None, we must be in the initial state
             assert self.init_count == 0 and self.echo_count == 0 and self.ready_count == 0
             self.body = body
-        assert self.body == body
+        assert self.body == body, "self.body {} != body: {}".format(self.body, body)
 
         if ty == MsgType.init.value:
             self.init_count += 1

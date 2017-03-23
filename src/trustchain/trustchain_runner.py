@@ -8,27 +8,16 @@ import logging
 
 from trustchain import TrustChain, TxBlock, CpBlock, Signature
 from src.utils.utils import Replay, Handled
-from src.utils.messages import SynMsg, SynAckMsg, AckMsg
+from src.utils.messages import SynMsg, SynAckMsg, AckMsg, CpMsg
 
 
 class TrustChainRunner:
     """
     We keep a queue of messages and handle them in order
     the handle function by itself essentially pushes the messages into the queue
-    struct Msg {
-        ty: u32,
-        body: Syn | SynAck | Ack,
-    }
-
-    struct Syn {
-        tx_id: u32,
-        prev: Digest,  // encode to base64 before sending
-        h_s: u32,
-        m: String,
-    }
     """
     def __init__(self, factory, msg_wrapper_f=lambda x: x):
-        self.chain = TrustChain()
+        self.tc = TrustChain()
         self.factory = factory
         self.recv_q = Queue()
         self.send_q = Queue()  # only for syn messages
@@ -138,7 +127,7 @@ class TrustChainRunner:
             m, node = self.send_q.get()
 
             tx_id = random.randint(0, 2**31 - 1)
-            msg = SynMsg(tx_id, self.chain.latest_hash(), self.chain.next_h(), m)
+            msg = SynMsg(tx_id, self.tc.latest_hash, self.tc.next_h, m)
 
             self.update_state(True, None, tx_id, node, None, m, None)
             self.send(node, msg)
@@ -179,12 +168,12 @@ class TrustChainRunner:
 
         # make sure we're in the initial state
         self.assert_unlocked_state()
-        block = TxBlock(self.chain.latest_hash(), self.chain.next_h(), h_r, m)  # generate s_s from this
+        block = TxBlock(self.tc.latest_hash, self.tc.next_h, h_r, m)  # generate s_s from this
         self.update_state(True,
                           block,
                           tx_id,
                           src,
-                          block.sign(self.chain.vk, self.chain.sk),  # store my signature
+                          block.sign(self.tc.vk, self.tc.sk),  # store my signature
                           m,
                           prev_r)
         self.send_synack()
@@ -194,8 +183,8 @@ class TrustChainRunner:
         self.assert_full_state()
         assert not self.block_r.is_sealed()
         msg = SynAckMsg(self.tx_id,
-                        self.chain.latest_hash(),
-                        self.chain.next_h(),
+                        self.tc.latest_hash,
+                        self.tc.next_h,
                         self.s_s)
         self.send(self.src, msg)
 
@@ -220,10 +209,10 @@ class TrustChainRunner:
         assert src == self.src
 
         logging.debug("TC: synack")
-        self.block_r = TxBlock(self.chain.latest_hash(), self.chain.next_h(), h_r, self.m)
-        s_s = self.block_r.sign(self.chain.vk, self.chain.sk)
-        self.block_r.seal(self.chain.vk, s_s, src, s_r, prev_r)
-        self.chain.new_tx(self.block_r)
+        self.block_r = TxBlock(self.tc.latest_hash, self.tc.next_h, h_r, self.m)
+        s_s = self.block_r.sign(self.tc.vk, self.tc.sk)
+        self.block_r.seal(self.tc.vk, s_s, src, s_r, prev_r)
+        self.tc.new_tx(self.block_r)
         logging.info("TC: added tx {}".format(str(self.block_r)))
 
         self.send_ack(s_s)
@@ -248,10 +237,10 @@ class TrustChainRunner:
         assert not self.block_r.is_sealed()
 
         logging.debug("TC: ack")
-        self.block_r.seal(self.chain.vk, self.s_s, src, s_r, self.prev_r)
-        self.chain.new_tx(self.block_r)
-        self.reset_state()
+        self.block_r.seal(self.tc.vk, self.s_s, src, s_r, self.prev_r)
+        self.tc.new_tx(self.block_r)
         logging.info("TC: added tx {}".format(str(self.block_r)))
+        self.reset_state()
 
         return Handled()
 
@@ -269,3 +258,18 @@ class TrustChainRunner:
         m = 'test' + str(random.random())
         logging.debug("TC: {} making random tx to".format(b64encode(node)))
         self.send_syn(node, m)
+
+    def bootstrap_promoters(self, n):
+        """
+        Assume all the nodes are already online
+        the first n values, sorted by vk, are promoters
+        :param n: number of promoters
+        :return:
+        """
+        promoters = sorted(self.factory.peers.keys())[:n]
+        if self.factory.vk in promoters:
+            self.factory.acs.start(self.tc.genesis)
+
+
+
+

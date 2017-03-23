@@ -83,27 +83,8 @@ def check_acs_files(n, t):
     # do various checks
     assert len(acs_dones) >= n - t, "ACS incorrect length! len = {}, n = {}, t = {}".format(len(acs_dones), n, t)
 
-    # first find the agreed set and check there's majority
-    # NOTE: we can't use value_and_tally because dictionary is unhashable
-    s = acs_dones[0]['set']
-    tally_s = 0
-    for x in acs_dones:
-        if s == x['set']:
-            tally_s += 1
-    assert tally_s >= n - t
-
-    # filter the messages that is not in the agreed set
-    key_of_ones = [k for k, v in s.iteritems() if v == 1]
-    print "key of ones", key_of_ones
-    assert len(key_of_ones) >= n - t
-
-    # NOTE: we manually do this too because dictionary is unhashable
-    msgs = {k: acs_dones[0]['msgs'][k] for k in key_of_ones}
-    tally_msgs = 0
-    for x in acs_dones:
-        if msgs == {k: x['msgs'][k] for k in key_of_ones}:
-            tally_msgs += 1
-    assert tally_msgs >= n - t
+    m, tally = value_and_tally(acs_dones)
+    assert tally >= n - t, "ACS incorrect tally! tally = {}, n = {}, t = {}, m = {}".format(tally, n, t, m)
 
 
 def check_bracha_files(n, t):
@@ -171,11 +152,9 @@ def test_acs(n, t, f, folder, discover):
     for i in range(n - t):
         port = GOOD_PORT + i
         configs.append(make_args(port, n, t, test='acs', output=DIR + str(port) + '.out'))
-        # configs.append(node.Config(port, n, t, test='acs', output=DIR + str(port) + '.out'))
     for i in range(t):
         port = BAD_PORT + i
         configs.append(make_args(port, n, t, test='acs', failure=f, output=DIR + str(port) + '.out'))
-        # configs.append(node.Config(port, n, t, test='acs', failure=f, output=DIR + str(port) + '.out'))
 
     ps = run_subprocesses(NODE_CMD_PREFIX, configs)
 
