@@ -161,11 +161,11 @@ def poll_check_f(to, tick, ps, f, *args, **kwargs):
 
 
 @pytest.mark.parametrize("n,t,f", [
-    # (4, 1, 'omission'),
-    # (7, 2, 'omission'),
-    # (19, 6, 'omission'),
-    # (4, 1, 'byzantine'),
-    # (7, 2, 'byzantine'),
+    (4, 1, 'omission'),
+    (7, 2, 'omission'),
+    (19, 6, 'omission'),
+    (4, 1, 'byzantine'),
+    (7, 2, 'byzantine'),
     (19, 6, 'byzantine'),
 ])
 def test_acs(n, t, f, folder, discover):

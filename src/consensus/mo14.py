@@ -172,7 +172,7 @@ class Mo14:
 
         if self.state == Mo14State.coin:
             s = coins[self.r]
-            logging.debug("Mo14: reached coin state, s =", s, "v =", v)
+            logging.debug("Mo14: reached coin state, s = {}, v = {}".format(s, v))
             logging.debug("Mo14: vals =? set([v]), {} =? {}".format(vals, set([v])))
             if vals == set([v]):
                 if v == s:
