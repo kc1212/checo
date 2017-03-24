@@ -121,8 +121,12 @@ def dictionary_hash(d):
     return digest
 
 
-def dict_to_list_by_key(d):
+def flatten(l):
+    return [item for sublist in l for item in sublist]
+
+
+def collate_cp_blocks(d):
     res = []
     for key in sorted(d):
         res.append(d[key])
-    return res
+    return list(set(flatten(res)))

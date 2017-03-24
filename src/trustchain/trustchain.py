@@ -104,6 +104,9 @@ class TxBlock:
                     self.inner.h_s, self.inner.h_r,
                     str(self.s_s), str(self.s_r), self.inner.m)
 
+    def __hash__(self):
+        return hash(self.hash)
+
     def sign(self, vk, sk):
         # type: (str, str) -> Signature
         """
@@ -243,6 +246,9 @@ class CpBlock:
     def __ne__(self, other):
         return not self.__ne__(other)
 
+    def __hash__(self):
+        return hash(self.hash)
+
     @property
     def hash(self):
         # type: () -> str
@@ -309,6 +315,9 @@ class Cons:
     def __ne__(self, other):
         return not self.__eq__(other)
 
+    def __hash__(self):
+        return hash(self.hash)
+
     def get_promoters(self, n):
         # type: () -> List[str]
         registered = filter(lambda cp: cp.inner.p == 1, self.blocks)
@@ -329,7 +338,7 @@ class Cons:
 def generate_genesis_block(vk, sk):
     # type: (str, str) -> CpBlock
     prev = libnacl.crypto_hash_sha256('0')
-    return CpBlock(prev, 0, Cons(-1, []), 0, vk, sk, [], [])
+    return CpBlock(prev, 0, Cons(-1, []), 1, vk, sk, [], [])
 
 
 class Chain:
@@ -358,7 +367,7 @@ class Chain:
         # type: (CpBlock) -> None
         assert cp.prev == self.chain[-1].hash
 
-        prev_cp = self.previous_cp
+        prev_cp = self.latest_cp
         assert prev_cp.inner.round < cp.inner.round, \
             "prev round {}, curr round {}, len {}".format(prev_cp, cp, len(self.chain))
 
@@ -370,7 +379,7 @@ class Chain:
         return self.chain[-1].hash
 
     @property
-    def previous_cp(self):
+    def latest_cp(self):
         # type: () -> CpBlock
         for b in reversed(self.chain):
             if isinstance(b, CpBlock):
@@ -385,7 +394,7 @@ class Chain:
     @property
     def latest_round(self):
         # type: () -> int
-        return self.previous_cp.inner.round
+        return self.latest_cp.inner.round
 
 
 class TrustChain:

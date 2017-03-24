@@ -159,7 +159,7 @@ class MyFactory(Factory):
     def __init__(self, config):
         # type: (Config) -> None
         self.peers = {}  # type: Dict[str, Tuple[str, int, MyProto]]
-        self.promoters = {}
+        self.promoters = []
         self.config = config
         self.bracha = Bracha(self)  # just for testing
         self.mo14 = Mo14(self)  # just for testing
@@ -215,6 +215,18 @@ class MyFactory(Factory):
         """
         logging.debug("overwriting promoters {}".format(len(self.peers)))
         self.promoters = self.peers.keys()
+
+    def fill_promoters(self):
+        """
+        This should not happen during normal circumstances, only happens when testing when everybody is a promoter
+        :return:
+        """
+        if len(self.promoters) < self.config.n:
+            logging.debug("not enough promoters, picking one deterministically")
+            candidates = sorted(list(set(self.peers.keys()) - set(self.promoters)))
+            for i in range(self.config.n - len(self.promoters)):
+                logging.debug("adding {} to promoter".format(b64encode(candidates[i])))
+                self.promoters.append(candidates[i])
 
 
 def got_protocol(p):
@@ -290,7 +302,7 @@ def run(config, bcast):
     elif config.test == 'mo14':
         reactor.callLater(6, f.mo14.start, config.value)
     elif config.test == 'acs':
-        reactor.callLater(6, f.acs.start, config.port)  # use port number (unique on local network) as test message
+        reactor.callLater(6, f.acs.start, config.port, 1)  # use port number (unique on local network) as test message
     elif config.test == 'tc':
         if config.tx > 0:
             reactor.callLater(5, f.tc_runner.make_random_tx)

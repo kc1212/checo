@@ -1,21 +1,23 @@
+from twisted.internet import reactor
 from twisted.internet.task import LoopingCall
 from twisted.python import log
 from base64 import b64encode
 from Queue import Queue
-from typing import Union, Dict, List
+from typing import Union
 import random
 import logging
 from collections import defaultdict
 
 from trustchain import TrustChain, TxBlock, CpBlock, Signature, Cons
-from src.utils.utils import Replay, Handled, dict_to_list_by_key
-from src.utils.messages import SynMsg, SynAckMsg, AckMsg, CpMsg, SigMsg
+from src.utils.utils import Replay, Handled, collate_cp_blocks
+from src.utils.messages import SynMsg, SynAckMsg, AckMsg, SigMsg
 
 
 class RoundState:
     def __init__(self):
         self.received_cons = None
         self.received_sigs = []
+        self.received_cps = []
 
     def new_cons(self, cons):
         # type: (Cons) -> None
@@ -30,6 +32,11 @@ class RoundState:
         # type: (Signature) -> None
         assert isinstance(s, Signature)
         self.received_sigs.append(s)
+
+    def new_cp(self, cp):
+        # type: (CpBlock) -> None
+        assert isinstance(cp, CpBlock)
+        self.received_cps.append(cp)
 
 
 class TrustChainRunner:
@@ -60,8 +67,6 @@ class TrustChainRunner:
         self.prev_r = None  # type: str
 
         # attributes below are states for building new CP blocks
-        # self.received_cons = {}  # type: Dict[int, Cons]
-        # self.received_sigs = {}  # type: Dict[int, List[Signature]]
         self.round_states = defaultdict(RoundState)
 
         random.seed()
@@ -116,21 +121,24 @@ class TrustChainRunner:
             return True
         return False
 
+    def latest_promoters(self):
+        return self.tc.my_chain.latest_cp.inner.cons.get_promoters(self.factory.config.n)
+
     def handle_cons_from_acs(self, msg):
         """
         This is only called after we get the output from ACS
         :param msg:
         :return:
         """
-        logging.debug("TC: handling cons {}".format(msg))
         bs, r = msg
+        logging.debug("TC: handling cons {}, round {}".format(bs, r))
 
         if isinstance(bs, dict):
             assert len(bs) > 0
-            assert isinstance(bs.values()[0], CpBlock)
+            assert isinstance(bs.values()[0][0], CpBlock)
 
             logging.debug("TC: adding cons")
-            cons = Cons(r, dict_to_list_by_key(bs))
+            cons = Cons(r, collate_cp_blocks(bs))
             self.round_states[r].new_cons(cons)
 
             # TODO eventually we'd like to use gossip
@@ -138,6 +146,10 @@ class TrustChainRunner:
 
             s = Signature(self.tc.vk, self.tc.sk, cons.hash)
             self.factory.bcast(SigMsg(s, r))
+
+            # we also try to add the CP here because we may receive the signatures before the actual CP
+            self.try_add_cp(r)
+
         else:
             logging.debug("TC: not a dict type in handle_cons_from_acs")
 
@@ -148,15 +160,37 @@ class TrustChainRunner:
         logging.debug("TC: received SigMsg {} from {}".format(msg, b64encode(remote_vk)))
         self.round_states[msg.r].new_sig(msg.s)
 
-        if self.sufficient_sigs(msg.r):
-            logging.debug("TC: sufficient sigs in round {}".format(msg.r))
-            if self.tc.latest_round >= msg.r:
+        self.try_add_cp(msg.r)
+
+    def try_add_cp(self, r):
+        if self.sufficient_sigs(r) and self.round_states[r].received_cons is not None:
+            logging.debug("TC: sufficient sigs in round {}".format(r))
+            if self.tc.latest_round >= r:
                 logging.debug("TC: already added the CP")
                 return
             self.tc.new_cp_from_cons(1,
-                                     self.round_states[msg.r].received_cons,
-                                     self.round_states[msg.r].received_sigs,
+                                     self.round_states[r].received_cons,
+                                     self.round_states[r].received_sigs,
                                      self.factory.promoters)
+            # we just created CP for round r, inside it, is the list of promoters for round r + 1
+            # terminate ACS, so that new messages are dropped, TX doesn't matter, coz it does not involve promoters
+            # update promoters
+            # finally collect new CP if I'm the promoter, otherwise send CP to promoter
+            self.factory.acs.reset()
+            logging.debug("TC: reset ACS in round {}".format(r))
+            self.factory.promoters = self.latest_promoters()
+            self.factory.fill_promoters()
+            logging.debug("TC: updated new promoters to {} in round {}"
+                          .format([b64encode(p) for p in self.factory.promoters], r))
+            if self.tc.vk in self.factory.promoters:
+                logging.info("TC: I'm a promoter, starting a new consensus round in 5 seconds")
+                self.round_states[r + 1].new_cp(self.tc.my_chain.latest_cp)
+                # TODO let others send CP to me
+                reactor.callLater(5, self.factory.acs.start, self.round_states[r + 1].received_cps, r + 1)
+            else:
+                logging.info("TC: I'm NOT a promoter")
+                # TODO send new CP to the new promoters if I'm not one
+                pass
 
     def handle(self, msg, src):
         # type: (Union[SynMsg, SynAckMsg, AckMsg]) -> None
@@ -341,4 +375,4 @@ class TrustChainRunner:
         """
         self.factory.promoters = sorted(self.factory.peers.keys())[:n]
         if self.factory.vk in self.factory.promoters:
-            self.factory.acs.start(self.tc.genesis)
+            self.factory.acs.start([self.tc.genesis], 1)

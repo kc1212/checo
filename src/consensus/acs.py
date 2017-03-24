@@ -11,7 +11,7 @@ from src.utils.utils import Replay, Handled, dictionary_hash
 class ACS:
     def __init__(self, factory):
         self.factory = factory
-        self.round = 0
+        self.round = -1  # type: int
         self.done = False
         # the following are initialised at start
         self.brachas = {}  # type: Dict[str, Bracha]
@@ -20,11 +20,29 @@ class ACS:
         self.mo14_results = {}  # type: Dict[str, int]
         self.mo14_provided = {}  # type: Dict[str, int]
 
-    def start(self, msg):
-        # initialise our RBC and BA instances
-        # assume all the peers are connected
+    def reset(self):
+        """
+        :return:
+        """
+        self.round = -1  # type: int
+        self.done = False
+        # the following are initialised at start
+        self.brachas = {}  # type: Dict[str, Bracha]
+        self.mo14s = {}  # type: Dict[str, Mo14]
+        self.bracha_results = {}  # type: Dict[str, str]
+        self.mo14_results = {}  # type: Dict[str, int]
+        self.mo14_provided = {}  # type: Dict[str, int]
+
+    def start(self, msg, r):
+        """
+        initialise our RBC and BA instances
+        assume all the promoters are connected
+        :param msg: the message to propose
+        :param r: the consensus round
+        :return:
+        """
         assert len(self.factory.peers) == self.factory.config.n
-        self.round += 1
+        self.round = r
 
         for peer in self.factory.peers.keys():
             logging.debug("ACS: adding peer {}".format(b64encode(peer)))

@@ -194,3 +194,21 @@ def test_tx_chain(m):
 
         assert chain_s.latest_hash == block_s.hash
         assert chain_r.latest_hash == block_r.hash
+
+
+@pytest.mark.parametrize("n, x, ps", [
+    (4, 1, 1),
+    (4, 4, 2),
+    (4, 4, 4),
+    (10, 1, 1),
+    (10, 10, 5),
+    (10, 10, 10),
+])
+def test_promoter(n, x, ps):
+    vks, ss, cons = gen_cons(n, 1)
+    for b, _ in zip(cons.blocks, range(n - ps)):
+        b.inner.p = 0
+
+    promoters = cons.get_promoters(x)
+
+    assert len(promoters) == ps
