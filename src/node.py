@@ -205,6 +205,7 @@ class MyFactory(Factory):
         sets all peers to promoters, only use this method for testing
         :return:
         """
+        logging.debug("overwriting promoters {}".format(len(self.peers)))
         self.promoters = self.peers.keys()
 
 
@@ -219,6 +220,18 @@ class Config:
     Should be singleton
     """
     def __init__(self, port, n, t, output, loglevel=logging.INFO, test=None, value=0, failure=None, tx=0):
+        """
+        This only stores the config necessary at runtime, so not necessarily all the information from argparse
+        :param port:
+        :param n:
+        :param t:
+        :param output:
+        :param loglevel:
+        :param test:
+        :param value:
+        :param failure:
+        :param tx:
+        """
         self.port = port
         self.n = n
         self.t = t
@@ -238,7 +251,7 @@ class Config:
         set_logging(loglevel, output)
 
 
-def run(config):
+def run(config, bcast):
     f = MyFactory(config)
 
     try:
@@ -257,18 +270,18 @@ def run(config):
     d = connectProtocol(point, MyProto(f))
     d.addCallback(got_protocol).addErrback(log.err)
 
+    if bcast:
+        reactor.callLater(5, f.overwrite_promoters)
+
     # optionally run tests, args.test == None implies reactive node
     # we use call later to wait until the nodes are registered
     if config.test == 'dummy':
         reactor.callLater(5, f.bcast, DummyMsg('z'))
     elif config.test == 'bracha':
-        reactor.callLater(5, f.overwrite_promoters)
         reactor.callLater(6, f.bracha.bcast_init)
     elif config.test == 'mo14':
-        reactor.callLater(5, f.overwrite_promoters)
         reactor.callLater(6, f.mo14.start, config.value)
     elif config.test == 'acs':
-        reactor.callLater(5, f.overwrite_promoters)
         reactor.callLater(6, f.acs.start, config.port)  # use port number (unique on local network) as test message
     elif config.test == 'tc':
         if config.tx > 0:
@@ -333,8 +346,14 @@ if __name__ == '__main__':
         type=int,
         metavar='RATE',
         default=0,
-        help='[testing] whether to initiate transaction RATE/sec'
+        help='[testing] initiate transaction at RATE/sec'
+    )
+    parser.add_argument(
+        '--broadcast',
+        help='[testing] overwrite promoters to be all peers',
+        action='store_true'
     )
     args = parser.parse_args()
 
-    run(Config(args.port, args.n, args.t, args.output, args.loglevel, args.test, args.value, args.failure, args.tx))
+    run(Config(args.port, args.n, args.t, args.output, args.loglevel, args.test, args.value, args.failure, args.tx),
+        args.broadcast)

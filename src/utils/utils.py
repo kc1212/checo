@@ -66,7 +66,22 @@ def set_logging(lvl, stream=sys.stdout):
     logging.basicConfig(stream=stream, level=lvl, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
-def make_args(port, n, t, test=None, value=0, failure=None, tx=0, loglevel=logging.INFO, output=None):
+def make_args(port, n, t, test=None, value=0, failure=None, tx=0, loglevel=logging.INFO, output=None,
+              broadcast=True):
+    """
+    This function should produce all the parameters accepted by argparse
+    :param port:
+    :param n:
+    :param t:
+    :param test:
+    :param value:
+    :param failure:
+    :param tx:
+    :param loglevel:
+    :param output:
+    :param broadcast:
+    :return:
+    """
     res = [str(port), str(n), str(t)]
 
     if test is not None:
@@ -92,6 +107,9 @@ def make_args(port, n, t, test=None, value=0, failure=None, tx=0, loglevel=loggi
     if output is not None:
         res.append('-o')
         res.append(output)
+
+    if broadcast:
+        res.append('--broadcast')
 
     return res
 

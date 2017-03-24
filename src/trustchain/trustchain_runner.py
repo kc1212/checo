@@ -2,7 +2,7 @@ from twisted.internet.task import LoopingCall
 from twisted.python import log
 from base64 import b64encode
 from Queue import Queue
-from typing import Union, Dict, List, Tuple
+from typing import Union, Dict, List
 import random
 import logging
 

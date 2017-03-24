@@ -135,8 +135,8 @@ def poll_check_f(to, tick, ps, f, *args, **kwargs):
         except AssertionError as e:
             print "poll not ready", e
 
-    f(*args, **kwargs)
     terminate_ps(ps)
+    f(*args, **kwargs)
 
 
 @pytest.mark.parametrize("n,t,f", [
