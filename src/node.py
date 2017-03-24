@@ -13,7 +13,7 @@ from twisted.internet.protocol import Factory
 from twisted.internet.task import LoopingCall
 
 from src.utils.jsonreceiver import JsonReceiver
-from src.utils.messages import DummyMsg, PingMsg, PongMsg, BrachaMsg, Mo14Msg, ACSMsg, ChainMsg
+from src.utils.messages import DummyMsg, PingMsg, PongMsg, BrachaMsg, Mo14Msg, ACSMsg, ChainMsg, SigMsg
 from src.utils.utils import Replay, Handled, set_logging
 from src.consensus.bracha import Bracha
 from src.consensus.acs import ACS
@@ -80,6 +80,9 @@ class MyProto(JsonReceiver):
         elif isinstance(obj, ChainMsg):
             self.factory.tc_runner.handle(obj.body, self.remote_vk)
 
+        elif isinstance(obj, SigMsg):
+            self.factory.tc_runner.handle_sig(obj, self.remote_vk)
+
         # NOTE messages below are for testing, bracha/mo14 is normally handled by acs
 
         elif isinstance(obj, BrachaMsg):
@@ -112,10 +115,11 @@ class MyProto(JsonReceiver):
             self.q.put(m)
         elif isinstance(o, Handled):
             if self.factory.config.test == 'acs':
-                # NOTE we don't do anything when testing only ACS
+                logging.debug("testing ACS, not handling the result")
                 return
             if o.m is not None:
-                self.factory.tc_runner.handle_cons(o.m)
+                logging.debug("attempting to handle ACS result")
+                self.factory.tc_runner.handle_cons_from_acs(o.m)
         else:
             raise AssertionError("instance is not Replay or Handled")
 
@@ -195,6 +199,10 @@ class MyFactory(Factory):
     def promoter_cast(self, msg):
         for promoter in self.promoters:
             self.send(promoter, msg)
+
+    def non_promoter_cast(self, msg):
+        for node in set(self.peers.keys()) - set(self.promoters):
+            self.send(node, msg)
 
     def send(self, node, msg):
         proto = self.peers[node][2]

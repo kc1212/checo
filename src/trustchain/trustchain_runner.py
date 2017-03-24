@@ -5,10 +5,31 @@ from Queue import Queue
 from typing import Union, Dict, List
 import random
 import logging
+from collections import defaultdict
 
 from trustchain import TrustChain, TxBlock, CpBlock, Signature, Cons
 from src.utils.utils import Replay, Handled, dict_to_list_by_key
 from src.utils.messages import SynMsg, SynAckMsg, AckMsg, CpMsg, SigMsg
+
+
+class RoundState:
+    def __init__(self):
+        self.received_cons = None
+        self.received_sigs = []
+
+    def new_cons(self, cons):
+        # type: (Cons) -> None
+        assert isinstance(cons, Cons)
+        if self.received_cons is None:
+            self.received_cons = cons
+        else:
+            # TODO eventually we need to store all received cons and check which are correctly and sufficiently signed
+            assert cons == self.received_cons
+
+    def new_sig(self, s):
+        # type: (Signature) -> None
+        assert isinstance(s, Signature)
+        self.received_sigs.append(s)
 
 
 class TrustChainRunner:
@@ -39,8 +60,9 @@ class TrustChainRunner:
         self.prev_r = None  # type: str
 
         # attributes below are states for building new CP blocks
-        self.received_cons = {}  # type: Dict[int, Cons]
-        self.received_sigs = {}  # type: Dict[int, List[Signature]]
+        # self.received_cons = {}  # type: Dict[int, Cons]
+        # self.received_sigs = {}  # type: Dict[int, List[Signature]]
+        self.round_states = defaultdict(RoundState)
 
         random.seed()
 
@@ -89,37 +111,52 @@ class TrustChainRunner:
         self.m = m
         self.prev_r = prev_r
 
-    def handle_cons(self, msg):
+    def sufficient_sigs(self, r):
+        if len(self.round_states[r].received_sigs) > self.factory.config.t:
+            return True
+        return False
+
+    def handle_cons_from_acs(self, msg):
+        """
+        This is only called after we get the output from ACS
+        :param msg:
+        :return:
+        """
         logging.debug("TC: handling cons {}".format(msg))
         bs, r = msg
 
         if isinstance(bs, dict):
             assert len(bs) > 0
             assert isinstance(bs.values()[0], CpBlock)
+
+            logging.debug("TC: adding cons")
             cons = Cons(r, dict_to_list_by_key(bs))
-            if r in self.received_cons:
-                logging.debug("TC: cons exists, doing nothing")
-                assert self.received_cons[r] == cons
-            else:
-                logging.debug("TC: cons does not exist, adding it")
-                self.received_cons[r] = cons
+            self.round_states[r].new_cons(cons)
 
-                # TODO eventually we'd like to use gossip
-                # TODO handle the result
-                self.factory.bcast(cons)
+            # TODO eventually we'd like to use gossip
+            self.factory.non_promoter_cast(cons)
+
+            s = Signature(self.tc.vk, self.tc.sk, cons.hash)
+            self.factory.bcast(SigMsg(s, r))
         else:
-            logging.debug("TC: not a list in handle_cons, doing nothing")
+            logging.debug("TC: not a dict type in handle_cons_from_acs")
 
-    def handle_sig(self, msg):
+    def handle_sig(self, msg, remote_vk):
         # type: (SigMsg) -> None
         assert isinstance(msg, SigMsg)
 
-        if msg.r in self.received_sigs:
-            self.received_sigs[msg.r].append(msg.s)
-        else:
-            self.received_sigs[msg.r] = [msg.s]
+        logging.debug("TC: received SigMsg {} from {}".format(msg, b64encode(remote_vk)))
+        self.round_states[msg.r].new_sig(msg.s)
 
-        # TODO check for number of signature and add CP block
+        if self.sufficient_sigs(msg.r):
+            logging.debug("TC: sufficient sigs in round {}".format(msg.r))
+            if self.tc.latest_round >= msg.r:
+                logging.debug("TC: already added the CP")
+                return
+            self.tc.new_cp_from_cons(1,
+                                     self.round_states[msg.r].received_cons,
+                                     self.round_states[msg.r].received_sigs,
+                                     self.factory.promoters)
 
     def handle(self, msg, src):
         # type: (Union[SynMsg, SynAckMsg, AckMsg]) -> None

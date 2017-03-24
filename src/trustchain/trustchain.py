@@ -359,7 +359,8 @@ class Chain:
         assert cp.prev == self.chain[-1].hash
 
         prev_cp = self.previous_cp
-        assert prev_cp.inner.round < cp.inner.round
+        assert prev_cp.inner.round < cp.inner.round, \
+            "prev round {}, curr round {}, len {}".format(prev_cp, cp, len(self.chain))
 
         self.chain.append(cp)
 
@@ -380,6 +381,11 @@ class Chain:
     def genesis(self):
         # type: () -> CpBlock
         return self.chain[0]
+
+    @property
+    def latest_round(self):
+        # type: () -> int
+        return self.previous_cp.inner.round
 
 
 class TrustChain:
@@ -407,6 +413,19 @@ class TrustChain:
         assert tx.h == self.next_h
         self.my_chain.new_tx(copy.deepcopy(tx))
 
+    def new_cp_from_cons(self, p, cons, ss, vks):
+        # type: (int, Cons, List[Signature], List[str], List[str]) -> None
+        """
+
+        :param p:
+        :param cons:
+        :param ss: signature of the promoters
+        :param vks: verification key of the promoters
+        :return:
+        """
+        cp = CpBlock(self.latest_hash, self.next_h, cons, p, self.vk, self.sk, ss, vks)
+        self.new_cp(cp)
+
     def new_cp(self, cp):
         # type: (CpBlock) -> None
         """
@@ -429,6 +448,10 @@ class TrustChain:
     @property
     def genesis(self):
         return self.my_chain.genesis
+
+    @property
+    def latest_round(self):
+        return self.my_chain.latest_round
 
     def pieces(self, tx):
         """
