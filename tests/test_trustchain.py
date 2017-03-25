@@ -80,8 +80,8 @@ def test_txblock():
     # s -> r: s_s // r seals block
     s_block, r_block = gen_txblock(prev_s, prev_r, vk_s, sk_s, vk_r, sk_r, h_s, h_r, m)
 
-    assert s_block.make_pair(prev_r).inner.dumps == r_block.inner.dumps
-    assert r_block.make_pair(prev_s).inner.dumps == s_block.inner.dumps
+    assert s_block.make_pair(prev_r).inner.hash == r_block.inner.hash
+    assert r_block.make_pair(prev_s).inner.hash == s_block.inner.hash
 
 
 @pytest.mark.parametrize("n,x", [
