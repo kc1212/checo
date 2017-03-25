@@ -11,12 +11,9 @@ ValidityState = Enum('ValidityState', 'Valid Invalid Unknown')
 
 class Signature:
     """
-    struct Signature {
-        vk: [u8; x], // verification key
-        sig: [u8, x],
-    }
+    Data structure stores the verification key along with the signature,
+    the signature is created using a sha256 digest of the original message
     """
-
     def __init__(self, vk=None, sk=None, msg=None):
         # type: (str, str, str) -> None
 
@@ -24,8 +21,8 @@ class Signature:
             self.vk = None
             self.sig = None
         else:
-            self.vk = vk  # this is also the identity
-            self.sig = libnacl.crypto_sign(msg, sk)  # self.sig contains the original message
+            self.vk = vk
+            self.sig = libnacl.crypto_sign(libnacl.crypto_hash_sha256(msg), sk)
 
     def __str__(self):
         return "({}, <sig>)".format(b64encode(self.vk))
@@ -45,7 +42,7 @@ class Signature:
         if vk != self.vk:
             raise ValueError("Mismatch verification key")
         expected_msg = libnacl.crypto_sign_open(self.sig, self.vk)
-        if expected_msg != msg:
+        if expected_msg != libnacl.crypto_hash_sha256(msg):
             raise ValueError("Mismatch message")
 
     @property
