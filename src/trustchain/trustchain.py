@@ -263,6 +263,10 @@ class CpBlock(EqHash):
         # type: () -> str
         return self.inner.prev
 
+    @property
+    def round(self):
+        return self.inner.round
+
 
 class Cons(EqHash):
     """

@@ -10,7 +10,7 @@ from collections import defaultdict
 
 from trustchain import TrustChain, TxBlock, CpBlock, Signature, Cons
 from src.utils.utils import Replay, Handled, collate_cp_blocks
-from src.utils.messages import SynMsg, SynAckMsg, AckMsg, SigMsg
+from src.utils.messages import SynMsg, SynAckMsg, AckMsg, SigMsg, CpMsg
 
 
 class RoundState:
@@ -67,6 +67,7 @@ class TrustChainRunner:
         self.prev_r = None  # type: str
 
         # attributes below are states for building new CP blocks
+        # TODO compare with my own chain and prune old rounds
         self.round_states = defaultdict(RoundState)
 
         random.seed()
@@ -159,10 +160,23 @@ class TrustChainRunner:
 
         logging.debug("TC: received SigMsg {} from {}".format(msg, b64encode(remote_vk)))
         self.round_states[msg.r].new_sig(msg.s)
-
         self.try_add_cp(msg.r)
 
+    def handle_cp(self, msg, remote_vk):
+        # type (CpMsg) -> None
+        assert isinstance(msg, CpMsg)
+
+        logging.debug("TC: received CpMsg {} from {}".format(msg, b64encode(remote_vk)))
+        cp = msg.cp
+        self.round_states[cp.round].new_cp(cp)
+
     def try_add_cp(self, r):
+        """
+        Try to add my own CP from the received consensus results and signatures
+        The input parameter is a bit strange, we don't add the cp from the parameter, but from the buffer round_states
+        :param r:
+        :return:
+        """
         if self.sufficient_sigs(r) and self.round_states[r].received_cons is not None:
             logging.debug("TC: sufficient sigs in round {}".format(r))
             if self.tc.latest_round >= r:
@@ -182,15 +196,18 @@ class TrustChainRunner:
             self.factory.fill_promoters()
             logging.debug("TC: updated new promoters to {} in round {}"
                           .format([b64encode(p) for p in self.factory.promoters], r))
+
+            # AT THIS POINT THE PROMOTERS ARE UPDATED
+
             if self.tc.vk in self.factory.promoters:
                 logging.info("TC: I'm a promoter, starting a new consensus round in 5 seconds")
                 self.round_states[r + 1].new_cp(self.tc.my_chain.latest_cp)
-                # TODO let others send CP to me
                 reactor.callLater(5, self.factory.acs.start, self.round_states[r + 1].received_cps, r + 1)
             else:
                 logging.info("TC: I'm NOT a promoter")
-                # TODO send new CP to the new promoters if I'm not one
-                pass
+
+            # send new CP to all promoters
+            self.factory.promoter_cast(CpMsg(self.tc.my_chain.latest_cp))
 
     def handle(self, msg, src):
         # type: (Union[SynMsg, SynAckMsg, AckMsg]) -> None

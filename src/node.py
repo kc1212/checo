@@ -13,7 +13,7 @@ from twisted.internet.protocol import Factory
 from twisted.internet.task import LoopingCall
 
 from src.utils.jsonreceiver import JsonReceiver
-from src.utils.messages import DummyMsg, PingMsg, PongMsg, BrachaMsg, Mo14Msg, ACSMsg, ChainMsg, SigMsg
+from src.utils.messages import DummyMsg, PingMsg, PongMsg, BrachaMsg, Mo14Msg, ACSMsg, ChainMsg, SigMsg, CpMsg
 from src.utils.utils import Replay, Handled, set_logging
 from src.consensus.bracha import Bracha
 from src.consensus.acs import ACS
@@ -82,6 +82,9 @@ class MyProto(JsonReceiver):
 
         elif isinstance(obj, SigMsg):
             self.factory.tc_runner.handle_sig(obj, self.remote_vk)
+
+        elif isinstance(obj, CpMsg):
+            self.factory.tc_runner.handle_cp(obj, self.remote_vk)
 
         # NOTE messages below are for testing, bracha/mo14 is normally handled by acs
 
