@@ -1,78 +1,7 @@
-import re
 import json
-import subprocess
-import time
 import random
 
-import os
-import pytest
-
-from src.utils.utils import value_and_tally, make_args
-
-GOOD_PORT = 30000
-BAD_PORT = 10000
-DIR = 'logs/'
-NODE_CMD_PREFIX = ['python2', '-u', '-m', 'src.node']  # -u forces stdin/stdout/stderr to be unbuffered
-# NODE_CMD_PREFIX = ['python2', '-u', '-m', 'src.node', '--debug']
-
-
-def delete_contents_of_dir(dname):
-    for f in os.listdir(dname):
-        fpath = os.path.join(dname, f)
-        if os.path.isfile(fpath):
-            os.unlink(fpath)
-
-
-def search_for_string(fname, target):
-    with open(fname, 'r') as f:
-        for line in f:
-            if target in line:
-                print "Test: found target in line", target, line
-                return line
-    print "Test: did not find", target, "in file", fname
-    return None
-
-
-def search_for_string_in_dir(folder, target, f=lambda x: x):
-    res = []
-    for fname in os.listdir(folder):
-
-        # we only care about output of honest nodes
-        if not re.match("^3.*\.out$", fname):
-            continue
-
-        msg = search_for_string(folder + fname, target)
-        if msg is not None:
-            msg = msg.split(target)[-1].strip()
-            print 'Test: found', f(msg)
-            res.append(f(msg))
-    return res
-
-
-def run_subprocesses(prefix, cmds):
-    ps = []
-    for cmd in cmds:
-        print "Test: running subprocess", prefix + cmd
-        p = subprocess.Popen(prefix + cmd)
-        ps.append(p)
-    return ps
-
-
-@pytest.fixture
-def discover():
-    p = subprocess.Popen(['python2', '-m', 'src.discovery'])
-    time.sleep(1)  # wait for it to spin up
-    yield None
-    print "Test: tear down discovery"
-    p.terminate()
-
-
-@pytest.fixture
-def folder():
-    if not os.path.exists(DIR):
-        os.makedirs(DIR)
-
-    delete_contents_of_dir(DIR)
+from tools import *
 
 
 def check_acs_files(n, t):
@@ -108,35 +37,6 @@ def check_mo14_files(n, t, expected_v):
 
     assert tally >= n - t, "Mo14 incorrect tally! tally = {}, n = {}, t = {}, v = {}".format(tally, n, t, v)
     assert int(v) == expected_v
-
-
-def poll_check_f(to, tick, ps, f, *args, **kwargs):
-    """
-    Runs f with parameters *args and **kwargs once every `tick` seconds and time out at `to`
-    :param to: timeout
-    :param tick: clock tick
-    :param ps: processes to terminate upon completion
-    :param f:
-    :param args:
-    :param kwargs:
-    :return:
-    """
-    def terminate_ps(_ps):
-        for _p in _ps:
-            _p.terminate()
-
-    while to > 0:
-        to -= tick
-        time.sleep(tick)
-        try:
-            f(*args, **kwargs)
-            terminate_ps(ps)
-            return
-        except AssertionError as e:
-            print "poll not ready", e
-
-    terminate_ps(ps)
-    f(*args, **kwargs)
 
 
 @pytest.mark.parametrize("n,t,f", [

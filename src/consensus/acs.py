@@ -41,7 +41,7 @@ class ACS:
         :param r: the consensus round
         :return:
         """
-        assert len(self.factory.peers) == self.factory.config.n
+        assert len(self.factory.promoters) == self.factory.config.n
         self.round = r
 
         for peer in self.factory.peers.keys():

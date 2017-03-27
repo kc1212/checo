@@ -2,7 +2,6 @@ import jsonpickle
 import logging
 import sys
 import libnacl
-from collections import Counter
 
 
 def byteify(inp):
@@ -19,30 +18,6 @@ def byteify(inp):
         return inp.encode('utf-8')
     else:
         return inp
-
-
-def value_and_tally(xs):
-    """
-    Given a list, get the unique values and their respective tally.
-    :param xs:
-    :return: Counter
-    """
-    res = Counter()
-    for x in xs:
-        res[x] += 1
-
-    return res.most_common(1)[0]
-
-
-class BColors:
-    HEADER = '\033[95m'
-    OKBLUE = '\033[94m'
-    OKGREEN = '\033[92m'
-    WARNING = '\033[93m'
-    FAIL = '\033[91m'
-    ENDC = '\033[0m'
-    BOLD = '\033[1m'
-    UNDERLINE = '\033[4m'
 
 
 class Replay:
@@ -64,54 +39,6 @@ class Handled:
 
 def set_logging(lvl, stream=sys.stdout):
     logging.basicConfig(stream=stream, level=lvl, format='%(asctime)s - %(levelname)s - %(message)s')
-
-
-def make_args(port, n, t, test=None, value=0, failure=None, tx=0, loglevel=logging.INFO, output=None,
-              broadcast=True):
-    """
-    This function should produce all the parameters accepted by argparse
-    :param port:
-    :param n:
-    :param t:
-    :param test:
-    :param value:
-    :param failure:
-    :param tx:
-    :param loglevel:
-    :param output:
-    :param broadcast:
-    :return:
-    """
-    res = [str(port), str(n), str(t)]
-
-    if test is not None:
-        res.append('--test')
-        res.append(test)
-
-    res.append('--value')
-    res.append(str(value))
-
-    if failure is not None:
-        res.append('--failure')
-        res.append(failure)
-
-    res.append('--tx')
-    res.append(str(tx))
-
-    if loglevel == logging.DEBUG:
-        res.append('--debug')
-    elif loglevel == logging.INFO:
-        res.append('-v')
-
-    # None represents stdout
-    if output is not None:
-        res.append('-o')
-        res.append(output)
-
-    if broadcast:
-        res.append('--broadcast')
-
-    return res
 
 
 def dictionary_hash(d):

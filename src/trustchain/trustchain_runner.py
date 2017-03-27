@@ -174,6 +174,7 @@ class TrustChainRunner:
         """
         Try to add my own CP from the received consensus results and signatures
         The input parameter is a bit strange, we don't add the cp from the parameter, but from the buffer round_states
+        we don't need lock here because this function runs atomically
         :param r:
         :return:
         """
@@ -194,7 +195,7 @@ class TrustChainRunner:
             logging.debug("TC: reset ACS in round {}".format(r))
             self.factory.promoters = self.latest_promoters()
             self.factory.fill_promoters()
-            logging.debug("TC: updated new promoters to {} in round {}"
+            logging.info("TC: updated new promoters to {} in round {}"
                           .format([b64encode(p) for p in self.factory.promoters], r))
 
             # AT THIS POINT THE PROMOTERS ARE UPDATED
