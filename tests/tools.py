@@ -104,12 +104,14 @@ def search_for_string_in_dir(dir, target, f=lambda x: x):
     return res
 
 
-def run_subprocesses(prefix, cmds):
+def run_subprocesses(prefix, cmds, sleep_interval=0):
     ps = []
     for cmd in cmds:
         print "Test: running subprocess", prefix + cmd
         p = subprocess.Popen(prefix + cmd)
         ps.append(p)
+        if sleep_interval != 0:
+            time.sleep(sleep_interval)
     return ps
 
 

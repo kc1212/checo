@@ -13,7 +13,7 @@ from twisted.internet.protocol import Factory
 from twisted.internet.task import LoopingCall
 
 from src.utils.jsonreceiver import JsonReceiver
-from src.utils.messages import DummyMsg, PingMsg, PongMsg, BrachaMsg, Mo14Msg, ACSMsg, ChainMsg, SigMsg, CpMsg
+from src.utils.messages import DummyMsg, PingMsg, PongMsg, BrachaMsg, Mo14Msg, ACSMsg, ChainMsg, SigMsg, CpMsg, ConsMsg
 from src.utils.utils import Replay, Handled, set_logging
 from src.consensus.bracha import Bracha
 from src.consensus.acs import ACS
@@ -51,7 +51,7 @@ class MyProto(JsonReceiver):
             self.obj_received(m)
 
     def connection_lost(self, reason):
-        logging.debug("deleting peer {}".format(b64encode(self.remote_vk)))
+        logging.info("deleting peer {}, reason {}".format(b64encode(self.remote_vk), reason))
         try:
             del self.peers[self.remote_vk]
         except KeyError:
@@ -86,6 +86,9 @@ class MyProto(JsonReceiver):
         elif isinstance(obj, CpMsg):
             self.factory.tc_runner.handle_cp(obj, self.remote_vk)
 
+        elif isinstance(obj, ConsMsg):
+            self.factory.tc_runner.handle_cons(obj, self.remote_vk)
+
         # NOTE messages below are for testing, bracha/mo14 is normally handled by acs
 
         elif isinstance(obj, BrachaMsg):
@@ -102,7 +105,7 @@ class MyProto(JsonReceiver):
             logging.info("got dummy message from {}".format(b64encode(self.remote_vk)))
 
         else:
-            raise AssertionError("invalid message type")
+            raise AssertionError("invalid message type {}".format(obj))
 
     def process_acs_res(self, o, m):
         """
@@ -200,8 +203,12 @@ class MyFactory(Factory):
             proto.send_obj(msg)
 
     def promoter_cast(self, msg):
-        for promoter in self.promoters:
-            self.send(promoter, msg)
+        try:
+            for promoter in self.promoters:
+                self.send(promoter, msg)
+        except KeyError as e:
+            logging.exception(e)
+            raise
 
     def non_promoter_cast(self, msg):
         for node in set(self.peers.keys()) - set(self.promoters):
@@ -311,7 +318,7 @@ def run(config, bcast):
             reactor.callLater(5, f.tc_runner.make_random_tx)
     elif config.test == 'bootstrap':
         # TODO for now everybody is a promoter
-        reactor.callLater(5, f.tc_runner.bootstrap_promoters, config.n)
+        reactor.callLater(5, f.tc_runner.bootstrap_promoters)
 
     reactor.run()
 

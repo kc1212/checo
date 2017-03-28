@@ -12,7 +12,6 @@ class JsonReceiver(LineOnlyReceiver):
         self.obj_received(obj)
 
     def obj_received(self, obj):
-        # we also expect a dict or list
         raise NotImplementedError
 
     def connection_lost(self, reason):

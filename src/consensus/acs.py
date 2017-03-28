@@ -24,9 +24,8 @@ class ACS:
         """
         :return:
         """
-        self.round = -1  # type: int
+        logging.debug("ACS: resetting...")
         self.done = False
-        # the following are initialised at start
         self.brachas = {}  # type: Dict[str, Bracha]
         self.mo14s = {}  # type: Dict[str, Mo14]
         self.bracha_results = {}  # type: Dict[str, str]
@@ -44,17 +43,16 @@ class ACS:
         assert len(self.factory.promoters) == self.factory.config.n
         self.round = r
 
-        for peer in self.factory.peers.keys():
-            logging.debug("ACS: adding peer {}".format(b64encode(peer)))
+        for promoter in self.factory.peers.keys():
+            logging.debug("ACS: adding promoter {}".format(b64encode(promoter)))
 
-            # TODO when do we update the round?
             def msg_wrapper_f_factory(instance, round):
                 def f(_msg):
                     return ACSMsg(instance, round, _msg)
                 return f
 
-            self.brachas[peer] = Bracha(self.factory, msg_wrapper_f_factory(peer, self.round))
-            self.mo14s[peer] = Mo14(self.factory, msg_wrapper_f_factory(peer, self.round))
+            self.brachas[promoter] = Bracha(self.factory, msg_wrapper_f_factory(promoter, self.round))
+            self.mo14s[promoter] = Mo14(self.factory, msg_wrapper_f_factory(promoter, self.round))
 
         my_vk = self.factory.vk
         assert my_vk in self.brachas
@@ -63,6 +61,10 @@ class ACS:
         # send the first RBC, assume all nodes have connected
         logging.info("ACS: initiating {} with {}".format(b64encode(my_vk), msg))
         self.brachas[my_vk].bcast_init(msg)
+
+    def reset_then_start(self, msg, r):
+        self.reset()
+        self.start(msg, r)
 
     def handle(self, msg, sender_vk):
         # type: (ACSMsg, str) -> Union[Handled, Replay]

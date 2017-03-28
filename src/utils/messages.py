@@ -1,6 +1,6 @@
 from typing import Union
 
-from src.trustchain.trustchain import Signature, CpBlock
+from src.trustchain.trustchain import Signature, CpBlock, Cons
 
 
 class DiscoverMsg:
@@ -108,3 +108,10 @@ class SigMsg:
         # type: (Signature, int) -> None
         self.s = s
         self.r = r
+
+
+class ConsMsg:
+    def __init__(self, cons):
+        # type: (Cons) -> None
+        self.cons = cons
+

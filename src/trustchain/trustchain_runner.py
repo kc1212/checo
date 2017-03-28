@@ -10,7 +10,7 @@ from collections import defaultdict
 
 from trustchain import TrustChain, TxBlock, CpBlock, Signature, Cons
 from src.utils.utils import Replay, Handled, collate_cp_blocks
-from src.utils.messages import SynMsg, SynAckMsg, AckMsg, SigMsg, CpMsg
+from src.utils.messages import SynMsg, SynAckMsg, AckMsg, SigMsg, CpMsg, ConsMsg
 
 
 class RoundState:
@@ -143,7 +143,8 @@ class TrustChainRunner:
             self.round_states[r].new_cons(cons)
 
             # TODO eventually we'd like to use gossip
-            self.factory.non_promoter_cast(cons)
+            # self.factory.non_promoter_cast(ConsMsg(cons))
+            self.factory.bcast(ConsMsg(cons))
 
             s = Signature(self.tc.vk, self.tc.sk, cons.hash)
             self.factory.bcast(SigMsg(s, r))
@@ -170,6 +171,14 @@ class TrustChainRunner:
         cp = msg.cp
         self.round_states[cp.round].new_cp(cp)
 
+    def handle_cons(self, msg, remote_vk):
+        # type (ConsMsg) -> None
+        assert isinstance(msg, ConsMsg)
+
+        logging.debug("TC: received ConsMsg {} from {}".format(msg, b64encode(remote_vk)))
+        self.round_states[msg.cons.round].new_cons(msg.cons)
+        self.try_add_cp(msg.cons.round)
+
     def try_add_cp(self, r):
         """
         Try to add my own CP from the received consensus results and signatures
@@ -178,37 +187,52 @@ class TrustChainRunner:
         :param r:
         :return:
         """
-        if self.sufficient_sigs(r) and self.round_states[r].received_cons is not None:
-            logging.debug("TC: sufficient sigs in round {}".format(r))
-            if self.tc.latest_round >= r:
-                logging.debug("TC: already added the CP")
-                return
-            self.tc.new_cp_from_cons(1,
-                                     self.round_states[r].received_cons,
-                                     self.round_states[r].received_sigs,
-                                     self.factory.promoters)
-            # we just created CP for round r, inside it, is the list of promoters for round r + 1
-            # terminate ACS, so that new messages are dropped, TX doesn't matter, coz it does not involve promoters
-            # update promoters
-            # finally collect new CP if I'm the promoter, otherwise send CP to promoter
-            self.factory.acs.reset()
-            logging.debug("TC: reset ACS in round {}".format(r))
-            self.factory.promoters = self.latest_promoters()
-            self.factory.fill_promoters()
-            logging.info("TC: updated new promoters to {} in round {}"
-                          .format([b64encode(p) for p in self.factory.promoters], r))
+        if self.tc.latest_round >= r:
+            # TODO verify the meaning of tc.latest_round
+            logging.debug("TC: already added the CP")
+            return
+        if self.round_states[r].received_cons is None:
+            logging.debug("TC: don't have consensus result")
+            return
+        if not self.sufficient_sigs(r):
+            logging.debug("TC: insufficient signatures")
+            return
 
-            # AT THIS POINT THE PROMOTERS ARE UPDATED
+        logging.debug("TC: adding CP in round {}".format(r))
+        self.tc.new_cp_from_cons(1,
+                                 self.round_states[r].received_cons,
+                                 self.round_states[r].received_sigs,
+                                 self.factory.promoters)
+        # we just created CP for round r, inside it, is the list of promoters for round r + 1
+        # terminate ACS, so that new messages are dropped, TX doesn't matter, coz it does not involve promoters
+        # update promoters
+        # finally collect new CP if I'm the promoter, otherwise send CP to promoter
+        self.factory.acs.reset()
+        logging.debug("TC: reset ACS in round {}".format(r))
+        self.factory.promoters = self.latest_promoters()
+        self.factory.fill_promoters()
+        logging.info("TC: updated new promoters to {} in round {}".format(
+            [b64encode(p) for p in self.factory.promoters], r)
+        )
 
-            if self.tc.vk in self.factory.promoters:
-                logging.info("TC: I'm a promoter, starting a new consensus round in 5 seconds")
-                self.round_states[r + 1].new_cp(self.tc.my_chain.latest_cp)
-                reactor.callLater(5, self.factory.acs.start, self.round_states[r + 1].received_cps, r + 1)
-            else:
-                logging.info("TC: I'm NOT a promoter")
+        # AT THIS POINT THE PROMOTERS ARE UPDATED
 
-            # send new CP to all promoters
-            self.factory.promoter_cast(CpMsg(self.tc.my_chain.latest_cp))
+        if self.tc.vk in self.factory.promoters:
+            logging.info("TC: I'm a promoter, starting a new consensus round in 5 seconds")
+            self.round_states[r + 1].new_cp(self.tc.my_chain.latest_cp)
+
+            def maybe_start_acs(_msg, _r):
+                if self.tc.latest_round >= _r:
+                    logging.info("TC: somebody completed ACS before me, not starting")
+                    return
+                self.factory.acs.reset_then_start(_msg, _r)
+
+            reactor.callLater(5, maybe_start_acs, self.round_states[r + 1].received_cps, r + 1)
+        else:
+            logging.info("TC: I'm NOT a promoter")
+
+        # send new CP to all promoters
+        self.factory.promoter_cast(CpMsg(self.tc.my_chain.latest_cp))
 
     def handle(self, msg, src):
         # type: (Union[SynMsg, SynAckMsg, AckMsg]) -> None
@@ -384,13 +408,14 @@ class TrustChainRunner:
         logging.debug("TC: {} making random tx to".format(b64encode(node)))
         self.send_syn(node, m)
 
-    def bootstrap_promoters(self, n):
+    def bootstrap_promoters(self):
         """
-        Assume all the nodes are already online
-        the first n values, sorted by vk, are promoters
-        :param n: number of promoters
+        Assume all the nodes are already online, exchange genesis blocks, and start ACS.
+        The first n values, sorted by vk, are promoters
         :return:
         """
+        n = self.factory.config.n
+        # TODO should we exchange genesis blocks?
         self.factory.promoters = sorted(self.factory.peers.keys())[:n]
         if self.factory.vk in self.factory.promoters:
             self.factory.acs.start([self.tc.genesis], 1)
