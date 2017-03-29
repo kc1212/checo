@@ -6,7 +6,7 @@ import logging
 
 from src.utils.jsonreceiver import JsonReceiver
 from src.utils.messages import DiscoverMsg, DiscoverReplyMsg, CoinMsg, CoinReplyMsg
-from src.utils.utils import set_logging
+from src.utils.utils import set_logging, MAX_LINE_LEN
 
 
 class Discovery(JsonReceiver):
@@ -83,6 +83,7 @@ def got_discovery(p, id, port):
 
 
 def run():
+    JsonReceiver.MAX_LENGTH = MAX_LINE_LEN
     port = 8123
     reactor.listenTCP(port, DiscoveryFactory())
     logging.info("Discovery server running on {}".format(port))

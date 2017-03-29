@@ -123,7 +123,8 @@ class TrustChainRunner:
         return False
 
     def latest_promoters(self):
-        return self.tc.my_chain.latest_cp.inner.cons.get_promoters(self.factory.config.n)
+        r = self.tc.latest_round
+        return self.tc.consensus[r].get_promoters(self.factory.config.n)
 
     def handle_cons_from_acs(self, msg):
         """
@@ -200,10 +201,10 @@ class TrustChainRunner:
 
         # here we create a new CP from the consensus result (both of round r)
         logging.debug("TC: adding CP in round {}".format(r))
-        self.tc.new_cp_from_cons(1,
-                                 self.round_states[r].received_cons,
-                                 self.round_states[r].received_sigs,
-                                 self.factory.promoters)
+        self.tc.new_cp(1,
+                      self.round_states[r].received_cons,
+                      self.round_states[r].received_sigs,
+                      self.factory.promoters)
 
         # new promoters are selected using the latest CP, these promoters are responsible for round r+1
         # no need to continue the ACS for earlier rounds

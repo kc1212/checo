@@ -181,13 +181,13 @@ class CpBlockInner(EqHash):
         self.prev = prev
         self.h_s = h
         self.round = cons.round
-        self.cons = cons
+        self.cons_hash = cons.hash
         self.ss = ss
         self.p = p
 
     def _tuple(self):
         self.ss.sort(key=lambda x: x.vk)
-        return self.prev, self.h_s, self.round, self.cons, tuple(self.ss), self.p
+        return self.prev, self.h_s, self.round, self.cons_hash, tuple(self.ss), self.p
 
 
 class CpBlock(EqHash):
@@ -230,7 +230,7 @@ class CpBlock(EqHash):
 
     def __str__(self):
         return "(prev: {}, cons: {}, h: {}, r: {}, p: {}, s: {})"\
-            .format(b64encode(self.prev), str(self.inner.cons),
+            .format(b64encode(self.prev), str(self.inner.cons_hash),
                     self.h, self.inner.round, self.inner.p, str(self.s))
 
     def _tuple(self):
@@ -246,7 +246,7 @@ class CpBlock(EqHash):
         _ss = [s for s in ss if s.vk in vks]  # only consider nodes that are promoters
         for _s in _ss:
             try:
-                _s.verify(_s.vk, self.inner.cons.hash)
+                _s.verify(_s.vk, self.inner.cons_hash)
                 oks += 1
             except ValueError:
                 logging.debug("one verification failed for {}".format(_s.vk))
@@ -383,6 +383,7 @@ class TrustChain:
         self.vk, self.sk = libnacl.crypto_sign_keypair()
         self.chains = {self.vk: Chain(self.vk, self.sk)}  # type: Dict[str, Chain]
         self.my_chain = self.chains[self.vk]
+        self.consensus = {}  # type: Dict[int, Cons]
 
     def new_tx(self, tx):
         # type: (TxBlock) -> None
@@ -393,7 +394,7 @@ class TrustChain:
         assert tx.h == self.next_h
         self.my_chain.new_tx(copy.deepcopy(tx))
 
-    def new_cp_from_cons(self, p, cons, ss, vks):
+    def new_cp(self, p, cons, ss, vks):
         # type: (int, Cons, List[Signature], List[str], List[str]) -> None
         """
 
@@ -403,13 +404,16 @@ class TrustChain:
         :param vks: verification key of the promoters
         :return:
         """
+        assert cons.round not in self.consensus
+        self.consensus[cons.round] = cons
         cp = CpBlock(self.latest_hash, self.next_h, cons, p, self.vk, self.sk, ss, vks)
-        self.new_cp(cp)
+        self._new_cp(cp)
 
-    def new_cp(self, cp):
+    def _new_cp(self, cp):
         # type: (CpBlock) -> None
         """
         Verify the cp, follow the rules and mutate the state to add it
+        NOTE: this does not cache the consensus result
         :return: None
         """
         assert cp.h == len(self.my_chain.chain)

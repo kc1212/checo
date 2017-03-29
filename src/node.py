@@ -12,7 +12,7 @@ from twisted.internet.protocol import Factory
 
 from src.utils.jsonreceiver import JsonReceiver
 from src.utils.messages import DummyMsg, PingMsg, PongMsg, BrachaMsg, Mo14Msg, ACSMsg, ChainMsg, SigMsg, CpMsg, ConsMsg
-from src.utils.utils import Replay, Handled, set_logging, my_err_back, call_later
+from src.utils.utils import Replay, Handled, set_logging, my_err_back, call_later, MAX_LINE_LEN
 from src.consensus.bracha import Bracha
 from src.consensus.acs import ACS
 from src.consensus.mo14 import Mo14
@@ -267,6 +267,8 @@ class Config:
 
 
 def run(config, bcast):
+    JsonReceiver.MAX_LENGTH = MAX_LINE_LEN
+
     f = MyFactory(config)
 
     try:
