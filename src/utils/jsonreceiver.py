@@ -2,8 +2,6 @@ import jsonpickle
 
 from twisted.protocols.basic import LineOnlyReceiver
 
-from .utils import MAX_LINE_LEN
-
 
 class JsonReceiver(LineOnlyReceiver):
     def connectionLost(self, reason):
@@ -20,6 +18,7 @@ class JsonReceiver(LineOnlyReceiver):
         raise NotImplementedError
 
     def send_obj(self, obj):
-        line = jsonpickle.encode(obj)
-        assert len(line) <= MAX_LINE_LEN
-        self.sendLine(line)
+        self.sendLine(jsonpickle.encode(obj))
+
+    def lineLengthExceeded(self, line):
+        raise IOError("Line length exceeded, len: {}".format(len(line)))
