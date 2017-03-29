@@ -115,7 +115,7 @@ def run_subprocesses(prefix, cmds, sleep_interval=0):
     return ps
 
 
-def make_args(port, n, t, test=None, value=0, failure=None, tx=0, loglevel=logging.DEBUG, output=None,
+def make_args(port, n, t, test=None, value=0, failure=None, tx=0, loglevel=logging.INFO, output=None,
               broadcast=True):
     """
     This function should produce all the parameters accepted by argparse
