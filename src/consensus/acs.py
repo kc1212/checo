@@ -32,6 +32,17 @@ class ACS:
         self.mo14_results = {}  # type: Dict[str, int]
         self.mo14_provided = {}  # type: Dict[str, int]
 
+    def stop(self, r):
+        """
+        Calling this will ignore messages on or before round r
+        :param r: 
+        :return: 
+        """
+        logging.debug("ACS: stopping...")
+        self.reset()
+        self.round = r
+        self.done = True
+
     def start(self, msg, r):
         """
         initialise our RBC and BA instances

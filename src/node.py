@@ -40,11 +40,11 @@ class MyProto(JsonReceiver):
     def process_queue(self):
         # we use counter to stop this routine from running forever,
         # because self.json_received can put item back into the queue
-        logging.debug("NODE: processing queue")
+        logging.debug("NODE: processing queue, size {}".format(self.q.qsize()))
         qsize = self.q.qsize()
         ctr = 0
         while not self.q.empty() and ctr < qsize:
-            logging.debug("NODE: processing item in queue")
+            # logging.debug("NODE: processing item in queue")
             ctr += 1
             m = self.q.get()
             self.obj_received(m)

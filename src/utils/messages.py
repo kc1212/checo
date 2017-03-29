@@ -1,3 +1,4 @@
+from base64 import b64encode
 from typing import Union
 
 from src.trustchain.trustchain import Signature, CpBlock, Cons
@@ -47,12 +48,18 @@ class BrachaMsg:
         self.ty = ty
         self.body = body
 
+    def __str__(self):
+        return "BrachaMsg - ty: {}, body: {}".format(self.ty, self.body)
+
 
 class Mo14Msg:
     def __init__(self, ty, r, v):
         self.ty = ty
         self.r = r
         self.v = v
+
+    def __str__(self):
+        return "Mo14Msg - ty: {}, r: {}, v: {}".format(self.ty, self.r, self.v)
 
 
 class ACSMsg:
@@ -61,6 +68,9 @@ class ACSMsg:
         self.instance = instance
         self.round = round
         self.body = body  # type: Union[BrachaMsg, Mo14Msg]
+
+    def __str__(self):
+        return "ACSMsg - instance: {}, round: {}, body: {}".format(b64encode(self.instance), self.round, self.body)
 
 
 class ChainMsg:

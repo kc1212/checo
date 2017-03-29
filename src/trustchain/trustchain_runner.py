@@ -206,7 +206,10 @@ class TrustChainRunner:
                                  self.factory.promoters)
 
         # new promoters are selected using the latest CP, these promoters are responsible for round r+1
+        # no need to continue the ACS for earlier rounds
+        assert r == self.tc.latest_round
         self.factory.promoters = self.latest_promoters()
+        self.factory.acs.stop(self.tc.latest_round)
 
         assert len(self.factory.promoters) == self.factory.config.n
         logging.info("TC: updated new promoters to {} in round {}".format(
@@ -223,9 +226,7 @@ class TrustChainRunner:
                 if self.tc.latest_round >= _r:
                     logging.info("TC: somebody completed ACS before me, not starting")
                     # setting the following causes the old messages to be dropped
-                    self.factory.acs.reset()
-                    self.factory.acs.done = True
-                    self.factory.acs.round = self.tc.latest_round
+                    self.factory.acs.stop(self.tc.latest_round)
                     return
                 self.factory.acs.reset_then_start(_msg, _r)
 
@@ -242,7 +243,7 @@ class TrustChainRunner:
         self.recv_q.put((msg, src))
 
     def process_recv_q(self):
-        logging.debug("TC: processing recv_q")
+        logging.debug("TC: processing recv_q, size: {}".format(self.recv_q.qsize()))
         qsize = self.recv_q.qsize()
 
         cnt = 0
@@ -269,7 +270,7 @@ class TrustChainRunner:
                 raise AssertionError("Incorrect message type")
 
     def process_send_q(self):
-        logging.debug("TC: processing send_q")
+        logging.debug("TC: processing send_q, size: {}".format(self.send_q.qsize()))
         qsize = self.send_q.qsize()
         cnt = 0
         while not self.send_q.empty() and cnt < qsize:

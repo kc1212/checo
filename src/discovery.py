@@ -42,7 +42,7 @@ class Discovery(JsonReceiver):
 
                 # TODO check addr to be in the form host:port
                 if self.vk not in self.nodes:
-                    logging.debug("Discovery: added node {} {}".format(b64encode(self.vk), self.addr))
+                    logging.debug("Discovery: added node {} {}".format(self.vk, self.addr))
                     self.nodes[self.vk] = self.addr
 
                 self.send_obj(DiscoverReplyMsg(self.nodes))
