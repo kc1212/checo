@@ -81,9 +81,6 @@ class ACS:
         """
         logging.debug("ACS: got msg (instance: {}, round: {}) from {}".format(b64encode(msg.instance),
                                                                               msg.round, b64encode(sender_vk)))
-        if self.done:
-            logging.debug("ACS: we're done, doing nothing")
-            return Handled()
 
         if msg.round < self.round:
             logging.debug("ACS: round already over, curr: {}, required: {}".format(self.round, msg.round))
@@ -92,6 +89,10 @@ class ACS:
         if msg.round > self.round:
             logging.debug("ACS: round is not ready, curr: {}, required: {}".format(self.round, msg.round))
             return Replay()
+
+        if self.done:
+            logging.debug("ACS: we're done, doing nothing")
+            return Handled()
 
         instance = msg.instance
         round = msg.round

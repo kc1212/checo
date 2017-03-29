@@ -5,16 +5,14 @@ import logging
 from base64 import b64encode, b64decode
 from typing import Dict, Tuple
 
-from twisted.python import log
-from twisted.internet import reactor
+from twisted.internet import reactor, task
 from twisted.internet.endpoints import TCP4ClientEndpoint, connectProtocol
 from twisted.internet.error import CannotListenError
 from twisted.internet.protocol import Factory
-from twisted.internet.task import LoopingCall
 
 from src.utils.jsonreceiver import JsonReceiver
 from src.utils.messages import DummyMsg, PingMsg, PongMsg, BrachaMsg, Mo14Msg, ACSMsg, ChainMsg, SigMsg, CpMsg, ConsMsg
-from src.utils.utils import Replay, Handled, set_logging
+from src.utils.utils import Replay, Handled, set_logging, my_err_back, call_later
 from src.consensus.bracha import Bracha
 from src.consensus.acs import ACS
 from src.consensus.mo14 import Mo14
@@ -36,8 +34,8 @@ class MyProto(JsonReceiver):
         self.state = 'SERVER'
 
         # start looping call on the queue
-        self.lc = LoopingCall(self.process_queue)
-        self.lc.start(1).addErrback(log.err)
+        self.lc = task.LoopingCall(self.process_queue)
+        self.lc.start(1).addErrback(my_err_back)
 
     def process_queue(self):
         # we use counter to stop this routine from running forever,
@@ -64,6 +62,8 @@ class MyProto(JsonReceiver):
         :param obj:
         :return:
         """
+
+        logging.debug("received obj {} from {}".format(obj, "<remote_vk>"))
 
         if isinstance(obj, PingMsg):
             self.handle_ping(obj)
@@ -190,7 +190,7 @@ class MyFactory(Factory):
         point = TCP4ClientEndpoint(reactor, host, port)
         proto = MyProto(self)
         d = connectProtocol(point, proto)
-        d.addCallback(got_protocol).addErrback(log.err)
+        d.addCallback(got_protocol).addErrback(my_err_back)
 
     def bcast(self, msg):
         """
@@ -203,12 +203,8 @@ class MyFactory(Factory):
             proto.send_obj(msg)
 
     def promoter_cast(self, msg):
-        try:
-            for promoter in self.promoters:
-                self.send(promoter, msg)
-        except KeyError as e:
-            logging.exception(e)
-            raise
+        for promoter in self.promoters:
+            self.send(promoter, msg)
 
     def non_promoter_cast(self, msg):
         for node in set(self.peers.keys()) - set(self.promoters):
@@ -240,8 +236,8 @@ class MyFactory(Factory):
 
 
 def got_protocol(p):
-    # this needs to be lower than the callLater in `run`
-    reactor.callLater(1, p.send_ping)
+    # this needs to be lower than the deferLater in `run`
+    call_later(1, p.send_ping)
 
 
 class Config:
@@ -293,32 +289,33 @@ def run(config, bcast):
     # connect to discovery server
     point = TCP4ClientEndpoint(reactor, "localhost", 8123)
     d = connectProtocol(point, Discovery({}, f))
-    d.addCallback(got_discovery, b64encode(f.vk), config.port).addErrback(log.err)
+    d.addCallback(got_discovery, b64encode(f.vk), config.port).addErrback(my_err_back)
 
     # connect to myself
     point = TCP4ClientEndpoint(reactor, "localhost", config.port)
     d = connectProtocol(point, MyProto(f))
-    d.addCallback(got_protocol).addErrback(log.err)
+    d.addCallback(got_protocol).addErrback(my_err_back)
 
     if bcast:
-        reactor.callLater(5, f.overwrite_promoters)
+        call_later(5, f.overwrite_promoters)
 
     # optionally run tests, args.test == None implies reactive node
     # we use call later to wait until the nodes are registered
     if config.test == 'dummy':
-        reactor.callLater(5, f.bcast, DummyMsg('z'))
+        call_later(5, f.bcast, DummyMsg('z'))
     elif config.test == 'bracha':
-        reactor.callLater(6, f.bracha.bcast_init)
+        call_later(6, f.bracha.bcast_init)
     elif config.test == 'mo14':
-        reactor.callLater(6, f.mo14.start, config.value)
+        call_later(6, f.mo14.start, config.value)
     elif config.test == 'acs':
-        reactor.callLater(6, f.acs.start, config.port, 1)  # use port number (unique on local network) as test message
+        # use port number (unique on local network) as test message
+        call_later(6, f.acs.start, config.port, 1)
     elif config.test == 'tc':
         if config.tx > 0:
-            reactor.callLater(5, f.tc_runner.make_random_tx)
+            call_later(5, f.tc_runner.make_random_tx)
     elif config.test == 'bootstrap':
         # TODO for now everybody is a promoter
-        reactor.callLater(5, f.tc_runner.bootstrap_promoters)
+        call_later(5, f.tc_runner.bootstrap_promoters)
 
     reactor.run()
 

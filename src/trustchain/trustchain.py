@@ -2,6 +2,7 @@ import math
 import libnacl
 import abc
 import copy
+import logging
 from base64 import b64encode
 from typing import List, Union, Dict
 from enum import Enum
@@ -248,7 +249,7 @@ class CpBlock(EqHash):
                 _s.verify(_s.vk, self.inner.cons.hash)
                 oks += 1
             except ValueError:
-                print "verification failed for", _s.vk
+                logging.debug("one verification failed for {}".format(_s.vk))
 
         if not oks > t:
             raise ValueError("verification failed, oks = {}, t = {}".format(oks, t))

@@ -21,7 +21,7 @@ def run_everything(n, t, f, m):
 
 
 @pytest.mark.parametrize("n,t,f,time_out,m", [
-    (4, 1, 'omission', 35, 4),
+    (4, 1, 'omission', 30, 4),
     # (7, 2, 'omission', 20),
     # (19, 6, 'omission', 20),
 ])

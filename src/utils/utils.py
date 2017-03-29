@@ -1,3 +1,5 @@
+from twisted.internet import reactor, task
+
 import jsonpickle
 import logging
 import sys
@@ -57,3 +59,15 @@ def collate_cp_blocks(d):
     for key in sorted(d):
         res.append(d[key])
     return list(set(flatten(res)))
+
+
+def call_later(delay, f, *args, **kw):
+    task.deferLater(reactor, delay, f, *args, **kw).addErrback(my_err_back)
+
+
+def my_err_back(failure):
+    logging.error(failure.getErrorMessage())
+    logging.error(failure.getTraceback())
+    failure.printTraceback()
+    reactor.stop()
+

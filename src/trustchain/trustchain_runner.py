@@ -1,6 +1,5 @@
 from twisted.internet import reactor
 from twisted.internet.task import LoopingCall
-from twisted.python import log
 from base64 import b64encode
 from Queue import Queue
 from typing import Union
@@ -9,7 +8,7 @@ import logging
 from collections import defaultdict
 
 from trustchain import TrustChain, TxBlock, CpBlock, Signature, Cons
-from src.utils.utils import Replay, Handled, collate_cp_blocks
+from src.utils.utils import Replay, Handled, collate_cp_blocks, my_err_back, call_later
 from src.utils.messages import SynMsg, SynAckMsg, AckMsg, SigMsg, CpMsg, ConsMsg
 
 
@@ -52,10 +51,10 @@ class TrustChainRunner:
         self.msg_wrapper_f = msg_wrapper_f
 
         self.recv_lc = LoopingCall(self.process_recv_q)
-        self.recv_lc.start(0.5).addErrback(log.err)
+        self.recv_lc.start(0.5).addErrback(my_err_back)
 
         self.send_lc = LoopingCall(self.process_send_q)
-        self.send_lc.start(0.5).addErrback(log.err)
+        self.send_lc.start(0.5).addErrback(my_err_back)
 
         # attributes below are states used for negotiating transaction
         self.tx_locked = False  # only process one transaction at a time, otherwise there'll be hash pointer collisions
@@ -132,7 +131,7 @@ class TrustChainRunner:
         :return:
         """
         bs, r = msg
-        logging.debug("TC: handling cons {}, round {}".format(bs, r))
+        logging.debug("TC: handling cons from ACS {}, round {}".format(bs, r))
 
         if isinstance(bs, dict):
             assert len(bs) > 0
@@ -227,7 +226,7 @@ class TrustChainRunner:
                     return
                 self.factory.acs.reset_then_start(_msg, _r)
 
-            reactor.callLater(5, maybe_start_acs, self.round_states[r + 1].received_cps, r + 1)
+            call_later(5, maybe_start_acs, self.round_states[r + 1].received_cps, r + 1)
         else:
             logging.info("TC: I'm NOT a promoter")
 
