@@ -42,6 +42,8 @@ def poll_check_f(to, tick, ps, f, *args, **kwargs):
     """
     def terminate_ps(_ps):
         for _p in _ps:
+            if _p.poll() is not None:
+                raise IOError("Process died prematurely, code {}".format(_p.poll()))
             _p.terminate()
 
     while to > 0:

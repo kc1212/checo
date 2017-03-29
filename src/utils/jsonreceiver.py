@@ -18,5 +18,4 @@ class JsonReceiver(LineOnlyReceiver):
         raise NotImplementedError
 
     def send_obj(self, obj):
-        # we expect dict or list
         self.sendLine(jsonpickle.encode(obj))

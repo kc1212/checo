@@ -309,7 +309,7 @@ class Cons(EqHash):
 def generate_genesis_block(vk, sk):
     # type: (str, str) -> CpBlock
     prev = libnacl.crypto_hash_sha256('0')
-    return CpBlock(prev, 0, Cons(-1, []), 1, vk, sk, [], [])
+    return CpBlock(prev, 0, Cons(0, []), 1, vk, sk, [], [])
 
 
 class Chain:
@@ -427,10 +427,12 @@ class TrustChain:
 
     @property
     def genesis(self):
+        # type () -> CpBlock
         return self.my_chain.genesis
 
     @property
     def latest_round(self):
+        # type: () -> int
         return self.my_chain.latest_round
 
     def pieces(self, tx):

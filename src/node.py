@@ -40,6 +40,7 @@ class MyProto(JsonReceiver):
     def process_queue(self):
         # we use counter to stop this routine from running forever,
         # because self.json_received can put item back into the queue
+        logging.debug("NODE: processing queue")
         qsize = self.q.qsize()
         ctr = 0
         while not self.q.empty() and ctr < qsize:
@@ -49,11 +50,11 @@ class MyProto(JsonReceiver):
             self.obj_received(m)
 
     def connection_lost(self, reason):
-        logging.info("deleting peer {}, reason {}".format(b64encode(self.remote_vk), reason))
+        logging.info("NODE: deleting peer {}, reason {}".format(b64encode(self.remote_vk), reason))
         try:
             del self.peers[self.remote_vk]
         except KeyError:
-            logging.warning("peer {} already deleted".format(b64encode(self.remote_vk)))
+            logging.warning("NODE: peer {} already deleted".format(b64encode(self.remote_vk)))
 
     def obj_received(self, obj):
         """
@@ -63,7 +64,7 @@ class MyProto(JsonReceiver):
         :return:
         """
 
-        logging.debug("received obj {} from {}".format(obj, "<remote_vk>"))
+        logging.debug("NODE: received obj {} from {}".format(obj, "<remote_vk>"))
 
         if isinstance(obj, PingMsg):
             self.handle_ping(obj)
@@ -102,7 +103,7 @@ class MyProto(JsonReceiver):
             self.factory.mo14.handle(obj, self.remote_vk)
 
         elif isinstance(obj, DummyMsg):
-            logging.info("got dummy message from {}".format(b64encode(self.remote_vk)))
+            logging.info("NODE: got dummy message from {}".format(b64encode(self.remote_vk)))
 
         else:
             raise AssertionError("invalid message type {}".format(obj))
@@ -117,29 +118,29 @@ class MyProto(JsonReceiver):
         assert o is not None
 
         if isinstance(o, Replay):
-            logging.debug("putting {} into msg queue".format(m))
+            logging.debug("NODE: putting {} into msg queue".format(m))
             self.q.put(m)
         elif isinstance(o, Handled):
             if self.factory.config.test == 'acs':
-                logging.debug("testing ACS, not handling the result")
+                logging.debug("NODE: testing ACS, not handling the result")
                 return
             if o.m is not None:
-                logging.debug("attempting to handle ACS result")
+                logging.debug("NODE: attempting to handle ACS result")
                 self.factory.tc_runner.handle_cons_from_acs(o.m)
         else:
             raise AssertionError("instance is not Replay or Handled")
 
     def send_ping(self):
         self.send_obj(PingMsg(self.vk, self.config.port))
-        logging.debug("sent ping")
+        logging.debug("NODE: sent ping")
         self.state = 'CLIENT'
 
     def handle_ping(self, msg):
         # type: (PingMsg) -> None
-        logging.debug("got ping, {}".format(msg))
+        logging.debug("NODE: got ping, {}".format(msg))
         assert (self.state == 'SERVER')
         if msg.vk in self.peers.keys():
-            logging.debug("ping found myself in peers.keys")
+            logging.debug("NODE: ping found myself in peers.keys")
             # self.transport.loseConnection()
         self.peers[msg.vk] = (self.transport.getPeer().host, msg.port, self)
         self.remote_vk = msg.vk
@@ -148,14 +149,14 @@ class MyProto(JsonReceiver):
 
     def handle_pong(self, msg):
         # type: (PongMsg) -> None
-        logging.debug("got pong, {}".format(msg))
+        logging.debug("NODE: got pong, {}".format(msg))
         assert (self.state == 'CLIENT')
         if msg.vk in self.peers.keys():
-            logging.debug("pong: found myself in peers.keys")
+            logging.debug("NODE: pong: found myself in peers.keys")
             # self.transport.loseConnection()
         self.peers[msg.vk] = (self.transport.getPeer().host, msg.port, self)
         self.remote_vk = msg.vk
-        logging.debug("done pong")
+        logging.debug("NODE: done pong")
 
 
 class MyFactory(Factory):
@@ -183,10 +184,10 @@ class MyFactory(Factory):
                 host, port = addr.split(":")
                 self.make_new_connection(host, int(port))
             else:
-                logging.debug("client {},{} already exist".format(b64encode(vk), addr))
+                logging.debug("NODE: client {},{} already exist".format(b64encode(vk), addr))
 
     def make_new_connection(self, host, port):
-        logging.debug("making client connection {}:{}".format(host, port))
+        logging.debug("NODE: making client connection {}:{}".format(host, port))
         point = TCP4ClientEndpoint(reactor, host, port)
         proto = MyProto(self)
         d = connectProtocol(point, proto)
@@ -219,20 +220,8 @@ class MyFactory(Factory):
         sets all peers to promoters, only use this method for testing
         :return:
         """
-        logging.debug("overwriting promoters {}".format(len(self.peers)))
+        logging.debug("NODE: overwriting promoters {}".format(len(self.peers)))
         self.promoters = self.peers.keys()
-
-    def fill_promoters(self):
-        """
-        This should not happen during normal circumstances, only happens when testing when everybody is a promoter
-        :return:
-        """
-        if len(self.promoters) < self.config.n:
-            logging.debug("not enough promoters, picking one deterministically")
-            candidates = sorted(list(set(self.peers.keys()) - set(self.promoters)))
-            for i in range(self.config.n - len(self.promoters)):
-                logging.debug("adding {} to promoter".format(b64encode(candidates[i])))
-                self.promoters.append(candidates[i])
 
 
 def got_protocol(p):

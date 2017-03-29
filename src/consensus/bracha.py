@@ -112,4 +112,5 @@ class Bracha:
         return False
 
     def bcast(self, msg):
+        logging.debug("Bracha: promoter_cast {}".format(msg))
         self.factory.promoter_cast(self.msg_wrapper_f(msg))

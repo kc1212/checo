@@ -1,5 +1,4 @@
-from twisted.internet import reactor
-from twisted.internet.task import LoopingCall
+from twisted.internet import task
 from base64 import b64encode
 from Queue import Queue
 from typing import Union
@@ -35,6 +34,8 @@ class RoundState:
     def new_cp(self, cp):
         # type: (CpBlock) -> None
         assert isinstance(cp, CpBlock)
+        if len(self.received_cps) > 0:
+            assert self.received_cps[0].round == cp.round
         self.received_cps.append(cp)
 
 
@@ -50,11 +51,11 @@ class TrustChainRunner:
         self.send_q = Queue()  # only for syn messages
         self.msg_wrapper_f = msg_wrapper_f
 
-        self.recv_lc = LoopingCall(self.process_recv_q)
-        self.recv_lc.start(0.5).addErrback(my_err_back)
+        self.recv_lc = task.LoopingCall(self.process_recv_q)
+        self.recv_lc.start(1).addErrback(my_err_back)
 
-        self.send_lc = LoopingCall(self.process_send_q)
-        self.send_lc.start(0.5).addErrback(my_err_back)
+        self.send_lc = task.LoopingCall(self.process_send_q)
+        self.send_lc.start(1).addErrback(my_err_back)
 
         # attributes below are states used for negotiating transaction
         self.tx_locked = False  # only process one transaction at a time, otherwise there'll be hash pointer collisions
@@ -197,36 +198,38 @@ class TrustChainRunner:
             logging.debug("TC: insufficient signatures")
             return
 
+        # here we create a new CP from the consensus result (both of round r)
         logging.debug("TC: adding CP in round {}".format(r))
         self.tc.new_cp_from_cons(1,
                                  self.round_states[r].received_cons,
                                  self.round_states[r].received_sigs,
                                  self.factory.promoters)
-        # we just created CP for round r, inside it, is the list of promoters for round r + 1
-        # terminate ACS, so that new messages are dropped, TX doesn't matter, coz it does not involve promoters
-        # update promoters
-        # finally collect new CP if I'm the promoter, otherwise send CP to promoter
-        self.factory.acs.reset()
-        logging.debug("TC: reset ACS in round {}".format(r))
+
+        # new promoters are selected using the latest CP, these promoters are responsible for round r+1
         self.factory.promoters = self.latest_promoters()
-        self.factory.fill_promoters()
+
+        assert len(self.factory.promoters) == self.factory.config.n
         logging.info("TC: updated new promoters to {} in round {}".format(
             [b64encode(p) for p in self.factory.promoters], r)
         )
 
-        # AT THIS POINT THE PROMOTERS ARE UPDATED
-
+        # at this point the promoters are updated
+        # finally collect new CP if I'm the promoter, otherwise send CP to promoter
         if self.tc.vk in self.factory.promoters:
             logging.info("TC: I'm a promoter, starting a new consensus round in 5 seconds")
-            self.round_states[r + 1].new_cp(self.tc.my_chain.latest_cp)
+            self.round_states[r].new_cp(self.tc.my_chain.latest_cp)
 
             def maybe_start_acs(_msg, _r):
                 if self.tc.latest_round >= _r:
                     logging.info("TC: somebody completed ACS before me, not starting")
+                    # setting the following causes the old messages to be dropped
+                    self.factory.acs.reset()
+                    self.factory.acs.done = True
+                    self.factory.acs.round = self.tc.latest_round
                     return
                 self.factory.acs.reset_then_start(_msg, _r)
 
-            call_later(5, maybe_start_acs, self.round_states[r + 1].received_cps, r + 1)
+            call_later(5, maybe_start_acs, self.round_states[r].received_cps, r + 1)
         else:
             logging.info("TC: I'm NOT a promoter")
 
@@ -239,6 +242,7 @@ class TrustChainRunner:
         self.recv_q.put((msg, src))
 
     def process_recv_q(self):
+        logging.debug("TC: processing recv_q")
         qsize = self.recv_q.qsize()
 
         cnt = 0
@@ -265,6 +269,7 @@ class TrustChainRunner:
                 raise AssertionError("Incorrect message type")
 
     def process_send_q(self):
+        logging.debug("TC: processing send_q")
         qsize = self.send_q.qsize()
         cnt = 0
         while not self.send_q.empty() and cnt < qsize:
@@ -414,7 +419,15 @@ class TrustChainRunner:
         :return:
         """
         n = self.factory.config.n
-        # TODO should we exchange genesis blocks?
         self.factory.promoters = sorted(self.factory.peers.keys())[:n]
-        if self.factory.vk in self.factory.promoters:
-            self.factory.acs.start([self.tc.genesis], 1)
+        self.factory.bcast(CpMsg(self.tc.genesis))
+
+        # wait for 5 seconds to receive all the genesis blocks, then begin consensus
+
+        def bootstrap():
+            logging.info("TC: starting bootstrap, got {} CPs".format(len(self.round_states[0].received_cps)))
+            if self.factory.vk in self.factory.promoters:
+                # collect CPs of round 0, from it, create consensus result of round 1
+                self.factory.acs.start(self.round_states[0].received_cps, 1)
+
+        call_later(5, bootstrap)
