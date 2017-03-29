@@ -5,7 +5,7 @@ import logging
 from base64 import b64encode, b64decode
 from typing import Dict, Tuple
 
-from twisted.internet import reactor
+from twisted.internet import reactor, task
 from twisted.internet.endpoints import TCP4ClientEndpoint, connectProtocol
 from twisted.internet.error import CannotListenError
 from twisted.internet.protocol import Factory
@@ -33,6 +33,10 @@ class MyProto(JsonReceiver):
         self.remote_vk = None
         self.state = 'SERVER'
 
+        # start looping call on the queue
+        self.lc = task.LoopingCall(self.process_queue)
+        self.lc.start(1).addErrback(my_err_back)
+
     def process_queue(self):
         # we use counter to stop this routine from running forever,
         # because self.json_received can put item back into the queue
@@ -42,7 +46,7 @@ class MyProto(JsonReceiver):
             logging.debug("NODE: processing item in queue")
             ctr += 1
             m = self.q.get()
-            self._obj_received(m)
+            self.obj_received(m)
 
     def connection_lost(self, reason):
         logging.info("deleting peer {}, reason {}".format(b64encode(self.remote_vk), reason))
@@ -51,7 +55,14 @@ class MyProto(JsonReceiver):
         except KeyError:
             logging.warning("peer {} already deleted".format(b64encode(self.remote_vk)))
 
-    def _obj_received(self, obj):
+    def obj_received(self, obj):
+        """
+        first we handle the items in the queue
+        then we handle the received message
+        :param obj:
+        :return:
+        """
+
         logging.debug("received obj {} from {}".format(obj, "<remote_vk>"))
 
         if isinstance(obj, PingMsg):
@@ -95,16 +106,6 @@ class MyProto(JsonReceiver):
 
         else:
             raise AssertionError("invalid message type {}".format(obj))
-
-    def obj_received(self, obj):
-        """
-        first we handle the items in the queue
-        then we handle the received message
-        :param obj:
-        :return:
-        """
-        self._obj_received(obj)
-        self.process_queue()
 
     def process_acs_res(self, o, m):
         """
