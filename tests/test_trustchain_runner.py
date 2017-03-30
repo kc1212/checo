@@ -37,7 +37,7 @@ def run_everything(n, t, m, failure):
     print "Test: nodes starting"
 
     # we use m instead of n because the consensus result should be propagated
-    poll_check_f(8 * n, 5, ps, check_multiple_rounds, m, t, 3)
+    poll_check_f(8 * m, 5, ps, check_multiple_rounds, m, t, 3)
 
 
 @pytest.mark.parametrize("n,t,m,failure", [
@@ -45,8 +45,8 @@ def run_everything(n, t, m, failure):
     (4, 1, 8, 'omission'),
     (8, 2, 8, 'omission'),
     (8, 2, 16, 'omission'),
-    (19, 6, 19, 'omission'),
-    (19, 6, 50, 'omission'),
+    # (19, 6, 19, 'omission'),
+    # (19, 6, 30, 'omission'),
 ])
 def test_everything(n, t, m, failure, folder, discover):
     run_everything(n, t, m, failure)
