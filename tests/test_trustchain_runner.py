@@ -25,16 +25,19 @@ def check_promoter_match(n, t, r):
 @pytest.fixture
 def run_everything(n, t, m, failure):
     configs = []
-    for i in range(m):
+    for i in range(m - t):
         port = GOOD_PORT + i
         configs.append(make_args(port, n, t, test='bootstrap', output=DIR + str(port) + '.out', broadcast=False))
-    # for i in range(t):
-        # configs.append(make_args(port, n, t, test='bootstrap', failure=f, output=DIR + str(port) + '.out', broadcast=False))
+    for i in range(t):
+        port = BAD_PORT + i
+        configs.append(make_args(port, n, t, test='bootstrap', output=DIR + str(port) + '.out', broadcast=False,
+                                 failure=failure))
 
     ps = run_subprocesses(NODE_CMD_PREFIX, configs)
     print "Test: nodes starting"
 
-    poll_check_f(30, 5, ps, check_multiple_rounds, n, t, 3)
+    # we use m instead of n because the consensus result should be propagated
+    poll_check_f(8 * n, 5, ps, check_multiple_rounds, m, t, 3)
 
 
 @pytest.mark.parametrize("n,t,m,failure", [
