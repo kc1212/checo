@@ -24,6 +24,14 @@ def byteify(inp):
         return inp
 
 
+def intersperce(iterable, delimiter):
+    it = iter(iterable)
+    yield next(it)
+    for x in it:
+        yield delimiter
+        yield x
+
+
 class Replay:
     """
     Dummy class returned by consensus algorithms to identify that the message should be replayed at a later time

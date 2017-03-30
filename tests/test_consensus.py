@@ -6,7 +6,6 @@ from tools import *
 
 def check_acs_files(n, t):
     target = 'ACS: DONE'
-    print os.listdir(DIR)
     acs_dones = search_for_string_in_dir(DIR, target, json.loads)
 
     # do various checks
