@@ -414,7 +414,7 @@ class TrustChainRunner:
         logging.debug("TC: {} making random tx to".format(b64encode(node)))
         self.send_syn(node, m)
 
-    def bootstrap_promoters(self):
+    def bootstrap_promoters(self, delay=5):
         """
         Assume all the nodes are already online, exchange genesis blocks, and start ACS.
         The first n values, sorted by vk, are promoters
@@ -422,9 +422,9 @@ class TrustChainRunner:
         """
         n = self.factory.config.n
         self.factory.promoters = sorted(self.factory.peers.keys())[:n]
-        self.factory.bcast(CpMsg(self.tc.genesis))
+        self.factory.promoter_cast(CpMsg(self.tc.genesis))
 
-        # wait for 5 seconds to receive all the genesis blocks, then begin consensus
+        # wait for <DELAY> seconds to receive all the genesis blocks, then begin consensus
 
         def bootstrap():
             logging.info("TC: starting bootstrap, got {} CPs".format(len(self.round_states[0].received_cps)))
@@ -432,4 +432,4 @@ class TrustChainRunner:
                 # collect CPs of round 0, from it, create consensus result of round 1
                 self.factory.acs.start(self.round_states[0].received_cps, 1)
 
-        call_later(5, bootstrap)
+        call_later(delay, bootstrap)

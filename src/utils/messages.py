@@ -1,5 +1,5 @@
 from base64 import b64encode
-from typing import Union
+from typing import Union, Dict
 
 from src.trustchain.trustchain import Signature, CpBlock, Cons
 
@@ -9,11 +9,27 @@ class DiscoverMsg:
         self.vk = vk
         self.port = port
 
+    def __str__(self):
+        return "DiscoverMsg - vk: {}, port: {}".format(b64encode(self.vk), self.port)
+
 
 class DiscoverReplyMsg:
-    # TODO set the type of nodes
     def __init__(self, nodes):
+        # type: (Dict[str, str]) -> ()
         self.nodes = nodes
+
+    def __str__(self):
+        return "DiscoverReplyMsg - {}".format(self.nodes)
+
+
+class InstructionMsg:
+    def __init__(self, delay, instruction, param=None):
+        self.delay = delay
+        self.instruction = instruction
+        self.param = param
+
+    def __str__(self):
+        return "InstructionMsg - delay: {}, instruction: {}, param: {}".format(self.delay, self.instruction, self.param)
 
 
 class CoinMsg:

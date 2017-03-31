@@ -11,7 +11,11 @@ from twisted.internet.error import CannotListenError
 from twisted.internet.protocol import Factory
 
 from src.utils.jsonreceiver import JsonReceiver
-from src.utils.messages import DummyMsg, PingMsg, PongMsg, BrachaMsg, Mo14Msg, ACSMsg, ChainMsg, SigMsg, CpMsg, ConsMsg
+from src.utils.messages import \
+    DummyMsg, PingMsg, PongMsg, \
+    BrachaMsg, Mo14Msg, ACSMsg, \
+    ChainMsg, SigMsg, CpMsg, ConsMsg, \
+    InstructionMsg
 from src.utils.utils import Replay, Handled, set_logging, my_err_back, call_later, MAX_LINE_LEN
 from src.consensus.bracha import Bracha
 from src.consensus.acs import ACS
@@ -50,7 +54,8 @@ class MyProto(JsonReceiver):
             self.obj_received(m)
 
     def connection_lost(self, reason):
-        logging.info("NODE: deleting peer {}, reason {}".format(b64encode(self.remote_vk), reason))
+        peer = "<None>" if self.remote_vk is None else b64encode(self.remote_vk)
+        logging.info("NODE: deleting peer {}, reason {}".format(peer, reason))
         try:
             del self.peers[self.remote_vk]
         except KeyError:
@@ -141,7 +146,6 @@ class MyProto(JsonReceiver):
         assert (self.state == 'SERVER')
         if msg.vk in self.peers.keys():
             logging.debug("NODE: ping found myself in peers.keys")
-            # self.transport.loseConnection()
         self.peers[msg.vk] = (self.transport.getPeer().host, msg.port, self)
         self.remote_vk = msg.vk
         self.send_obj(PongMsg(self.vk, self.config.port))
@@ -187,7 +191,7 @@ class MyFactory(Factory):
                 logging.debug("NODE: client {},{} already exist".format(b64encode(vk), addr))
 
     def make_new_connection(self, host, port):
-        logging.debug("NODE: making client connection {}:{}".format(host, port))
+        logging.info("NODE: making client connection {}:{}".format(host, port))
         point = TCP4ClientEndpoint(reactor, host, port)
         proto = MyProto(self)
         d = connectProtocol(point, proto)
@@ -222,6 +226,15 @@ class MyFactory(Factory):
         """
         logging.debug("NODE: overwriting promoters {}".format(len(self.peers)))
         self.promoters = self.peers.keys()
+
+    def handle_instruction(self, msg):
+        assert isinstance(msg, InstructionMsg)
+        logging.info("NODE: handling instruction {}".format(msg))
+        if msg.instruction == 'bootstrap':
+            call_later(msg.delay, self.tc_runner.bootstrap_promoters)
+            # TODO create transactions
+        else:
+            raise AssertionError("Invalid instruction msg {}".format(msg))
 
 
 def got_protocol(p):
@@ -305,7 +318,6 @@ def run(config, bcast, discovery_addr):
         if config.tx > 0:
             call_later(5, f.tc_runner.make_random_tx)
     elif config.test == 'bootstrap':
-        # TODO for now everybody is a promoter
         call_later(5, f.tc_runner.bootstrap_promoters)
 
     reactor.run()
