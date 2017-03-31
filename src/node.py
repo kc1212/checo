@@ -266,7 +266,7 @@ class Config:
         set_logging(loglevel, output)
 
 
-def run(config, bcast):
+def run(config, bcast, discovery_addr):
     JsonReceiver.MAX_LENGTH = MAX_LINE_LEN
 
     f = MyFactory(config)
@@ -278,7 +278,7 @@ def run(config, bcast):
         sys.exit(1)
 
     # connect to discovery server
-    point = TCP4ClientEndpoint(reactor, "localhost", 8123)
+    point = TCP4ClientEndpoint(reactor, discovery_addr, 8123)
     d = connectProtocol(point, Discovery({}, f))
     d.addCallback(got_discovery, b64encode(f.vk), config.port).addErrback(my_err_back)
 
@@ -343,6 +343,12 @@ if __name__ == '__main__':
         help="location for the output file"
     )
     parser.add_argument(
+        '--discovery',
+        metavar='ADDR',
+        default='localhost',
+        help='address of the discovery server on port 8123'
+    )
+    parser.add_argument(
         '--test',
         choices=['dummy', 'bracha', 'mo14', 'acs', 'tc', 'bootstrap'],
         help='[testing] choose an algorithm to initialise'
@@ -374,4 +380,4 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     run(Config(args.port, args.n, args.t, args.output, args.loglevel, args.test, args.value, args.failure, args.tx),
-        args.broadcast)
+        args.broadcast, args.discovery)

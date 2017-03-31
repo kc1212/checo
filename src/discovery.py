@@ -33,7 +33,7 @@ class Discovery(JsonReceiver):
         :param obj:
         :return:
         """
-        logging.debug("Discovery: received msg {}".format(obj))
+        logging.debug("Discovery: received msg {} from {}".format(obj, self.transport.getPeer().host))
 
         if self.state == 'SERVER':
             if isinstance(obj, DiscoverMsg):
