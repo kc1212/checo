@@ -79,13 +79,13 @@ class Bracha:
                 self.step = BrachaStep.one
                 self.init_count = 0
                 self.done = True
-                logging.info("Bracha: DELIVER {}".format(body))
+                logging.debug("Bracha: DELIVER {}".format(body))
                 return Handled(body)
 
         return Handled()
 
     def bcast_init(self, msg="some test msg!!"):
-        logging.info("Bracha: initiating with msg {}".format(msg))
+        logging.debug("Bracha: initiating with msg {}".format(msg))
         self.bcast(BrachaMsg(MsgType.init.value, msg))
 
     def bcast_echo(self, body):

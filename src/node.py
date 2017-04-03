@@ -247,7 +247,7 @@ class Config:
     All the static settings, used in Factory
     Should be singleton
     """
-    def __init__(self, port, n, t, output, loglevel=logging.INFO, test=None, value=0, failure=None, tx=0):
+    def __init__(self, port, n, t, test, value, failure, tx, consensus_delay):
         """
         This only stores the config necessary at runtime, so not necessarily all the information from argparse
         :param port:
@@ -276,7 +276,9 @@ class Config:
         assert tx >= 0
         self.tx = tx
 
-        set_logging(loglevel, output)
+        assert isinstance(consensus_delay, int)
+        assert consensus_delay >= 0
+        self.consensus_delay = consensus_delay
 
 
 def run(config, bcast, discovery_addr):
@@ -287,7 +289,7 @@ def run(config, bcast, discovery_addr):
     try:
         reactor.listenTCP(config.port, f)
     except CannotListenError:
-        logging.warning("cannot listen on {}".format(config.port))
+        logging.error("cannot listen on {}".format(config.port))
         sys.exit(1)
 
     # connect to discovery server
@@ -316,10 +318,11 @@ def run(config, bcast, discovery_addr):
         call_later(6, f.acs.start, config.port, 1)
     elif config.test == 'tc':
         if config.tx > 0:
-            call_later(5, f.tc_runner.make_random_tx)
+            call_later(5, f.tc_runner.make_random_tx, 1.0 / config.tx)
     elif config.test == 'bootstrap':
         call_later(5, f.tc_runner.bootstrap_promoters)
 
+    logging.info("NODE: reactor starting on port {}".format(config.port))
     reactor.run()
 
 
@@ -361,6 +364,12 @@ if __name__ == '__main__':
         help='address of the discovery server on port 8123'
     )
     parser.add_argument(
+        '--consensus-delay',
+        type=int,
+        default=5,
+        help='delay in seconds between consensus rounds'
+    )
+    parser.add_argument(
         '--test',
         choices=['dummy', 'bracha', 'mo14', 'acs', 'tc', 'bootstrap'],
         help='[testing] choose an algorithm to initialise'
@@ -378,7 +387,7 @@ if __name__ == '__main__':
         help='[testing] the mode of failure'
     )
     parser.add_argument(
-        '--tx',
+        '--tx-rate',
         type=int,
         metavar='RATE',
         default=0,
@@ -391,5 +400,6 @@ if __name__ == '__main__':
     )
     args = parser.parse_args()
 
-    run(Config(args.port, args.n, args.t, args.output, args.loglevel, args.test, args.value, args.failure, args.tx),
+    set_logging(args.loglevel, args.output)
+    run(Config(args.port, args.n, args.t, args.test, args.value, args.failure, args.tx_rate, args.consensus_delay),
         args.broadcast, args.discovery)

@@ -44,12 +44,13 @@ class TrustChainRunner:
     We keep a queue of messages and handle them in order
     the handle function by itself essentially pushes the messages into the queue
     """
-    def __init__(self, factory, msg_wrapper_f=lambda x: x):
+    def __init__(self, factory, msg_wrapper_f=lambda x: x, consensus_delay=0):
         self.tc = TrustChain()
         self.factory = factory
         self.recv_q = Queue()
         self.send_q = Queue()  # only for syn messages
         self.msg_wrapper_f = msg_wrapper_f
+        self.consensus_delay = consensus_delay
 
         self.recv_lc = task.LoopingCall(self.process_recv_q)
         self.recv_lc.start(1).addErrback(my_err_back)
@@ -231,7 +232,10 @@ class TrustChainRunner:
                     return
                 self.factory.acs.reset_then_start(_msg, _r)
 
-            call_later(5, maybe_start_acs, self.round_states[r].received_cps, r + 1)
+            if self.consensus_delay <= 0:
+                maybe_start_acs(self.round_states[r].received_cps, r + 1)
+            else:
+                call_later(5, maybe_start_acs, self.round_states[r].received_cps, r + 1)
         else:
             logging.info("TC: I'm NOT a promoter")
 
@@ -287,7 +291,7 @@ class TrustChainRunner:
             self.update_state(True, None, tx_id, node, None, m, None)
             self.send(node, msg)
 
-            logging.info("TC: sent {} to node {}".format(msg, b64encode(node)))
+            logging.debug("TC: sent {} to node {}".format(msg, b64encode(node)))
 
     def send_syn(self, node, m):
         """
@@ -403,14 +407,19 @@ class TrustChainRunner:
         logging.debug("TC: sending {} to {}".format(self.msg_wrapper_f(msg), b64encode(node)))
         self.factory.send(node, self.msg_wrapper_f(msg))
 
-    def make_random_tx(self):
+    def make_random_tx(self, interval):
+        lc = task.LoopingCall(self._make_random_tx)
+        lc.start(interval).addErrback(my_err_back)
+
+    def _make_random_tx(self):
         node = random.choice(self.factory.peers.keys())
 
         # cannot be myself
         while node == self.factory.vk:
             node = random.choice(self.factory.peers.keys())
 
-        m = 'test' + str(random.random())
+        # typical bitcoin tx is 500 bytes
+        m = 'a' * random.randint(400, 600)
         logging.debug("TC: {} making random tx to".format(b64encode(node)))
         self.send_syn(node, m)
 
