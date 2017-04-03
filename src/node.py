@@ -286,7 +286,8 @@ def run(config, bcast, discovery_addr):
     f = MyFactory(config)
 
     try:
-        reactor.listenTCP(config.port, f)
+        port = reactor.listenTCP(config.port, f)
+        config.port = port.getHost().port
     except CannotListenError:
         logging.error("cannot listen on {}".format(config.port))
         sys.exit(1)

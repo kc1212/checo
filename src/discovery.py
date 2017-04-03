@@ -112,7 +112,7 @@ class DiscoveryFactory(Factory):
             self.bcast(msg)
             self.lc.stop()
         else:
-            logging.debug("Instruction not ready...")
+            logging.debug("Instruction not ready ({} / {})...".format(len(self.nodes), self.m))
 
     def buildProtocol(self, addr):
         return Discovery(self.nodes, self)
