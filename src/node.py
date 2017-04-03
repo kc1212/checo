@@ -253,12 +253,11 @@ class Config:
         :param port:
         :param n:
         :param t:
-        :param output:
-        :param loglevel:
         :param test:
         :param value:
         :param failure:
         :param tx:
+        :param consensus_delay:
         """
         self.port = port
         self.n = n

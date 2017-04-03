@@ -52,7 +52,7 @@ class Mo14:
         self.r += 1
         self.bcast_est(v)
         self.state = Mo14State.start
-        logging.debug("Mo14: initial message broadcasted {}".format(v))
+        logging.info("Mo14: initial message broadcasted {}".format(v))
 
     def store_msg(self, msg, sender_vk):
         ty = msg.ty
@@ -176,7 +176,7 @@ class Mo14:
             logging.debug("Mo14: vals =? set([v]), {} =? {}".format(vals, set([v])))
             if vals == set([v]):
                 if v == s:
-                    logging.debug("Mo14: DECIDED {}".format(v))
+                    logging.info("Mo14: DECIDED {}".format(v))
                     self.state = Mo14State.stopped
                     return Handled(v)
                 else:
