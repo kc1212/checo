@@ -365,7 +365,7 @@ if __name__ == '__main__':
     parser.add_argument(
         '--consensus-delay',
         type=int,
-        default=5,
+        default=0,
         help='delay in seconds between consensus rounds'
     )
     parser.add_argument(

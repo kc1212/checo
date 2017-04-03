@@ -54,7 +54,7 @@ class ACS:
         assert len(self.factory.promoters) == self.factory.config.n
         self.round = r
 
-        for promoter in self.factory.peers.keys():
+        for promoter in self.factory.promoters:
             logging.debug("ACS: adding promoter {}".format(b64encode(promoter)))
 
             def msg_wrapper_f_factory(instance, round):
