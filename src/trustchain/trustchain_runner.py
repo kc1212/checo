@@ -53,10 +53,10 @@ class TrustChainRunner:
         self.consensus_delay = consensus_delay
 
         self.recv_lc = task.LoopingCall(self.process_recv_q)
-        self.recv_lc.start(1).addErrback(my_err_back)
+        self.recv_lc.start(1, False).addErrback(my_err_back)
 
         self.send_lc = task.LoopingCall(self.process_send_q)
-        self.send_lc.start(1).addErrback(my_err_back)
+        self.send_lc.start(1, False).addErrback(my_err_back)
 
         # attributes below are states used for negotiating transaction
         self.tx_locked = False  # only process one transaction at a time, otherwise there'll be hash pointer collisions
@@ -70,6 +70,8 @@ class TrustChainRunner:
         # attributes below are states for building new CP blocks
         # TODO compare with my own chain and prune old rounds
         self.round_states = defaultdict(RoundState)
+
+        self.bootstrap_lc = None
 
         random.seed()
 
@@ -423,7 +425,7 @@ class TrustChainRunner:
         logging.debug("TC: {} making random tx to".format(b64encode(node)))
         self.send_syn(node, m)
 
-    def bootstrap_promoters(self, delay=5):
+    def bootstrap_promoters(self):
         """
         Assume all the nodes are already online, exchange genesis blocks, and start ACS.
         The first n values, sorted by vk, are promoters
@@ -433,12 +435,16 @@ class TrustChainRunner:
         self.factory.promoters = sorted(self.factory.peers.keys())[:n]
         self.factory.promoter_cast(CpMsg(self.tc.genesis))
 
-        # wait for <DELAY> seconds to receive all the genesis blocks, then begin consensus
-
-        def bootstrap():
-            logging.info("TC: starting bootstrap, got {} CPs".format(len(self.round_states[0].received_cps)))
+        def bootstrap_when_ready():
             if self.factory.vk in self.factory.promoters:
+                logging.info("TC: bootstrap_lc, got {} CPs".format(len(self.round_states[0].received_cps)))
                 # collect CPs of round 0, from it, create consensus result of round 1
-                self.factory.acs.start(self.round_states[0].received_cps, 1)
+                if len(self.round_states[0].received_cps) >= n:
+                    self.factory.acs.start(self.round_states[0].received_cps, 1)
+                    self.bootstrap_lc.stop()
+            else:
+                logging.info("TC: bootstrap_lc, not promoter, got {} CPs".format(len(self.round_states[0].received_cps)))
+                self.bootstrap_lc.stop()
 
-        call_later(delay, bootstrap)
+        self.bootstrap_lc = task.LoopingCall(bootstrap_when_ready)
+        self.bootstrap_lc.start(5, False).addErrback(my_err_back)
