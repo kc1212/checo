@@ -44,13 +44,13 @@ class TrustChainRunner:
     We keep a queue of messages and handle them in order
     the handle function by itself essentially pushes the messages into the queue
     """
-    def __init__(self, factory, msg_wrapper_f=lambda x: x, consensus_delay=0):
+    def __init__(self, factory, msg_wrapper_f=lambda x: x):
         self.tc = TrustChain()
         self.factory = factory
         self.recv_q = Queue()
         self.send_q = Queue()  # only for syn messages
         self.msg_wrapper_f = msg_wrapper_f
-        self.consensus_delay = consensus_delay
+        self.consensus_delay = factory.config.consensus_delay
 
         self.recv_lc = task.LoopingCall(self.process_recv_q)
         self.recv_lc.start(1, False).addErrback(my_err_back)
@@ -62,6 +62,7 @@ class TrustChainRunner:
         self.collect_rubbish_lc.start(5, False).addErrback(my_err_back)
 
         self.bootstrap_lc = None
+        self.new_consensus_lc = None
 
         # attributes below are states used for negotiating transaction
         self.tx_locked = False  # only process one transaction at a time, otherwise there'll be hash pointer collisions
@@ -236,21 +237,25 @@ class TrustChainRunner:
         # at this point the promoters are updated
         # finally collect new CP if I'm the promoter, otherwise send CP to promoter
         if self.tc.vk in self.factory.promoters:
-            logging.info("TC: I'm a promoter, starting a new consensus round in 5 seconds")
+            logging.info("TC: I'm a promoter, starting a new consensus round when we have enough CPs")
             self.round_states[r].new_cp(self.tc.my_chain.latest_cp)
 
-            def maybe_start_acs(_msg, _r):
+            def try_start_acs(_msg, _r):
                 if self.tc.latest_round >= _r:
                     logging.info("TC: somebody completed ACS before me, not starting")
                     # setting the following causes the old messages to be dropped
                     self.factory.acs.stop(self.tc.latest_round)
-                    return
-                self.factory.acs.reset_then_start(_msg, _r)
+                    self.new_consensus_lc.stop()
+                elif len(_msg) < self.factory.config.n:
+                    # we don't have enough CPs to start the consensus, so wait for more
+                    pass
+                else:
+                    self.factory.acs.reset_then_start(_msg, _r)
+                    self.new_consensus_lc.stop()
 
-            if self.consensus_delay <= 0:
-                maybe_start_acs(self.round_states[r].received_cps, r + 1)
-            else:
-                call_later(5, maybe_start_acs, self.round_states[r].received_cps, r + 1)
+            self.new_consensus_lc = task.LoopingCall(try_start_acs, self.round_states[r].received_cps, r + 1)
+            self.new_consensus_lc.start(self.consensus_delay, False).addErrback(my_err_back)
+            # call_later(5, maybe_start_acs, self.round_states[r].received_cps, r + 1)
         else:
             logging.info("TC: I'm NOT a promoter")
 

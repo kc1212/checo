@@ -118,7 +118,7 @@ def run_subprocesses(prefix, cmds, sleep_interval=0):
 
 
 def make_args(port, n, t, test=None, value=0, failure=None, tx=0, loglevel=logging.INFO, output=None,
-              broadcast=True, consensus_delay=5):
+              broadcast=True, consensus_delay=1):
     """
     This function should produce all the parameters accepted by argparse
     :param port:
