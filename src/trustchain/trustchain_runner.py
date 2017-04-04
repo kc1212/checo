@@ -222,11 +222,13 @@ class TrustChainRunner:
 
         # new promoters are selected using the latest CP, these promoters are responsible for round r+1
         # no need to continue the ACS for earlier rounds
-        assert r == self.tc.latest_round
+        assert r == self.tc.latest_round, "{} != {}"\
+            .format(r, self.tc.latest_round)
         self.factory.promoters = self.latest_promoters()
         self.factory.acs.stop(self.tc.latest_round)
 
-        assert len(self.factory.promoters) == self.factory.config.n
+        assert len(self.factory.promoters) == self.factory.config.n, "{} != {}"\
+            .format(len(self.factory.promoters), self.factory.config.n)
         logging.info('TC: updated new promoters in round {} to [{}]'.format(
             r, ",".join(['"' + b64encode(p) + '"' for p in self.factory.promoters]))
         )
