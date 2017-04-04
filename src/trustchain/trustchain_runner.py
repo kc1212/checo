@@ -58,6 +58,11 @@ class TrustChainRunner:
         self.send_lc = task.LoopingCall(self.process_send_q)
         self.send_lc.start(1, False).addErrback(my_err_back)
 
+        self.collect_rubbish_lc = task.LoopingCall(self.collect_rubbish)
+        self.collect_rubbish_lc.start(5, False).addErrback(my_err_back)
+
+        self.bootstrap_lc = None
+
         # attributes below are states used for negotiating transaction
         self.tx_locked = False  # only process one transaction at a time, otherwise there'll be hash pointer collisions
         self.block_r = None  # type: TxBlock
@@ -68,10 +73,7 @@ class TrustChainRunner:
         self.prev_r = None  # type: str
 
         # attributes below are states for building new CP blocks
-        # TODO compare with my own chain and prune old rounds
         self.round_states = defaultdict(RoundState)
-
-        self.bootstrap_lc = None
 
         random.seed()
 
@@ -124,6 +126,12 @@ class TrustChainRunner:
         if len(self.round_states[r].received_sigs) > self.factory.config.t:
             return True
         return False
+
+    def collect_rubbish(self):
+        for k in self.round_states.keys():
+            if k < self.tc.latest_round:
+                logging.debug("TC: pruning key {}".format(k))
+                del self.round_states[k]
 
     def latest_promoters(self):
         r = self.tc.latest_round
