@@ -228,6 +228,11 @@ class MyFactory(Factory):
         self.promoters = self.peers.keys()
 
     def handle_instruction(self, msg):
+        """
+        The msg.delay need to be long enough such that the ping/pong messages are finished
+        :param msg: 
+        :return: 
+        """
         assert isinstance(msg, InstructionMsg)
         logging.info("NODE: handling instruction {}".format(msg))
         if msg.instruction == 'bootstrap':

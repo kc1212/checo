@@ -414,6 +414,14 @@ class TrustChainRunner:
         lc.start(interval).addErrback(my_err_back)
 
     def _make_random_tx(self):
+        """
+        This function is expected to be called very frequently, so we don't want the send_q to build up.
+        Thus we don't make the tx if the state is locked.
+        :return: 
+        """
+        if self.tx_locked:
+            return
+
         node = random.choice(self.factory.peers.keys())
 
         # cannot be myself

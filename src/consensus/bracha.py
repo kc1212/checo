@@ -87,7 +87,8 @@ class Bracha:
         return Handled()
 
     def bcast_init(self, msg="some test msg!!"):
-        logging.info("Bracha: initiating with msg {}".format(msg))
+        log_msg = "{} items of type {}".format(len(msg), type(msg[0])) if isinstance(msg, list) else msg
+        logging.info("Bracha: initiating with msg {}".format(log_msg))
         self.bcast(BrachaMsg(MsgType.init.value, msg))
 
     def bcast_echo(self, body):
