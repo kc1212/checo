@@ -126,18 +126,28 @@ class AckMsg:
 class CpMsg:
     def __init__(self, cp):
         # type: (CpBlock) -> None
-        self.cp = cp
+        self.cp = cp  # type: CpBlock
+
+    @property
+    def r(self):
+        # type: () -> int
+        return self.cp.round
 
 
 class SigMsg:
     def __init__(self, s, r):
         # type: (Signature, int) -> None
-        self.s = s
-        self.r = r
+        self.s = s  # type: Signature
+        self.r = r  # type: int
 
 
 class ConsMsg:
     def __init__(self, cons):
         # type: (Cons) -> None
-        self.cons = cons
+        self.cons = cons  # type: Cons
+
+    @property
+    def r(self):
+        # type: () -> int
+        return self.cons.round
 

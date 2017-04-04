@@ -168,28 +168,31 @@ class TrustChainRunner:
             logging.debug("TC: not a dict type in handle_cons_from_acs")
 
     def handle_sig(self, msg, remote_vk):
-        # type: (SigMsg) -> None
+        # type: (SigMsg, str) -> None
         assert isinstance(msg, SigMsg)
 
         logging.debug("TC: received SigMsg {} from {}".format(msg, b64encode(remote_vk)))
-        self.round_states[msg.r].new_sig(msg.s)
-        self.try_add_cp(msg.r)
+        if msg.r >= self.tc.latest_round:
+            self.round_states[msg.r].new_sig(msg.s)
+            self.try_add_cp(msg.r)
 
     def handle_cp(self, msg, remote_vk):
-        # type (CpMsg) -> None
+        # type: (CpMsg, str) -> None
         assert isinstance(msg, CpMsg)
 
         logging.debug("TC: received CpMsg {} from {}".format(msg, b64encode(remote_vk)))
-        cp = msg.cp
-        self.round_states[cp.round].new_cp(cp)
+        if msg.r >= self.tc.latest_round:
+            cp = msg.cp
+            self.round_states[cp.round].new_cp(cp)
 
     def handle_cons(self, msg, remote_vk):
-        # type (ConsMsg) -> None
+        # type: (ConsMsg, str) -> None
         assert isinstance(msg, ConsMsg)
 
         logging.debug("TC: received ConsMsg {} from {}".format(msg, b64encode(remote_vk)))
-        self.round_states[msg.cons.round].new_cons(msg.cons)
-        self.try_add_cp(msg.cons.round)
+        if msg.r >= self.tc.latest_round:
+            self.round_states[msg.cons.round].new_cons(msg.cons)
+            self.try_add_cp(msg.r)
 
     def try_add_cp(self, r):
         """
