@@ -232,7 +232,13 @@ class MyFactory(Factory):
         logging.info("NODE: handling instruction {}".format(msg))
         if msg.instruction == 'bootstrap':
             call_later(msg.delay, self.tc_runner.bootstrap_promoters)
-            # TODO create transactions
+        elif msg.instruction == 'tx-only':
+            rate = msg.param
+            call_later(msg.delay, self.tc_runner.make_random_tx, 1.0 / rate)
+        elif msg.instruction == 'bootstrap-tx':
+            rate = msg.param
+            call_later(msg.delay, self.tc_runner.bootstrap_promoters)
+            call_later(msg.delay, self.tc_runner.make_random_tx, 1.0 / rate)
         else:
             raise AssertionError("Invalid instruction msg {}".format(msg))
 

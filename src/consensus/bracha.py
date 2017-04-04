@@ -79,7 +79,9 @@ class Bracha:
                 self.step = BrachaStep.one
                 self.init_count = 0
                 self.done = True
-                logging.info("Bracha: DELIVER {}".format(body))
+
+                log_msg = "{} items of type {}".format(len(body), type(body[0])) if isinstance(body, list) else body
+                logging.info("Bracha: DELIVER {}".format(log_msg))
                 return Handled(body)
 
         return Handled()

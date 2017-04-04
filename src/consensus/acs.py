@@ -52,6 +52,9 @@ class ACS:
         :return:
         """
         assert len(self.factory.promoters) == self.factory.config.n
+        assert isinstance(msg, list)
+        assert len(msg) > 0
+
         self.round = r
 
         for promoter in self.factory.promoters:
@@ -70,7 +73,7 @@ class ACS:
         assert my_vk in self.mo14s
 
         # send the first RBC, assume all nodes have connected
-        logging.info("ACS: initiating {} with {}".format(b64encode(my_vk), msg))
+        logging.info("ACS: initiating vk {}, {} items of type {}".format(b64encode(my_vk), len(msg), type(msg[0])))
         self.brachas[my_vk].bcast_init(msg)
 
     def reset_then_start(self, msg, r):
