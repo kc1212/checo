@@ -270,11 +270,8 @@ class TrustChainRunner:
         else:
             logging.info("TC: I'm NOT a promoter")
 
-        # send new CP to either all promoters or a subset of them depending on the network size
-        if self.factory.config.large_network:
-            self.factory.tplus1_promoter_cast(CpMsg(self.tc.my_chain.latest_cp))
-        else:
-            self.factory.promoter_cast(CpMsg(self.tc.my_chain.latest_cp))
+        # send new CP to either all promoters
+        self.factory.promoter_cast(CpMsg(self.tc.my_chain.latest_cp))
 
     def handle(self, msg, src):
         # type: (Union[SynMsg, SynAckMsg, AckMsg]) -> None
