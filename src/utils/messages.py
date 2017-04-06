@@ -60,12 +60,14 @@ class PongMsg:
 
 
 class BrachaMsg:
-    def __init__(self, ty, body):
+    def __init__(self, ty, digest, fragment):
         self.ty = ty
-        self.body = body
+        self.digest = digest
+        self.fragment = fragment
 
     def __str__(self):
-        return "BrachaMsg - ty: {}, body: {}".format(self.ty, self.body)
+        return "BrachaMsg - ty: {}, digest: {}, fragment : {}"\
+            .format(self.ty, b64encode(self.digest), b64encode(self.fragment))
 
 
 class Mo14Msg:

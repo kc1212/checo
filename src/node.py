@@ -56,7 +56,7 @@ class MyProto(JsonReceiver):
 
     def connection_lost(self, reason):
         peer = "<None>" if self.remote_vk is None else b64encode(self.remote_vk)
-        logging.info("NODE: deleting peer {}, reason {}".format(peer, reason))
+        logging.info("NODE: deleting peer {}".format(peer))
         try:
             del self.peers[self.remote_vk]
         except KeyError:
@@ -70,7 +70,7 @@ class MyProto(JsonReceiver):
         :return:
         """
 
-        logging.debug("NODE: received obj {} from {}".format(obj, "<remote_vk>"))
+        # logging.debug("NODE: received obj {} from {}".format(type(obj), "<remote_vk>"))
 
         if isinstance(obj, PingMsg):
             self.handle_ping(obj)
@@ -101,7 +101,7 @@ class MyProto(JsonReceiver):
         elif isinstance(obj, BrachaMsg):
             if self.factory.config.failure == 'omission':
                 return
-            self.factory.bracha.handle(obj)
+            self.factory.bracha.handle(obj, self.remote_vk)
 
         elif isinstance(obj, Mo14Msg):
             if self.factory.config.failure == 'omission':
@@ -290,8 +290,7 @@ class Config:
         assert value in (0, 1)
         self.value = value
 
-        # TODO use None or 'none' as default?
-        assert failure == 'byzantine' or failure == 'omission' or failure is None
+        assert failure in ['byzantine', 'omission'] or failure is None
         self.failure = failure
 
         assert isinstance(tx, int)

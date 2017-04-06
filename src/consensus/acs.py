@@ -118,7 +118,7 @@ class ACS:
             if instance not in self.brachas:
                 logging.debug("instance {} not in self.brachas".format(b64encode(instance)))
                 return Replay()
-            res = self.brachas[instance].handle(body)
+            res = self.brachas[instance].handle(body, sender_vk)
             if isinstance(res, Handled) and res.m is not None:
                 logging.debug("ACS: Bracha delivered for {}, {}".format(b64encode(instance), res.m))
                 self.bracha_results[instance] = res.m
