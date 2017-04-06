@@ -251,7 +251,13 @@ class TrustChainRunner:
                     # we don't have enough CPs to start the consensus, so wait for more
                     pass
                 else:
-                    self.factory.acs.reset_then_start(_msg, _r)
+                    # the 50 here is a rough guess,
+                    # it should result in a total of > 1000 CPs if there are enough promoters (> 20)
+                    if self.factory.config.large_network and len(_msg) > 50:
+                        cps = random.sample(_msg, 50)
+                    else:
+                        cps = _msg
+                    self.factory.acs.reset_then_start(cps, _r)
                     self.new_consensus_lc.stop()
 
             self.new_consensus_lc = task.LoopingCall(try_start_acs, self.round_states[r].received_cps, r + 1)
@@ -469,7 +475,12 @@ class TrustChainRunner:
                 logging.info("TC: bootstrap_lc, got {} CPs".format(len(self.round_states[0].received_cps)))
                 # collect CPs of round 0, from it, create consensus result of round 1
                 if len(self.round_states[0].received_cps) >= n:
-                    self.factory.acs.start(self.round_states[0].received_cps, 1)
+                    if self.factory.config.large_network:
+                        # picking only n CPs does not matter regarding fairness in the bootstrap stage
+                        cps = random.sample(self.round_states[0].received_cps, n)
+                    else:
+                        cps = self.round_states[0].received_cps
+                    self.factory.acs.start(cps, 1)
                     self.bootstrap_lc.stop()
             else:
                 logging.info("TC: bootstrap_lc, not promoter, got {} CPs".format(len(self.round_states[0].received_cps)))
