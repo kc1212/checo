@@ -43,7 +43,9 @@ def poll_check_f(to, tick, ps, f, *args, **kwargs):
     def terminate_ps(_ps):
         for _p in _ps:
             if _p.poll() is not None:
-                raise IOError("Process died prematurely, code {}".format(_p.poll()))
+                # this is not an error because the if the first process is killed
+                # it can cause later processes to die prematurely
+                print "Process died prematurely, code {}".format(_p.poll())
             _p.terminate()
 
     while to > 0:
@@ -118,7 +120,7 @@ def run_subprocesses(prefix, cmds, sleep_interval=0):
 
 
 def make_args(port, n, t, test=None, value=0, failure=None, tx=0, loglevel=logging.INFO, output=None,
-              broadcast=True, consensus_delay=1):
+              broadcast=True, consensus_delay=1, large_network=False):
     """
     This function should produce all the parameters accepted by argparse
     :param port:
@@ -132,6 +134,7 @@ def make_args(port, n, t, test=None, value=0, failure=None, tx=0, loglevel=loggi
     :param output:
     :param broadcast:
     :param consensus_delay:
+    :param large_network:
     :return:
     """
     res = [str(port), str(n), str(t)]
@@ -165,6 +168,9 @@ def make_args(port, n, t, test=None, value=0, failure=None, tx=0, loglevel=loggi
 
     res.append('--consensus-delay')
     res.append(str(consensus_delay))
+
+    if large_network:
+        res.append('--large-network')
 
     return res
 

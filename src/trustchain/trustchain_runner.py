@@ -7,7 +7,7 @@ import logging
 from collections import defaultdict
 
 from trustchain import TrustChain, TxBlock, CpBlock, Signature, Cons
-from src.utils.utils import Replay, Handled, collate_cp_blocks, my_err_back, call_later
+from src.utils.utils import Replay, Handled, collate_cp_blocks, my_err_back
 from src.utils.messages import SynMsg, SynAckMsg, AckMsg, SigMsg, CpMsg, ConsMsg
 
 
@@ -230,6 +230,7 @@ class TrustChainRunner:
 
         assert len(self.factory.promoters) == self.factory.config.n, "{} != {}"\
             .format(len(self.factory.promoters), self.factory.config.n)
+        logging.info('TC: CP count in Cons is {}'.format(self.tc.consensus[r].count))
         logging.info('TC: updated new promoters in round {} to [{}]'.format(
             r, ",".join(['"' + b64encode(p) + '"' for p in self.factory.promoters]))
         )
@@ -255,12 +256,14 @@ class TrustChainRunner:
 
             self.new_consensus_lc = task.LoopingCall(try_start_acs, self.round_states[r].received_cps, r + 1)
             self.new_consensus_lc.start(self.consensus_delay, False).addErrback(my_err_back)
-            # call_later(5, maybe_start_acs, self.round_states[r].received_cps, r + 1)
         else:
             logging.info("TC: I'm NOT a promoter")
 
-        # send new CP to all promoters
-        self.factory.promoter_cast(CpMsg(self.tc.my_chain.latest_cp))
+        # send new CP to either all promoters or a subset of them depending on the network size
+        if self.factory.config.large_network:
+            self.factory.tplus1_promoter_cast(CpMsg(self.tc.my_chain.latest_cp))
+        else:
+            self.factory.promoter_cast(CpMsg(self.tc.my_chain.latest_cp))
 
     def handle(self, msg, src):
         # type: (Union[SynMsg, SynAckMsg, AckMsg]) -> None

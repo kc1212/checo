@@ -2,6 +2,7 @@ import Queue
 import argparse
 import sys
 import logging
+import random
 from base64 import b64encode, b64decode
 from typing import Dict, Tuple
 
@@ -215,6 +216,17 @@ class MyFactory(Factory):
         for node in set(self.peers.keys()) - set(self.promoters):
             self.send(node, msg)
 
+    def tplus1_promoter_cast(self, msg):
+        """
+        Send `msg` to t+1 promoters instead of all,
+        useful for when the population is much higher than the number of promoters,
+        do not use when the population is close to the number of promoters.
+        :param msg: 
+        :return: 
+        """
+        for promoter in random.sample(self.promoters, self.config.t + 1):
+            self.send(promoter, msg)
+
     def send(self, node, msg):
         proto = self.peers[node][2]
         proto.send_obj(msg)
@@ -258,7 +270,7 @@ class Config:
     All the static settings, used in Factory
     Should be singleton
     """
-    def __init__(self, port, n, t, test, value, failure, tx, consensus_delay):
+    def __init__(self, port, n, t, test, value, failure, tx, consensus_delay, large_network):
         """
         This only stores the config necessary at runtime, so not necessarily all the information from argparse
         :param port:
@@ -289,6 +301,8 @@ class Config:
         assert isinstance(consensus_delay, int)
         assert consensus_delay >= 0
         self.consensus_delay = consensus_delay
+
+        self.large_network = large_network
 
 
 def run(config, bcast, discovery_addr):
@@ -381,6 +395,11 @@ if __name__ == '__main__':
         help='delay in seconds between consensus rounds'
     )
     parser.add_argument(
+        '--large-network',
+        action='store_true',
+        help='use this option when population >> n'
+    )
+    parser.add_argument(
         '--test',
         choices=['dummy', 'bracha', 'mo14', 'acs', 'tc', 'bootstrap'],
         help='[testing] choose an algorithm to initialise'
@@ -412,5 +431,6 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     set_logging(args.loglevel, args.output)
-    run(Config(args.port, args.n, args.t, args.test, args.value, args.failure, args.tx_rate, args.consensus_delay),
+    run(Config(args.port, args.n, args.t, args.test, args.value, args.failure, args.tx_rate, args.consensus_delay,
+               args.large_network),
         args.broadcast, args.discovery)

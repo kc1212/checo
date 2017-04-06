@@ -305,6 +305,11 @@ class Cons(EqHash):
         registered.sort(key=lambda x: x.luck)
         return [b.s.vk for b in registered][:n]
 
+    @property
+    def count(self):
+        # type: () -> int
+        return len(self.blocks)
+
 
 def generate_genesis_block(vk, sk):
     # type: (str, str) -> CpBlock
