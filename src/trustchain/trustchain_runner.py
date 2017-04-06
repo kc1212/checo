@@ -63,6 +63,7 @@ class TrustChainRunner:
 
         self.bootstrap_lc = None
         self.new_consensus_lc = None
+        self.new_consensus_lc_count = 0
 
         # attributes below are states used for negotiating transaction
         self.tx_locked = False  # only process one transaction at a time, otherwise there'll be hash pointer collisions
@@ -242,13 +243,15 @@ class TrustChainRunner:
             self.round_states[r].new_cp(self.tc.my_chain.latest_cp)
 
             def try_start_acs(_msg, _r):
+                self.new_consensus_lc_count += 1
                 if self.tc.latest_round >= _r:
                     logging.info("TC: somebody completed ACS before me, not starting")
                     # setting the following causes the old messages to be dropped
                     self.factory.acs.stop(self.tc.latest_round)
                     self.new_consensus_lc.stop()
-                elif len(_msg) < self.factory.config.n:
-                    # we don't have enough CPs to start the consensus, so wait for more
+                    self.new_consensus_lc_count = 0
+                elif len(_msg) < self.factory.config.n and self.new_consensus_lc_count < 20:
+                    # we don't have enough CPs to start the consensus, so wait for more until some timeout
                     pass
                 else:
                     # the 50 here is a rough guess,
@@ -259,7 +262,9 @@ class TrustChainRunner:
                         cps = _msg
                     self.factory.acs.reset_then_start(cps, _r)
                     self.new_consensus_lc.stop()
+                    self.new_consensus_lc_count = 0
 
+            assert self.new_consensus_lc_count == 0, "Overlapping ACS"
             self.new_consensus_lc = task.LoopingCall(try_start_acs, self.round_states[r].received_cps, r + 1)
             self.new_consensus_lc.start(self.consensus_delay, False).addErrback(my_err_back)
         else:
