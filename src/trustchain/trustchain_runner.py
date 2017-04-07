@@ -53,10 +53,10 @@ class TrustChainRunner:
         self.consensus_delay = factory.config.consensus_delay
 
         self.recv_lc = task.LoopingCall(self.process_recv_q)
-        self.recv_lc.start(1, False).addErrback(my_err_back)
+        self.recv_lc.start(0.1, False).addErrback(my_err_back)
 
         self.send_lc = task.LoopingCall(self.process_send_q)
-        self.send_lc.start(1, False).addErrback(my_err_back)
+        self.send_lc.start(0.1, False).addErrback(my_err_back)
 
         self.collect_rubbish_lc = task.LoopingCall(self.collect_rubbish)
         self.collect_rubbish_lc.start(5, False).addErrback(my_err_back)
@@ -73,6 +73,7 @@ class TrustChainRunner:
         self.s_s = None  # type: Signature
         self.m = None  # type: str
         self.prev_r = None  # type: str
+        self.continuous_tx = False
 
         # attributes below are states for building new CP blocks
         self.round_states = defaultdict(RoundState)
@@ -332,7 +333,7 @@ class TrustChainRunner:
         :param m:
         :return:
         """
-        logging.debug("TC: putting ({}, {}) in send_q".format(b64encode(node), m))
+        logging.info('TC: putting {{ "node": {}, "m": {} }} in send_q'.format(b64encode(node), m))
         self.send_q.put((m, node))
 
     def process_syn(self, msg, src):
@@ -397,22 +398,29 @@ class TrustChainRunner:
 
         self.assert_after_syn_state()  # we initiated the syn
         assert src == self.src
+        assert src == s_r.vk
 
         logging.debug("TC: synack")
         self.block_r = TxBlock(self.tc.latest_hash, self.tc.next_h, h_r, self.m)
         s_s = self.block_r.sign(self.tc.vk, self.tc.sk)
         self.block_r.seal(self.tc.vk, s_s, src, s_r, prev_r)
         self.tc.new_tx(self.block_r)
-        logging.info("TC: added tx {}".format(str(self.block_r)))
+        logging.info("TC: added tx {}".format(self.block_r))
 
         self.send_ack(s_s)
+
         return Handled()
 
     def send_ack(self, s_s):
         # type: (Signature) -> None
         msg = AckMsg(self.tx_id, s_s)
         self.send(self.src, msg)
+
         self.reset_state()
+
+        # running tx continuously, so we start again
+        if self.continuous_tx:
+            self._make_random_tx(self.factory.neighbour)
 
     def process_ack(self, msg, src):
         # type: (AckMsg, str) -> Union[Handled, Replay]
@@ -429,7 +437,7 @@ class TrustChainRunner:
         logging.debug("TC: ack")
         self.block_r.seal(self.tc.vk, self.s_s, src, s_r, self.prev_r)
         self.tc.new_tx(self.block_r)
-        logging.info("TC: added tx {}".format(str(self.block_r)))
+        logging.info("TC: added tx {}".format(self.block_r))
         self.reset_state()
 
         return Handled()
@@ -438,24 +446,26 @@ class TrustChainRunner:
         logging.debug("TC: sending {} to {}".format(self.msg_wrapper_f(msg), b64encode(node)))
         self.factory.send(node, self.msg_wrapper_f(msg))
 
-    def make_random_tx(self, interval):
-        lc = task.LoopingCall(self._make_random_tx)
+    def make_random_tx_continuously(self):
+        self.continuous_tx = True
+        node = self.factory.neighbour
+        assert node != self.factory.vk
+
+        # typical bitcoin tx is 500 bytes
+        m = 'a' * random.randint(400, 600)
+        logging.debug("TC: {} making random tx to".format(b64encode(node)))
+        self.send_syn(node, m)
+
+    def make_random_tx_periodically(self, interval):
+        lc = task.LoopingCall(self._make_random_tx, self.factory.neighbour)
         lc.start(interval).addErrback(my_err_back)
 
-    def _make_random_tx(self):
+    def _make_random_tx(self, node):
         """
-        This function is expected to be called very frequently, so we don't want the send_q to build up.
-        Thus we don't make the tx if the state is locked.
         :return: 
         """
-        if self.tx_locked:
-            return
-
-        node = random.choice(self.factory.peers.keys())
-
         # cannot be myself
-        while node == self.factory.vk:
-            node = random.choice(self.factory.peers.keys())
+        assert node != self.factory.vk
 
         # typical bitcoin tx is 500 bytes
         m = 'a' * random.randint(400, 600)

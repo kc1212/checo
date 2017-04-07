@@ -33,6 +33,8 @@ class Bracha:
         self.t = self.factory.config.t
         self.sent_ready = False
 
+        # NOTE: #define EC_MAX_FRAGMENTS 32
+        # https://github.com/openstack/liberasurecode/blob/master/include/erasurecode/erasurecode.h
         k = self.n - 2 * self.t
         m = 2 * self.t
         logging.debug("Bracha: erasure code params k={}, m={}".format(k, m))

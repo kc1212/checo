@@ -108,6 +108,28 @@ def search_for_string_in_dir(dir, target, f=lambda x: x):
     return res
 
 
+def search_for_all_string(fname, target):
+    res = []
+    with open(fname, 'r') as f:
+        for line in f:
+            if target in line:
+                res.append(line)
+    return res
+
+
+def search_for_all_string_in_dir(dir, target, f=lambda x: x):
+    res = []
+    for fname in os.listdir(dir):
+
+        # we only care about output of honest nodes
+        if not re.match("^3.*\.out$", fname):
+            continue
+
+        msgs = search_for_all_string(dir + fname, target)
+        res += [f(msg.split(target)[-1].strip()) for msg in msgs]
+    return res
+
+
 def run_subprocesses(prefix, cmds, sleep_interval=0):
     ps = []
     for cmd in cmds:
@@ -119,7 +141,7 @@ def run_subprocesses(prefix, cmds, sleep_interval=0):
     return ps
 
 
-def make_args(port, n, t, test=None, value=0, failure=None, tx=0, loglevel=logging.INFO, output=None,
+def make_args(port, n, t, test=None, value=0, failure=None, tx_rate=0, loglevel=logging.INFO, output=None,
               broadcast=True, consensus_delay=5, large_network=False):
     """
     This function should produce all the parameters accepted by argparse
@@ -129,7 +151,7 @@ def make_args(port, n, t, test=None, value=0, failure=None, tx=0, loglevel=loggi
     :param test:
     :param value:
     :param failure:
-    :param tx:
+    :param tx_rate:
     :param loglevel:
     :param output:
     :param broadcast:
@@ -151,7 +173,7 @@ def make_args(port, n, t, test=None, value=0, failure=None, tx=0, loglevel=loggi
         res.append(failure)
 
     res.append('--tx-rate')
-    res.append(str(tx))
+    res.append(str(tx_rate))
 
     if loglevel == logging.DEBUG:
         res.append('--debug')

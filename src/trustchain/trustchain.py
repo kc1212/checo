@@ -49,7 +49,7 @@ class Signature(EqHash):
             self.sig = libnacl.crypto_sign(msg, sk)
 
     def __str__(self):
-        return "({}, <sig>)".format(b64encode(self.vk))
+        return '{{"vk": "{}", "sig": "{}"}}'.format(b64encode(self.vk), b64encode(self.sig))
 
     def _tuple(self):
         return self.vk,  self.sig
@@ -110,10 +110,10 @@ class TxBlock(EqHash):
         self.validity = ValidityState.Unknown
 
     def __str__(self):
-        return "(prev: {}, h_s: {}, h_r: {}, s_s: {}, s_r: {}, m: {})"\
+        return '{{"prev": "{}", "h_s": {}, "h_r": {}, "s_s": {}, "s_r": {}, "m": "{}"}}'\
             .format(b64encode(self.prev),
                     self.inner.h_s, self.inner.h_r,
-                    str(self.s_s), str(self.s_r), self.inner.m)
+                    self.s_s, self.s_r, self.inner.m)
 
     def _tuple(self):
         return self.inner, self.s_s, self.s_r, self.validity
@@ -229,9 +229,9 @@ class CpBlock(EqHash):
         self.s = Signature(vk, sk, self.inner.hash)
 
     def __str__(self):
-        return "(prev: {}, cons: {}, h: {}, r: {}, p: {}, s: {})"\
-            .format(b64encode(self.prev), str(self.inner.cons_hash),
-                    self.h, self.inner.round, self.inner.p, str(self.s))
+        return '{{"prev": "{}", "cons": "{}", "h": {}, "r": {}, "p": {}, "s": {}}}'\
+            .format(b64encode(self.prev), b64encode(self.inner.cons_hash),
+                    self.h, self.inner.round, self.inner.p, self.s)
 
     def _tuple(self):
         return self.inner, self.s
@@ -291,8 +291,7 @@ class Cons(EqHash):
         self.blocks = blocks
 
     def __str__(self):
-        # TODO what to print?
-        return "<cons>"
+        return '{{"r": {}, "blocks": {}}}'.format(self.round, len(self.blocks))
 
     def _tuple(self):
         # TODO sorting this every time may be inefficient...
@@ -389,6 +388,7 @@ class TrustChain:
         self.chains = {self.vk: Chain(self.vk, self.sk)}  # type: Dict[str, Chain]
         self.my_chain = self.chains[self.vk]
         self.consensus = {}  # type: Dict[int, Cons]
+        logging.info("TC: my VK is {}".format(b64encode(self.vk)))
 
     def new_tx(self, tx):
         # type: (TxBlock) -> None

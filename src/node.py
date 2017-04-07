@@ -179,6 +179,8 @@ class MyFactory(Factory):
         self.tc_runner = TrustChainRunner(self, lambda m: ChainMsg(m))
         self.vk = self.tc_runner.tc.vk
 
+        self._neighbour = None
+
     def buildProtocol(self, addr):
         return MyProto(self)
 
@@ -239,6 +241,18 @@ class MyFactory(Factory):
         logging.debug("NODE: overwriting promoters {}".format(len(self.peers)))
         self.promoters = self.peers.keys()
 
+    @property
+    def neighbour(self):
+        """
+        Expect all peers to be connected, return the verification key of the node that's after me, or loop back
+        :return: 
+        """
+        if self._neighbour is None:
+            sorted_keys = sorted(self.peers.keys())
+            my_idx = sorted_keys.index(self.vk)
+            self._neighbour = sorted_keys[(my_idx + 1) % len(sorted_keys)]
+        return self._neighbour
+
     def handle_instruction(self, msg):
         """
         The msg.delay need to be long enough such that the ping/pong messages are finished
@@ -251,11 +265,11 @@ class MyFactory(Factory):
             call_later(msg.delay, self.tc_runner.bootstrap_promoters)
         elif msg.instruction == 'tx-only':
             rate = msg.param
-            call_later(msg.delay, self.tc_runner.make_random_tx, 1.0 / rate)
+            call_later(msg.delay, self.tc_runner.make_random_tx_periodically, 1.0 / rate)
         elif msg.instruction == 'bootstrap-tx':
             rate = msg.param
             call_later(msg.delay, self.tc_runner.bootstrap_promoters)
-            call_later(msg.delay, self.tc_runner.make_random_tx, 1.0 / rate)
+            call_later(msg.delay, self.tc_runner.make_random_tx_periodically, 1.0 / rate)
         else:
             raise AssertionError("Invalid instruction msg {}".format(msg))
 
@@ -270,7 +284,7 @@ class Config:
     All the static settings, used in Factory
     Should be singleton
     """
-    def __init__(self, port, n, t, test, value, failure, tx, consensus_delay, large_network):
+    def __init__(self, port, n, t, test, value, failure, tx_rate, consensus_delay, large_network):
         """
         This only stores the config necessary at runtime, so not necessarily all the information from argparse
         :param port:
@@ -279,7 +293,7 @@ class Config:
         :param test:
         :param value:
         :param failure:
-        :param tx:
+        :param tx_rate:
         :param consensus_delay:
         """
         self.port = port
@@ -293,9 +307,8 @@ class Config:
         assert failure in ['byzantine', 'omission'] or failure is None
         self.failure = failure
 
-        assert isinstance(tx, int)
-        assert tx >= 0
-        self.tx = tx
+        assert isinstance(tx_rate, float)
+        self.tx_rate = tx_rate
 
         assert isinstance(consensus_delay, int)
         assert consensus_delay >= 0
@@ -341,8 +354,10 @@ def run(config, bcast, discovery_addr):
         # use port number (unique on local network) as test message
         call_later(6, f.acs.start, config.port, 1)
     elif config.test == 'tc':
-        if config.tx > 0:
-            call_later(5, f.tc_runner.make_random_tx, 1.0 / config.tx)
+        if config.tx_rate > 0:
+            call_later(5, f.tc_runner.make_random_tx_periodically, 1.0 / config.tx_rate)
+        else:
+            call_later(5, f.tc_runner.make_random_tx_continuously)
     elif config.test == 'bootstrap':
         call_later(5, f.tc_runner.bootstrap_promoters)
 
@@ -417,9 +432,9 @@ if __name__ == '__main__':
     )
     parser.add_argument(
         '--tx-rate',
-        type=int,
+        type=float,
         metavar='RATE',
-        default=0,
+        default=0.0,
         help='[testing] initiate transaction at RATE/sec'
     )
     parser.add_argument(
