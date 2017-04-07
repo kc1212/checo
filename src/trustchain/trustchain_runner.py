@@ -255,10 +255,10 @@ class TrustChainRunner:
                     # we don't have enough CPs to start the consensus, so wait for more until some timeout
                     pass
                 else:
-                    # the 50 here is a rough guess,
-                    # it should result in a total of > 1000 CPs if there are enough promoters (> 20)
-                    if self.factory.config.large_network and len(_msg) > 50:
-                        cps = random.sample(_msg, 50)
+                    # the 200 here is a rough guess,
+                    # it should result in a total of 1000 CPs if there are enough promoters
+                    if self.factory.config.large_network and len(_msg) > 200:
+                        cps = random.sample(_msg, 200)
                     else:
                         cps = _msg
                     self.factory.acs.reset_then_start(cps, _r)
