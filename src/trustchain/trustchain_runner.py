@@ -53,13 +53,16 @@ class TrustChainRunner:
         self.consensus_delay = factory.config.consensus_delay
 
         self.recv_lc = task.LoopingCall(self.process_recv_q)
-        self.recv_lc.start(0.1, False).addErrback(my_err_back)
+        self.recv_lc.start(1, False).addErrback(my_err_back)
 
         self.send_lc = task.LoopingCall(self.process_send_q)
-        self.send_lc.start(0.1, False).addErrback(my_err_back)
+        self.send_lc.start(1, False).addErrback(my_err_back)
 
         self.collect_rubbish_lc = task.LoopingCall(self.collect_rubbish)
         self.collect_rubbish_lc.start(5, False).addErrback(my_err_back)
+
+        self.log_tx_count_lc = task.LoopingCall(self._log_tx_count)
+        self.log_tx_count_lc.start(10, False).addErrback(my_err_back)
 
         self.bootstrap_lc = None
         self.new_consensus_lc = None
@@ -79,6 +82,13 @@ class TrustChainRunner:
         self.round_states = defaultdict(RoundState)
 
         random.seed()
+
+    def _log_tx_count(self):
+        """
+        Too much spam if we log all TX, thus use this in a LoopingCall
+        :return: 
+        """
+        logging.info("TC: current tx count {}".format(self.tc.tx_count))
 
     def reset_state(self):
         self.tx_locked = False
@@ -246,7 +256,7 @@ class TrustChainRunner:
             def try_start_acs(_msg, _r):
                 self.new_consensus_lc_count += 1
                 if self.tc.latest_round >= _r:
-                    logging.info("TC: somebody completed ACS before me, not starting")
+                    logging.debug("TC: somebody completed ACS before me, not starting")
                     # setting the following causes the old messages to be dropped
                     self.factory.acs.stop(self.tc.latest_round)
                     self.new_consensus_lc.stop()
@@ -333,7 +343,7 @@ class TrustChainRunner:
         :param m:
         :return:
         """
-        logging.info('TC: putting {{ "node": {}, "m": {} }} in send_q'.format(b64encode(node), m))
+        logging.debug('TC: putting {{ "node": {}, "m": {} }} in send_q'.format(b64encode(node), m))
         self.send_q.put((m, node))
 
     def process_syn(self, msg, src):
@@ -405,7 +415,7 @@ class TrustChainRunner:
         s_s = self.block_r.sign(self.tc.vk, self.tc.sk)
         self.block_r.seal(self.tc.vk, s_s, src, s_r, prev_r)
         self.tc.new_tx(self.block_r)
-        logging.info("TC: added tx {}".format(self.block_r))
+        logging.debug("TC: added tx {}".format(self.block_r))
 
         self.send_ack(s_s)
 
@@ -437,7 +447,7 @@ class TrustChainRunner:
         logging.debug("TC: ack")
         self.block_r.seal(self.tc.vk, self.s_s, src, s_r, self.prev_r)
         self.tc.new_tx(self.block_r)
-        logging.info("TC: added tx {}".format(self.block_r))
+        logging.debug("TC: added tx {}".format(self.block_r))
         self.reset_state()
 
         return Handled()
@@ -460,9 +470,15 @@ class TrustChainRunner:
         self.send_syn(node, m)
 
     def make_random_tx_periodically(self, interval):
-        node = random.choice(self.factory.peers.keys())
-        while node == self.factory.vk:
-            node = random.choice(self.factory.peers.keys())
+        # node = random.choice(self.factory.peers.keys())
+        # while node == self.factory.vk:
+        #     node = random.choice(self.factory.peers.keys())
+
+        node = self.factory.neighbour_if_even()
+        if node is None:
+            # we do nothing, since we're not an even index
+            return
+        assert node != self.factory.vk
 
         lc = task.LoopingCall(self._make_random_tx, node)
         lc.start(interval).addErrback(my_err_back)

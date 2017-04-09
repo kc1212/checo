@@ -331,12 +331,15 @@ class Chain:
         # type: (str, str) -> None
         self.vk = vk
         self.chain = [generate_genesis_block(vk, sk)]  # type: List[Union[CpBlock, TxBlock]]
+        self._tx_count = 0
+        self._cp_count = 0
 
     def new_tx(self, tx):
         # type: (TxBlock) -> None
         assert tx.prev == self.chain[-1].hash
 
         self.chain.append(tx)
+        self._tx_count += 1
 
     def new_cp(self, cp):
         # type: (CpBlock) -> None
@@ -347,6 +350,7 @@ class Chain:
             "prev round {}, curr round {}, len {}".format(prev_cp, cp, len(self.chain))
 
         self.chain.append(cp)
+        self._cp_count += 1
 
     @property
     def latest_hash(self):
@@ -370,6 +374,16 @@ class Chain:
     def latest_round(self):
         # type: () -> int
         return self.latest_cp.inner.round
+
+    @property
+    def tx_count(self):
+        # type: () -> int
+        return self._tx_count
+
+    @property
+    def cp_count(self):
+        # type: () -> int
+        return self._cp_count
 
 
 class TrustChain:
@@ -443,6 +457,16 @@ class TrustChain:
     def latest_round(self):
         # type: () -> int
         return self.my_chain.latest_round
+
+    @property
+    def tx_count(self):
+        # type: () -> int
+        return self.my_chain.tx_count
+
+    @property
+    def cp_count(self):
+        # type: () -> int
+        return self.my_chain.cp_count
 
     def pieces(self, tx):
         """

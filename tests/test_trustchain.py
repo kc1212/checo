@@ -166,6 +166,8 @@ def test_cp_chain(n, m):
             # adding again (bad hash) should result in an error
             chain.new_cp(cp)
 
+    assert chain.cp_count == m
+
 
 @pytest.mark.parametrize("m", [
     4,
@@ -194,6 +196,9 @@ def test_tx_chain(m):
 
         assert chain_s.latest_hash == block_s.hash
         assert chain_r.latest_hash == block_r.hash
+
+    assert chain_s.tx_count == m
+    assert chain_r.tx_count == m
 
 
 @pytest.mark.parametrize("n, x, ps", [
