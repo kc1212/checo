@@ -52,42 +52,45 @@ def test_consensus(n, t, m, failure, folder, discover):
 
 
 def check_tx(expected):
-    target = 'TC: added tx'
-    txs = search_for_all_string_in_dir(DIR, target, json.loads)
+    target = 'TC: current tx count'
+    counts = search_for_last_string_in_dir(DIR, target, json.loads)
 
     # *2 because every tx creates 2 tx blocks
-    print len(txs)
-    assert len(txs) >= expected
+    print sum(counts)
+    assert sum(counts) >= expected
 
 
 # TODO there appears to be some deadlock going on when performing transactions
-# @pytest.mark.parametrize("n,t,rate,timeout", [
-#     (4, 1, 1.0, 10),
-#     (4, 1, 5.0, 10),
-#     (8, 2, 2.0, 10),
-#     (8, 2, 10.0, 20),
-# ])
-# def test_tx_periodically(n, t, rate, timeout, folder, discover):
-#     configs = []
-#     for i in range(n):
-#         port = GOOD_PORT + i
-#         configs.append(make_args(port, n, t, test='tc', tx_rate=rate / n, output=DIR + str(port) + '.out'))
-#
-#     ps = run_subprocesses(NODE_CMD_PREFIX, configs)
-#     print "Test: tx nodes starting"
-#
-#     # give it some time to setup
-#     time.sleep(timeout + 5)
-#
-#     for p in ps:
-#         p.terminate()
-#     check_tx(rate * timeout * 2)
-#     print "Test: tx test passed"
+@pytest.mark.parametrize("n,t,rate,timeout", [
+    (4, 1, 2.0, 10),
+    (4, 1, 10.0, 10),
+    (8, 2, 4.0, 10),
+    (8, 2, 20.0, 20),
+])
+def test_tx_periodically(n, t, rate, timeout, folder, discover):
+    configs = []
+    for i in range(n):
+        port = GOOD_PORT + i
+        configs.append(make_args(port, n, t, test='tc', tx_rate=rate / n, output=DIR + str(port) + '.out'))
+
+    ps = run_subprocesses(NODE_CMD_PREFIX, configs)
+    print "Test: tx nodes starting"
+
+    # give it some time to setup
+    time.sleep(timeout + 6)
+
+    for p in ps:
+        p.terminate()
+
+    # NOTE: *2 not necessary when only using even indexed nodes
+    # check_tx(rate * timeout * 2 * 0.9)
+    check_tx(rate * timeout * 0.9)  # 0.9 for 10% error
+    print "Test: tx test passed"
 
 
 @pytest.mark.parametrize("n, t, timeout, expected", [
-    (4, 1, 10, 250),
-    (8, 2, 10, 500),
+    (4, 1, 15, 250),
+    (8, 2, 15, 500),
 ])
 def test_tx_continuously(n, t, timeout, expected, folder, discover):
     configs = []
@@ -98,11 +101,11 @@ def test_tx_continuously(n, t, timeout, expected, folder, discover):
     ps = run_subprocesses(NODE_CMD_PREFIX, configs)
     print "Test: tx nodes starting"
 
-    time.sleep(timeout + 5)
+    time.sleep(timeout + 6)
 
     for p in ps:
         p.terminate()
 
-    check_tx(expected)
+    check_tx(expected * 0.9)
     print "Test: tx test passed"
 

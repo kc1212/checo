@@ -410,7 +410,7 @@ class TrustChain:
         Verify tx, follow the rules and mutates the state to add it
         :return: None
         """
-        assert tx.h == self.next_h
+        assert tx.h == self.next_h, "{} != {}".format(tx.h, self.next_h)
         self.my_chain.new_tx(copy.deepcopy(tx))
 
     def new_cp(self, p, cons, ss, vks):

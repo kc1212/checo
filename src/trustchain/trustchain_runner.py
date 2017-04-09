@@ -53,20 +53,21 @@ class TrustChainRunner:
         self.consensus_delay = factory.config.consensus_delay
 
         self.recv_lc = task.LoopingCall(self.process_recv_q)
-        self.recv_lc.start(1, False).addErrback(my_err_back)
+        self.recv_lc.start(0.2, False).addErrback(my_err_back)
 
         self.send_lc = task.LoopingCall(self.process_send_q)
-        self.send_lc.start(1, False).addErrback(my_err_back)
+        self.send_lc.start(0.2, False).addErrback(my_err_back)
 
         self.collect_rubbish_lc = task.LoopingCall(self.collect_rubbish)
         self.collect_rubbish_lc.start(5, False).addErrback(my_err_back)
 
         self.log_tx_count_lc = task.LoopingCall(self._log_tx_count)
-        self.log_tx_count_lc.start(10, False).addErrback(my_err_back)
+        self.log_tx_count_lc.start(5, False).addErrback(my_err_back)
 
         self.bootstrap_lc = None
         self.new_consensus_lc = None
         self.new_consensus_lc_count = 0
+        self.cp_q = Queue()
 
         # attributes below are states used for negotiating transaction
         self.tx_locked = False  # only process one transaction at a time, otherwise there'll be hash pointer collisions
@@ -98,6 +99,10 @@ class TrustChainRunner:
         self.s_s = None
         self.m = None
         self.prev_r = None
+
+        while not self.cp_q.empty():
+            r = self.cp_q.get()
+            self.try_add_cp(r)
 
     def assert_unlocked_state(self):
         assert not self.tx_locked
@@ -212,8 +217,8 @@ class TrustChainRunner:
         Try to add my own CP from the received consensus results and signatures
         The input parameter is a bit strange, we don't add the cp from the parameter, but from the buffer round_states
         we don't need lock here because this function runs atomically
-        :param r:
-        :return:
+        :param r: 
+        :return: 
         """
         if self.tc.latest_round >= r:
             # TODO verify the meaning of tc.latest_round
@@ -226,6 +231,16 @@ class TrustChainRunner:
             logging.debug("TC: insufficient signatures")
             return
 
+        if self.tx_locked:
+            self.cp_q.put(r)
+        else:
+            self._add_cp(r)
+
+    def _add_cp(self, r):
+        """
+        :param r:
+        :return:
+        """
         # here we create a new CP from the consensus result (both of round r)
         logging.debug("TC: adding CP in round {}".format(r))
         self.tc.new_cp(1,
@@ -480,6 +495,7 @@ class TrustChainRunner:
             return
         assert node != self.factory.vk
 
+        logging.info("TC: making TX with {}".format(b64encode(node)))
         lc = task.LoopingCall(self._make_random_tx, node)
         lc.start(interval).addErrback(my_err_back)
 
@@ -487,6 +503,9 @@ class TrustChainRunner:
         """
         :return: 
         """
+        if self.send_q.qsize() > 20 or self.recv_q.qsize() > 20:
+            return
+
         # cannot be myself
         assert node != self.factory.vk
 

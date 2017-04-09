@@ -276,10 +276,10 @@ class MyFactory(Factory):
         if msg.instruction == 'bootstrap':
             call_later(msg.delay, self.tc_runner.bootstrap_promoters)
         elif msg.instruction == 'tx-only':
-            rate = msg.param
+            rate = float(msg.param)
             call_later(msg.delay, self.tc_runner.make_random_tx_periodically, 1.0 / rate)
         elif msg.instruction == 'bootstrap-tx':
-            rate = msg.param
+            rate = float(msg.param)
             call_later(msg.delay, self.tc_runner.bootstrap_promoters)
             call_later(msg.delay, self.tc_runner.make_random_tx_periodically, 1.0 / rate)
         else:

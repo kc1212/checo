@@ -92,7 +92,11 @@ def search_for_string(fname, target):
     return None
 
 
-def search_for_string_in_dir(dir, target, f=lambda x: x):
+def search_for_last_string_in_dir(dir, target, parse_f=lambda x: x):
+    return search_for_string_in_dir(dir, target, parse_f, search_for_last_string)
+
+
+def search_for_string_in_dir(dir, target, parse_f=lambda x: x, search_f=search_for_string):
     res = []
     for fname in os.listdir(dir):
 
@@ -100,11 +104,12 @@ def search_for_string_in_dir(dir, target, f=lambda x: x):
         if not re.match("^3.*\.out$", fname):
             continue
 
-        msg = search_for_string(dir + fname, target)
+        msg = search_f(dir + fname, target)
+        # TODO generalise parse_f
         if msg is not None:
             msg = msg.split(target)[-1].strip()
-            print 'Test: found', f(msg)
-            res.append(f(msg))
+            print 'Test: found', parse_f(msg)
+            res.append(parse_f(msg))
     return res
 
 
@@ -128,6 +133,13 @@ def search_for_all_string_in_dir(dir, target, f=lambda x: x):
         msgs = search_for_all_string(dir + fname, target)
         res += [f(msg.split(target)[-1].strip()) for msg in msgs]
     return res
+
+
+def search_for_last_string(fname, target):
+    res = search_for_all_string(fname, target)
+    if len(res) > 0:
+        return res[-1]
+    return None
 
 
 def run_subprocesses(prefix, cmds, sleep_interval=0):
