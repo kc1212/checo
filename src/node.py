@@ -253,6 +253,18 @@ class MyFactory(Factory):
             self._neighbour = sorted_keys[(my_idx + 1) % len(sorted_keys)]
         return self._neighbour
 
+    def neighbour_if_even(self):
+        """
+        To maximise transaction rate, only nodes with an even index initiate TX.
+        This function returns the neighbour if I'm on an even index otherwise None.
+        :return: 
+        """
+        sorted_keys = sorted(self.peers.keys())
+        my_idx = sorted_keys.index(self.vk)
+        if my_idx % 2 == 0:
+            return self.neighbour
+        return None
+
     def handle_instruction(self, msg):
         """
         The msg.delay need to be long enough such that the ping/pong messages are finished

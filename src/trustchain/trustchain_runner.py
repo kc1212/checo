@@ -448,7 +448,10 @@ class TrustChainRunner:
 
     def make_random_tx_continuously(self):
         self.continuous_tx = True
-        node = self.factory.neighbour
+        node = self.factory.neighbour_if_even()
+        if node is None:
+            # we do nothing, since we're not an even index
+            return
         assert node != self.factory.vk
 
         # typical bitcoin tx is 500 bytes
@@ -457,7 +460,11 @@ class TrustChainRunner:
         self.send_syn(node, m)
 
     def make_random_tx_periodically(self, interval):
-        lc = task.LoopingCall(self._make_random_tx, self.factory.neighbour)
+        node = random.choice(self.factory.peers.keys())
+        while node == self.factory.vk:
+            node = random.choice(self.factory.peers.keys())
+
+        lc = task.LoopingCall(self._make_random_tx, node)
         lc.start(interval).addErrback(my_err_back)
 
     def _make_random_tx(self, node):
