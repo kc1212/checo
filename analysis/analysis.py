@@ -31,30 +31,41 @@ def extract_files(folder_name):
                 extract_file(full_path)
 
 
-def plot_consensus(folder_name):
+def plot_consensus(dirs):
     """
-    Entry point for plotting the consensus graph.
-    x-axis: no. of promoters
-    y-axis: average time for one consensus round
-    :param folder_name: 
+
+    :param dirs: 
     :return: 
     """
-    extract_files(folder_name)
+    def extract_data(folder_name):
+        extract_files(folder_name)
 
-    res = []
-    for item in os.listdir(folder_name):
-        full_path = os.path.join(folder_name, item)
-        if os.path.isdir(full_path):
-            mean, std = _consensus_stats(full_path)
-            res.append([int(item), mean])
+        res = []
+        for item in os.listdir(folder_name):
+            full_path = os.path.join(folder_name, item)
+            if os.path.isdir(full_path):
+                mean, std = _consensus_stats(full_path)
+                res.append([int(item), mean])
 
-    res.sort(key=lambda x: x[0])
-    res = np.transpose(res)
-    plt.plot(res[0], res[1], 'x--')
+        res.sort(key=lambda x: x[0])
+        res = np.transpose(res)
+        return res
+
+    for k, v in sorted(dirs.items()):
+        legend = v[0]
+        style = v[1]
+        res = extract_data(k)
+        plt.plot(res[0], res[1], style, label=legend)
+
     plt.ylabel('Avg. time for one consensus round')
     plt.xlabel('No. of promoters')
+    plt.legend(loc='upper left')
     plt.grid()
     plt.show()
+
+
+def plot_tx_rate(folder_name):
+    pass
 
 
 def _consensus_stats(folder_name):
@@ -74,21 +85,64 @@ def _read_inverval_stats(match, fnames):
     differences = []
 
     for fname in fnames:
-        lines_of_interest = []
-        with open(fname, 'r') as f:
-            for line in f:
-                if match in line:
-                    lines_of_interest.append(line)
+        lines_of_interest = find_lines_of_interest(match, fname)
 
-        # log files are like this
-        # 2017-04-09 21:57:02,001 - INFO ...
-        # we split ' - ' and take the 0th element as time
-
-        times = [dateutil.parser.parse(line.split(' - ')[0]) for line in lines_of_interest]
+        times = [datetime_from_line(line) for line in lines_of_interest]
         for a, b in zip(times, times[1:]):
             differences.append(difference_in_seconds(a, b))
 
     return np.mean(differences), np.std(differences)
+
+
+def _read_tx_rate(fname):
+    """
+    
+    :param fname: 
+    :return: (count, total_time)
+    """
+    match = 'TC: current tx count'
+    lines_of_interest = find_lines_of_interest(match, fname)
+
+    # take the start time as the first onee that does not have a 0 count
+    start_t = None
+    for line in lines_of_interest:
+        count = int(line.split(match)[-1])
+        if count != 0:
+            start_t = datetime_from_line(line)
+            break
+
+    end_t = datetime_from_line(lines_of_interest[-1])
+    end_count = int(lines_of_interest[-1].split(match)[-1])
+
+    # return float(end_count) / difference_in_seconds(start_t, end_t)
+    return end_count, difference_in_seconds(start_t, end_t)
+
+
+def datetime_from_line(line):
+    """
+    log files are like this
+    2017-04-09 21:57:02,001 - INFO ...
+    we split ' - ' and take the 0th element as time
+    :param line: 
+    :return: 
+    """
+    return dateutil.parser.parse(line.split(' - ')[0])
+
+
+def find_lines_of_interest(match, fname):
+    """
+    return lines that contain `match`
+    :param match: 
+    :param fname: 
+    :return: 
+    """
+    lines_of_interest = []
+    with open(fname, 'r') as f:
+        for line in f:
+            if match in line:
+                lines_of_interest.append(line)
+
+    return lines_of_interest
 
 
 def difference_in_seconds(a, b):
@@ -101,17 +155,27 @@ def difference_in_seconds(a, b):
     assert b > a
     return (b - a).seconds
 
+
+def expand_vars_in_key(s):
+    return {os.path.expandvars(k): v for k, v in s.items()}
+
+
 if __name__ == '__main__':
+    consensus_dirs = expand_vars_in_key({
+        "$HOME/tudelft/consensus-experiment/consensus-500-5": ("1250 tx/s", 'x--'),
+        "$HOME/tudelft/consensus-experiment/consensus-500-2": ("500 tx/s", 'o-'),
+        "$HOME/tudelft/consensus-experiment/consensus-500-0": ("0tx/s", '^:'),
+    })
+
     fns = {'consensus': plot_consensus}
 
     parser = argparse.ArgumentParser(description='Analyse experiment results.')
-    parser.add_argument('dir', help='the directory containing the log files')
     parser.add_argument(
-            '-e', '--experiment',
+            '-p', '--plot',
             choices=fns.keys(),
             help='the type of experiment'
     )
     args = parser.parse_args()
 
-    fns[args.experiment](args.dir)
+    fns[args.plot](consensus_dirs)
 
