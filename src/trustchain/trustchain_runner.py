@@ -7,29 +7,41 @@ import logging
 from collections import defaultdict
 
 from trustchain import TrustChain, TxBlock, CpBlock, Signature, Cons
-from src.utils.utils import Replay, Handled, collate_cp_blocks, my_err_back
+from src.utils.utils import Replay, Handled, collate_cp_blocks, my_err_back, call_later
 from src.utils.messages import SynMsg, SynAckMsg, AckMsg, SigMsg, CpMsg, ConsMsg
 
 
 class RoundState:
     def __init__(self):
         self.received_cons = None
-        self.received_sigs = []
+        self.received_sigs = {}
         self.received_cps = []
 
     def new_cons(self, cons):
-        # type: (Cons) -> None
+        # type: (Cons) -> bool
         assert isinstance(cons, Cons)
         if self.received_cons is None:
             self.received_cons = cons
-        else:
-            # TODO eventually we need to store all received cons and check which are correctly and sufficiently signed
-            assert cons == self.received_cons
+            return True
+
+        # TODO eventually we need to store all received cons and check which are correctly and sufficiently signed
+        assert cons == self.received_cons
+        return False
 
     def new_sig(self, s):
-        # type: (Signature) -> None
+        # type: (Signature) -> bool
+        """
+        :param s: 
+        :return: True if it is new, otherwise False
+        """
         assert isinstance(s, Signature)
-        self.received_sigs.append(s)
+        if s.vk not in self.received_sigs:
+            self.received_sigs[s.vk] = s
+            return True
+
+        # TODO we should handle this
+        assert self.received_sigs[s.vk] == s
+        return False
 
     def new_cp(self, cp):
         # type: (CpBlock) -> None
@@ -172,12 +184,14 @@ class TrustChainRunner:
             cons = Cons(r, collate_cp_blocks(bs))
             self.round_states[r].new_cons(cons)
 
-            # TODO eventually we'd like to use gossip
-            # self.factory.non_promoter_cast(ConsMsg(cons))
-            self.factory.bcast(ConsMsg(cons))
-
+            future_promoters = cons.get_promoters(self.factory.config.n)
             s = Signature(self.tc.vk, self.tc.sk, cons.hash)
-            self.factory.bcast(SigMsg(s, r))
+
+            self.factory.multicast(future_promoters, ConsMsg(cons))
+            self.factory.gossip_except(future_promoters, ConsMsg(cons))
+
+            self.factory.multicast(future_promoters, SigMsg(s, r))
+            self.factory.gossip_except(future_promoters, SigMsg(s, r))
 
             # we also try to add the CP here because we may receive the signatures before the actual CP
             self.try_add_cp(r)
@@ -191,8 +205,11 @@ class TrustChainRunner:
 
         logging.debug("TC: received SigMsg {} from {}".format(msg, b64encode(remote_vk)))
         if msg.r >= self.tc.latest_round:
-            self.round_states[msg.r].new_sig(msg.s)
-            self.try_add_cp(msg.r)
+            is_new = self.round_states[msg.r].new_sig(msg.s)
+            if is_new:
+                self.try_add_cp(msg.r)
+                self.factory.gossip(msg)
+                # call_later(1, self.factory.gossip, msg)
 
     def handle_cp(self, msg, remote_vk):
         # type: (CpMsg, str) -> None
@@ -209,8 +226,11 @@ class TrustChainRunner:
 
         logging.debug("TC: received ConsMsg {} from {}".format(msg, b64encode(remote_vk)))
         if msg.r >= self.tc.latest_round:
-            self.round_states[msg.cons.round].new_cons(msg.cons)
-            self.try_add_cp(msg.r)
+            is_new = self.round_states[msg.cons.round].new_cons(msg.cons)
+            if is_new:
+                self.try_add_cp(msg.r)
+                # call_later(1, self.factory.gossip, msg)
+                self.factory.gossip(msg)
 
     def try_add_cp(self, r):
         """
@@ -245,7 +265,7 @@ class TrustChainRunner:
         logging.debug("TC: adding CP in round {}".format(r))
         self.tc.new_cp(1,
                        self.round_states[r].received_cons,
-                       self.round_states[r].received_sigs,
+                       self.round_states[r].received_sigs.values(),
                        self.factory.promoters)
 
         # new promoters are selected using the latest CP, these promoters are responsible for round r+1

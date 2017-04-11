@@ -218,16 +218,27 @@ class MyFactory(Factory):
         for node in set(self.peers.keys()) - set(self.promoters):
             self.send(node, msg)
 
-    def tplus1_promoter_cast(self, msg):
+    def gossip(self, msg):
         """
-        Send `msg` to t+1 promoters instead of all,
-        useful for when the population is much higher than the number of promoters,
-        do not use when the population is close to the number of promoters.
+        Receivers of the gossiped currently needs to manually decide whether it wants to forward it.
+        TODO create a special gossip message type and do the gossiping/forwarding on the base class.
         :param msg: 
         :return: 
         """
-        for promoter in random.sample(self.promoters, self.config.t + 1):
-            self.send(promoter, msg)
+        fan_out = min(self.config.fan_out, self.config.n)
+        for node in random.sample(self.peers.keys(), fan_out):
+            self.send(node, msg)
+
+    def gossip_except(self, exception, msg):
+        new_set = set(self.peers.keys()) - set(exception)
+        fan_out = min(self.config.fan_out, self.config.n, len(new_set))
+        nodes = random.sample(new_set, fan_out)
+        for node in nodes:
+            self.send(node, msg)
+
+    def multicast(self, nodes, msg):
+        for node in nodes:
+            self.send(node, msg)
 
     def send(self, node, msg):
         proto = self.peers[node][2]
@@ -296,7 +307,7 @@ class Config:
     All the static settings, used in Factory
     Should be singleton
     """
-    def __init__(self, port, n, t, test, value, failure, tx_rate, consensus_delay, large_network):
+    def __init__(self, port, n, t, test, value, failure, tx_rate, consensus_delay, large_network, fan_out):
         """
         This only stores the config necessary at runtime, so not necessarily all the information from argparse
         :param port:
@@ -327,6 +338,8 @@ class Config:
         self.consensus_delay = consensus_delay
 
         self.large_network = large_network
+
+        self.fan_out = fan_out
 
 
 def run(config, bcast, discovery_addr):
@@ -426,6 +439,12 @@ if __name__ == '__main__':
         help='use this option when population >> n'
     )
     parser.add_argument(
+        '--fan-out',
+        type=int,
+        default=10,
+        help='fan-out parameter for gossiping'
+    )
+    parser.add_argument(
         '--test',
         choices=['dummy', 'bracha', 'mo14', 'acs', 'tc', 'bootstrap'],
         help='[testing] choose an algorithm to initialise'
@@ -458,5 +477,5 @@ if __name__ == '__main__':
 
     set_logging(args.loglevel, args.output)
     run(Config(args.port, args.n, args.t, args.test, args.value, args.failure, args.tx_rate, args.consensus_delay,
-               args.large_network),
+               args.large_network, args.fan_out),
         args.broadcast, args.discovery)

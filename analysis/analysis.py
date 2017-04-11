@@ -164,7 +164,8 @@ if __name__ == '__main__':
     consensus_dirs = expand_vars_in_key({
         "$HOME/tudelft/consensus-experiment/consensus-500-5": ("1250 tx/s", 'x--'),
         "$HOME/tudelft/consensus-experiment/consensus-500-2": ("500 tx/s", 'o-'),
-        "$HOME/tudelft/consensus-experiment/consensus-500-0": ("0tx/s", '^:'),
+        "$HOME/tudelft/consensus-experiment/consensus-500-1": ("250 tx/s", 's-.'),
+        "$HOME/tudelft/consensus-experiment/consensus-500-0": ("0tx/s", '^:')
     })
 
     fns = {'consensus': plot_consensus}
