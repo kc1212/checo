@@ -242,8 +242,9 @@ def generate_tc_pair(n_cp, n_tx):
 
     for i in range(n_cp):
         for j in range(n_tx):
-            block_s, block_r = gen_txblock(tc_s.latest_hash, tc_r.latest_hash, vk_s, sk_s, vk_r, sk_r, tc_s.next_h, tc_r.next_h, "123test")
-
+            block_s, block_r = gen_txblock(tc_s.latest_hash, tc_r.latest_hash,
+                                           vk_s, sk_s, vk_r, sk_r,
+                                           tc_s.next_h, tc_r.next_h, "123test")
             tc_s.new_tx(block_s)
             tc_r.new_tx(block_r)
 
@@ -254,23 +255,33 @@ def generate_tc_pair(n_cp, n_tx):
         tc_s.new_cp(1, cons, ss, vks)
         tc_r.new_cp(1, cons, ss, vks)
 
+    assert tc_r.my_chain.tx_count == n_cp * n_tx
+    assert tc_r.my_chain.cp_count == n_cp
+
+    assert tc_s.my_chain.tx_count == n_cp * n_tx
+    assert tc_s.my_chain.cp_count == n_cp
+
     return tc_s, tc_r
 
 
-@pytest.mark.parametrize("seq,n_cp,n_tx", [
-    (4, 3, 5),
-    (7, 3, 5)
+@pytest.mark.parametrize("seq,n_cp,n_tx,expected", [
+    (4, 3, 5, ValidityState.Valid),
+    (7, 3, 5, ValidityState.Valid),
+    (15, 3, 5, ValidityState.Unknown)
 ])
-def test_pieces(seq, n_cp, n_tx):
+def test_validation(seq, n_cp, n_tx, expected):
     """
     
     :param seq: 
     :param n_cp: 
     :param n_tx: 
+    :param expected:
     :return: 
     """
     tc_s, tc_r = generate_tc_pair(n_cp, n_tx)
     seq_r = tc_s.my_chain.chain[seq].inner.h_r
     resp = tc_r.pieces(seq_r)
-    assert tc_s.verify(seq, resp) == ValidityState.Valid
+    #
+    r = seq / (n_tx + 1) + 1
+    assert tc_s.verify(seq, r, r+1, resp) == expected
 

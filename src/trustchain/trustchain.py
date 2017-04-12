@@ -529,20 +529,25 @@ class TrustChain:
         :param r: the round which `cp` is expected to be in
         :return: 
         """
+        if r not in self.consensus:
+            return False
         cons = self.consensus[r]
-        return any(map(lambda b: b == cp, cons.blocks))
+        return any(map(lambda b: b.hash == cp.hash and b.round == cp.round, cons.blocks))
 
     def pieces(self, seq):
         # type: (int) -> List[Union[CpBlock, TxBlock]]
         return self.my_chain.pieces(seq)
 
-    def verify(self, seq, resp=None):
-        # type: (int, List[Union[CpBlock, TxBlock]]) -> ValidityState
+    def verify(self, seq, r_a, r_b, resp=None):
+        # type: (int, int, int, List[Union[CpBlock, TxBlock]]) -> ValidityState
         """
-        We want to verify one of our own TX with sequence number (height) `seq`
+        We want to verify one of our own TX with expected round numbers that contains the consensus result of the piece
+        and the sequence number (height) `seq` that contains the pair
         against some result `resp` we got from the counterparty.
         If the `resp` is empty, we try to use data in the cache (TODO).
         :param seq:
+        :param r_a: round which resp[0] is in consensus
+        :param r_b: round which resp[-1] is in consensus
         :param resp:
         :return:
         """
@@ -562,14 +567,8 @@ class TrustChain:
         assert isinstance(peer_cp_a, CpBlock)
         assert isinstance(peer_cp_b, CpBlock)
 
-        my_cp_a = self.my_chain.get_cp_of_round(peer_cp_a.round)
-        my_cp_b = self.my_chain.get_cp_of_round(peer_cp_b.round)
-
-        if my_cp_a is None or my_cp_b is None:
+        if not (self.in_consensus(peer_cp_a, r_a) and self.in_consensus(peer_cp_b, r_b)):
             return ValidityState.Unknown
-
-        if my_cp_a.inner.cons_hash != peer_cp_a.inner.cons_hash or my_cp_b.inner.cons_hash != peer_cp_b.inner.cons_hash:
-            return ValidityState.Invalid
 
         if not hash_pointers_ok(resp):
             # we return Unknown here instead of Invalid because the message may be corrupted
