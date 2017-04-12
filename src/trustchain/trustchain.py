@@ -4,7 +4,7 @@ import abc
 import copy
 import logging
 from base64 import b64encode
-from typing import List, Union, Dict
+from typing import List, Union, Dict, Tuple
 from enum import Enum
 
 
@@ -352,6 +352,14 @@ class Chain:
         self.chain.append(cp)
         self._cp_count += 1
 
+    def get_cp_of_round(self, r):
+        # TODO an optimisation would be to begin from the back side if 'r' is large
+        for block in self.chain:
+            if isinstance(block, CpBlock):
+                if block.round == r:
+                    return block
+        return None
+
     @property
     def latest_hash(self):
         # type: () -> str
@@ -468,30 +476,69 @@ class TrustChain:
         # type: () -> int
         return self.my_chain.cp_count
 
-    def pieces(self, tx):
+    def pieces(self, seq):
+        # type: (int) -> List[Union[CpBlock, TxBlock]]
         """
         tx must exist, return the pieces of tx
-        :param tx:
+        :param seq:
         :return: List<Block>
         """
-        raise NotImplementedError
+        c_a, c_b = self._enclosure(seq)
+        if c_a is None or c_b is None:
+            return []
 
-    def verify(self, tx, resp):
+        # the height (h) should always be correct, since it is checked when adding new CP
+        return self.my_chain.chain[c_a.h:c_b.h + 1]
+
+    def verify(self, seq, resp=None):
+        # type: (int, List[Union[CpBlock, TxBlock]]) -> ValidityState
         """
-
-        :param tx:
+        We want to verify one of our own TX with sequence number (height) `seq`
+        against some result `resp` we got from the counterparty.
+        If the `resp` is empty, we try to use data in the cache (TODO).
+        :param seq:
         :param resp:
         :return:
         """
-        raise NotImplementedError
+        if resp is None:
+            raise NotImplemented
 
-    def _enclosure(self, tx):
+        tx = self.my_chain.chain[seq]
+        assert isinstance(tx, TxBlock)
+
+        # check that I also have the same CP blocks
+        # hash pointers are ok
+        # check the pair is in the received blocks
+
+
+
+        return ValidityState.Unknown
+
+    def _enclosure(self, seq):
+        # type: (int) -> Tuple[CpBlock, CpBlock]
         """
-
-        :param tx:
+        Finds two CP blocks that encloses a TX block with a sequence number `seq`
+        :param seq: the sequence number of interest, must be a TX block
         :return: (CpBlock, CpBlock)
         """
-        raise NotImplementedError
+        tx = self.my_chain.chain[seq]
+        assert isinstance(tx, TxBlock)
+
+        cp_a = cp_b = None
+
+        for i in xrange(seq - 1, -1, -1):
+            cp = self.my_chain.chain[i]
+            if isinstance(cp, CpBlock):
+                cp_a = cp
+                break
+
+        for i in xrange(seq + 1, len(self.my_chain.chain)):
+            cp = self.my_chain.chain[i]
+            if isinstance(cp, CpBlock):
+                cp_b = cp
+                break
+
+        return cp_a, cp_b
 
 
 # EqHash.register(Signature)

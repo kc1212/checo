@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python2
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -19,7 +19,7 @@ def extract_file(file_name):
         zip_ref.extractall(dir_name)
         zip_ref.close()
     except OSError as e:
-        print("File already extracted, exception: {}".format(e))
+        print "File already extracted, exception: {}".format(e)
 
 
 def extract_files(folder_name):
@@ -27,7 +27,7 @@ def extract_files(folder_name):
         for f in files:
             if f.split('.')[-1] == 'zip':
                 full_path = os.path.join(root, f)
-                print("trying to extract {}".format(full_path))
+                print "trying to extract {}".format(full_path)
                 extract_file(full_path)
 
 
@@ -51,7 +51,7 @@ def plot_consensus(dirs):
         res = np.transpose(res)
         return res
 
-    for k, v in sorted(dirs.items()):
+    for k, v in sorted(dirs.iteritems()):
         legend = v[0]
         style = v[1]
         res = extract_data(k)
@@ -88,8 +88,17 @@ def _read_inverval_stats(match, fnames):
         lines_of_interest = find_lines_of_interest(match, fname)
 
         times = [datetime_from_line(line) for line in lines_of_interest]
+        idx = 0
         for a, b in zip(times, times[1:]):
-            differences.append(difference_in_seconds(a, b))
+            if "round {}".format(idx+1) in lines_of_interest[idx] \
+                    and "round {}".format(idx+2) in lines_of_interest[idx+1]:
+                differences.append(difference_in_seconds(a, b))
+                idx += 1
+            else:
+                print "a round is skipped: round {} in file {}\n" \
+                      "\t{}\n" \
+                      "\t{}".format(idx, fname, lines_of_interest[idx+1], lines_of_interest[idx+2])
+                break
 
     return np.mean(differences), np.std(differences)
 
@@ -157,7 +166,7 @@ def difference_in_seconds(a, b):
 
 
 def expand_vars_in_key(s):
-    return {os.path.expandvars(k): v for k, v in s.items()}
+    return {os.path.expandvars(k): v for k, v in s.iteritems()}
 
 
 if __name__ == '__main__':
@@ -165,7 +174,8 @@ if __name__ == '__main__':
         "$HOME/tudelft/consensus-experiment/consensus-500-5": ("1250 tx/s", 'x--'),
         "$HOME/tudelft/consensus-experiment/consensus-500-2": ("500 tx/s", 'o-'),
         "$HOME/tudelft/consensus-experiment/consensus-500-1": ("250 tx/s", 's-.'),
-        "$HOME/tudelft/consensus-experiment/consensus-500-0": ("0tx/s", '^:')
+        "$HOME/tudelft/consensus-experiment/consensus-500-0": ("0 tx/s", '^:'),
+        "$HOME/tudelft/consensus-experiment/consensus-500-4-gossip": ("1000 tx/s (with gossip)", '+--')
     })
 
     fns = {'consensus': plot_consensus}

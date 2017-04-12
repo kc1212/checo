@@ -17,7 +17,7 @@ from src.utils.messages import \
     BrachaMsg, Mo14Msg, ACSMsg, \
     ChainMsg, SigMsg, CpMsg, ConsMsg, \
     InstructionMsg
-from src.utils.utils import Replay, Handled, set_logging, my_err_back, call_later, MAX_LINE_LEN
+from src.utils import Replay, Handled, set_logging, my_err_back, call_later, MAX_LINE_LEN
 from src.consensus.bracha import Bracha
 from src.consensus.acs import ACS
 from src.consensus.mo14 import Mo14
@@ -430,7 +430,7 @@ if __name__ == '__main__':
     parser.add_argument(
         '--consensus-delay',
         type=int,
-        default=1,
+        default=5,
         help='delay in seconds between consensus rounds'
     )
     parser.add_argument(

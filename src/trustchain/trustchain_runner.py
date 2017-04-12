@@ -7,7 +7,7 @@ import logging
 from collections import defaultdict
 
 from trustchain import TrustChain, TxBlock, CpBlock, Signature, Cons
-from src.utils.utils import Replay, Handled, collate_cp_blocks, my_err_back, call_later
+from src.utils.utils import Replay, Handled, collate_cp_blocks, my_err_back
 from src.utils.messages import SynMsg, SynAckMsg, AckMsg, SigMsg, CpMsg, ConsMsg
 
 
@@ -187,11 +187,11 @@ class TrustChainRunner:
             future_promoters = cons.get_promoters(self.factory.config.n)
             s = Signature(self.tc.vk, self.tc.sk, cons.hash)
 
-            self.factory.multicast(future_promoters, ConsMsg(cons))
             self.factory.gossip_except(future_promoters, ConsMsg(cons))
+            self.factory.multicast(future_promoters, ConsMsg(cons))
 
-            self.factory.multicast(future_promoters, SigMsg(s, r))
             self.factory.gossip_except(future_promoters, SigMsg(s, r))
+            self.factory.multicast(future_promoters, SigMsg(s, r))
 
             # we also try to add the CP here because we may receive the signatures before the actual CP
             self.try_add_cp(r)
@@ -209,7 +209,6 @@ class TrustChainRunner:
             if is_new:
                 self.try_add_cp(msg.r)
                 self.factory.gossip(msg)
-                # call_later(1, self.factory.gossip, msg)
 
     def handle_cp(self, msg, remote_vk):
         # type: (CpMsg, str) -> None
@@ -241,7 +240,6 @@ class TrustChainRunner:
         :return: 
         """
         if self.tc.latest_round >= r:
-            # TODO verify the meaning of tc.latest_round
             logging.debug("TC: already added the CP")
             return
         if self.round_states[r].received_cons is None:

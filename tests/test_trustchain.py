@@ -1,6 +1,6 @@
 import pytest
 from typing import Tuple
-from src.trustchain.trustchain import *
+from src.trustchain import *
 
 
 @pytest.fixture
