@@ -7,6 +7,7 @@ from base64 import b64encode
 from typing import List, Union, Dict, Tuple
 from enum import Enum
 
+from src.utils import hash_pointers_ok
 
 ValidityState = Enum('ValidityState', 'Valid Invalid Unknown')
 
@@ -393,6 +394,46 @@ class Chain:
         # type: () -> int
         return self._cp_count
 
+    def pieces(self, seq):
+        # type: (int) -> List[Union[CpBlock, TxBlock]]
+        """
+        tx must exist, return the pieces of tx
+        :param seq:
+        :return: List<Block>
+        """
+        c_a, c_b = self.enclosure(seq)
+        if c_a is None or c_b is None:
+            return []
+
+        # the height (h) should always be correct, since it is checked when adding new CP
+        return self.chain[c_a.h:c_b.h + 1]
+
+    def enclosure(self, seq):
+        # type: (int) -> Tuple[CpBlock, CpBlock]
+        """
+        Finds two CP blocks that encloses a TX block with a sequence number `seq`
+        :param seq: the sequence number of interest, must be a TX block
+        :return: (CpBlock, CpBlock)
+        """
+        tx = self.chain[seq]
+        assert isinstance(tx, TxBlock)
+
+        cp_a = cp_b = None
+
+        for i in xrange(seq - 1, -1, -1):
+            cp = self.chain[i]
+            if isinstance(cp, CpBlock):
+                cp_a = cp
+                break
+
+        for i in xrange(seq + 1, len(self.chain)):
+            cp = self.chain[i]
+            if isinstance(cp, CpBlock):
+                cp_b = cp
+                break
+
+        return cp_a, cp_b
+
 
 class TrustChain:
     """
@@ -476,19 +517,24 @@ class TrustChain:
         # type: () -> int
         return self.my_chain.cp_count
 
+    @property
+    def latest_cp(self):
+        return self.my_chain.latest_cp
+
+    def in_consensus(self, cp, r):
+        # type: (CpBlock) -> bool
+        """
+        Given someone else's CP block, this function checks whether it's in some consensus result
+        :param cp: 
+        :param r: the round which `cp` is expected to be in
+        :return: 
+        """
+        cons = self.consensus[r]
+        return any(map(lambda b: b == cp, cons.blocks))
+
     def pieces(self, seq):
         # type: (int) -> List[Union[CpBlock, TxBlock]]
-        """
-        tx must exist, return the pieces of tx
-        :param seq:
-        :return: List<Block>
-        """
-        c_a, c_b = self._enclosure(seq)
-        if c_a is None or c_b is None:
-            return []
-
-        # the height (h) should always be correct, since it is checked when adding new CP
-        return self.my_chain.chain[c_a.h:c_b.h + 1]
+        return self.my_chain.pieces(seq)
 
     def verify(self, seq, resp=None):
         # type: (int, List[Union[CpBlock, TxBlock]]) -> ValidityState
@@ -509,37 +555,33 @@ class TrustChain:
         # check that I also have the same CP blocks
         # hash pointers are ok
         # check the pair is in the received blocks
+        # TODO what about the round diff?
 
+        peer_cp_a = resp[0]
+        peer_cp_b = resp[-1]
+        assert isinstance(peer_cp_a, CpBlock)
+        assert isinstance(peer_cp_b, CpBlock)
 
+        my_cp_a = self.my_chain.get_cp_of_round(peer_cp_a.round)
+        my_cp_b = self.my_chain.get_cp_of_round(peer_cp_b.round)
 
-        return ValidityState.Unknown
+        if my_cp_a is None or my_cp_b is None:
+            return ValidityState.Unknown
 
-    def _enclosure(self, seq):
-        # type: (int) -> Tuple[CpBlock, CpBlock]
-        """
-        Finds two CP blocks that encloses a TX block with a sequence number `seq`
-        :param seq: the sequence number of interest, must be a TX block
-        :return: (CpBlock, CpBlock)
-        """
-        tx = self.my_chain.chain[seq]
-        assert isinstance(tx, TxBlock)
+        if my_cp_a.inner.cons_hash != peer_cp_a.inner.cons_hash or my_cp_b.inner.cons_hash != peer_cp_b.inner.cons_hash:
+            return ValidityState.Invalid
 
-        cp_a = cp_b = None
+        if not hash_pointers_ok(resp):
+            # we return Unknown here instead of Invalid because the message may be corrupted
+            return ValidityState.Unknown
 
-        for i in xrange(seq - 1, -1, -1):
-            cp = self.my_chain.chain[i]
-            if isinstance(cp, CpBlock):
-                cp_a = cp
-                break
+        def contains_h(h, bs):
+            return any(map(lambda b: b.h == h, bs))
 
-        for i in xrange(seq + 1, len(self.my_chain.chain)):
-            cp = self.my_chain.chain[i]
-            if isinstance(cp, CpBlock):
-                cp_b = cp
-                break
+        if not contains_h(tx.inner.h_r, resp):
+            return ValidityState.Invalid
 
-        return cp_a, cp_b
-
+        return ValidityState.Valid
 
 # EqHash.register(Signature)
 # EqHash.register(TxBlockInner)

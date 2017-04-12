@@ -75,6 +75,15 @@ def call_later(delay, f, *args, **kw):
     task.deferLater(reactor, delay, f, *args, **kw).addErrback(my_err_back)
 
 
+def hash_pointers_ok(blocks):
+    prev = blocks[0].hash
+    for b in blocks[1:]:
+        if b.prev != prev:
+            return False
+        prev = b.hash
+    return True
+
+
 def my_err_back(failure):
     logging.error(failure.getErrorMessage())
     logging.error(failure.getTraceback())

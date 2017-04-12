@@ -1,6 +1,6 @@
 import pytest
-from typing import Tuple
 from src.trustchain import *
+from src.utils import hash_pointers_ok
 
 
 @pytest.fixture
@@ -167,10 +167,12 @@ def test_cp_chain(n, m):
             chain.new_cp(cp)
 
     assert chain.cp_count == m
+    assert hash_pointers_ok(chain.chain)
 
 
 @pytest.mark.parametrize("m", [
     4,
+    8,
 ])
 def test_tx_chain(m):
     """
@@ -199,6 +201,8 @@ def test_tx_chain(m):
 
     assert chain_s.tx_count == m
     assert chain_r.tx_count == m
+    assert hash_pointers_ok(chain_s.chain)
+    assert hash_pointers_ok(chain_r.chain)
 
 
 @pytest.mark.parametrize("n, x, ps", [
@@ -217,3 +221,56 @@ def test_promoter(n, x, ps):
     promoters = cons.get_promoters(x)
 
     assert len(promoters) == ps
+
+
+def generate_tc_pair(n_cp, n_tx):
+    """
+    
+    :param n_cp: number of CP blocks excluding the genesis block
+    :param n_tx: number of TX blocks in between CP blocks
+    :return: 
+    """
+    tc_s = TrustChain()
+    vk_s = tc_s.vk
+    sk_s = tc_s.sk
+
+    tc_r = TrustChain()
+    vk_r = tc_r.vk
+    sk_r = tc_r.sk
+
+    vks = [vk_s, vk_r]
+
+    for i in range(n_cp):
+        for j in range(n_tx):
+            block_s, block_r = gen_txblock(tc_s.latest_hash, tc_r.latest_hash, vk_s, sk_s, vk_r, sk_r, tc_s.next_h, tc_r.next_h, "123test")
+
+            tc_s.new_tx(block_s)
+            tc_r.new_tx(block_r)
+
+        r = i + 1
+        cons = Cons(r, [tc_s.latest_cp, tc_r.latest_cp])
+        ss = [Signature(vk_s, sk_s, cons.hash), Signature(vk_r, sk_r, cons.hash)]
+
+        tc_s.new_cp(1, cons, ss, vks)
+        tc_r.new_cp(1, cons, ss, vks)
+
+    return tc_s, tc_r
+
+
+@pytest.mark.parametrize("seq,n_cp,n_tx", [
+    (4, 3, 5),
+    (7, 3, 5)
+])
+def test_pieces(seq, n_cp, n_tx):
+    """
+    
+    :param seq: 
+    :param n_cp: 
+    :param n_tx: 
+    :return: 
+    """
+    tc_s, tc_r = generate_tc_pair(n_cp, n_tx)
+    seq_r = tc_s.my_chain.chain[seq].inner.h_r
+    resp = tc_r.pieces(seq_r)
+    assert tc_s.verify(seq, resp) == ValidityState.Valid
+

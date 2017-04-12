@@ -81,7 +81,10 @@ class TrustChainRunner:
         self.new_consensus_lc_count = 0
         self.cp_q = Queue()
 
-        # attributes below are states used for negotiating transaction
+        # states below are states used for negotiating transaction
+        # TODO these states are really ugly and error prone,
+        # TODO refactor them into another class, e.g. IntermediateTX
+        # TODO the lock is also not ideal, prefer to chain up Deferred
         self.tx_locked = False  # only process one transaction at a time, otherwise there'll be hash pointer collisions
         self.block_r = None  # type: TxBlock
         self.tx_id = -1  # type: int
