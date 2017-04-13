@@ -8,7 +8,7 @@ from collections import defaultdict
 
 from trustchain import TrustChain, TxBlock, CpBlock, Signature, Cons
 from src.utils.utils import Replay, Handled, collate_cp_blocks, my_err_back
-from src.utils.messages import SynMsg, SynAckMsg, AckMsg, SigMsg, CpMsg, ConsMsg
+from src.utils.messages import SynMsg, AbortMsg, SynAckMsg, AckMsg, SigMsg, CpMsg, ConsMsg
 
 
 class RoundState:
@@ -65,10 +65,10 @@ class TrustChainRunner:
         self.consensus_delay = factory.config.consensus_delay
 
         self.recv_lc = task.LoopingCall(self.process_recv_q)
-        self.recv_lc.start(0.2, False).addErrback(my_err_back)
+        self.recv_lc.start(0.1, False).addErrback(my_err_back)
 
         self.send_lc = task.LoopingCall(self.process_send_q)
-        self.send_lc.start(0.2, False).addErrback(my_err_back)
+        self.send_lc.start(0.1, False).addErrback(my_err_back)
 
         self.collect_rubbish_lc = task.LoopingCall(self.collect_rubbish)
         self.collect_rubbish_lc.start(5, False).addErrback(my_err_back)
@@ -92,7 +92,9 @@ class TrustChainRunner:
         self.s_s = None  # type: Signature
         self.m = None  # type: str
         self.prev_r = None  # type: str
+
         self.continuous_tx = False
+        self.random_node_for_tx = False
 
         # attributes below are states for building new CP blocks
         self.round_states = defaultdict(RoundState)
@@ -323,7 +325,15 @@ class TrustChainRunner:
     def handle(self, msg, src):
         # type: (Union[SynMsg, SynAckMsg, AckMsg]) -> None
         logging.debug("TC: got message".format(msg))
-        self.recv_q.put((msg, src))
+        if isinstance(msg, AbortMsg):
+            if self.tx_locked and self.tx_id == msg.tx_id:
+                self.reset_state()
+
+                # restart continuous TX after some abort happens
+                if self.continuous_tx:
+                    self.make_tx_continuously(self.random_node_for_tx)
+        else:
+            self.recv_q.put((msg, src))
 
     def process_recv_q(self):
         logging.debug("TC: processing recv_q, size: {}".format(self.recv_q.qsize()))
@@ -353,14 +363,15 @@ class TrustChainRunner:
                 raise AssertionError("Incorrect message type")
 
     def process_send_q(self):
+        """
+        Only process one at a time, because if the state gets locked after processing one until we receive SynAck
+        :return: 
+        """
         logging.debug("TC: processing send_q, size: {}".format(self.send_q.qsize()))
-        qsize = self.send_q.qsize()
-        cnt = 0
-        while not self.send_q.empty() and cnt < qsize:
+        if not self.send_q.empty():
             if self.tx_locked:
                 return
 
-            cnt += 1
             m, node = self.send_q.get()
 
             tx_id = random.randint(0, 2**31 - 1)
@@ -393,8 +404,9 @@ class TrustChainRunner:
         logging.debug("TC: processing syn msg {}".format(msg))
         # put the processing in queue if I'm locked
         if self.tx_locked:
-            logging.debug("TC: we're locked, putting syn message in queue")
-            return Replay()
+            logging.debug("TC: we're locked, aborting")
+            self.send(src, AbortMsg(msg.tx_id))
+            return Handled()
 
         # we're not locked, so proceed
         logging.debug("TC: not locked, proceeding")
@@ -438,9 +450,7 @@ class TrustChainRunner:
         prev_r = msg.prev
         h_r = msg.h
         s_r = msg.s
-        if tx_id != self.tx_id:
-            logging.debug("TC: not the tx_id we're expecting, putting it back to queue")
-            return Replay()
+        assert tx_id == self.tx_id, "TC: not the tx_id we're expecting"
 
         self.assert_after_syn_state()  # we initiated the syn
         assert src == self.src
@@ -466,7 +476,10 @@ class TrustChainRunner:
 
         # running tx continuously, so we start again
         if self.continuous_tx:
-            self._make_random_tx(self.factory.neighbour)
+            if self.random_node_for_tx:
+                self._make_tx(self.factory.random_node)
+            else:
+                self._make_tx(self.factory.neighbour)
 
     def process_ack(self, msg, src):
         # type: (AckMsg, str) -> Union[Handled, Replay]
@@ -492,39 +505,40 @@ class TrustChainRunner:
         logging.debug("TC: sending {} to {}".format(self.msg_wrapper_f(msg), b64encode(node)))
         self.factory.send(node, self.msg_wrapper_f(msg))
 
-    def make_random_tx_continuously(self):
+    def make_tx_continuously(self, random_node=False):
         self.continuous_tx = True
-        node = self.factory.neighbour_if_even()
-        if node is None:
-            # we do nothing, since we're not an even index
-            return
-        assert node != self.factory.vk
 
-        # typical bitcoin tx is 500 bytes
-        m = 'a' * random.randint(400, 600)
-        logging.debug("TC: {} making random tx to".format(b64encode(node)))
-        self.send_syn(node, m)
+        if random_node:
+            node = self.factory.random_node
+            self.random_node_for_tx = random_node
+        else:
+            node = self.factory.neighbour_if_even()
+            if node is None:
+                # we do nothing, since we're not an even index
+                return
+            assert node != self.factory.vk
 
-    def make_random_tx_periodically(self, interval):
-        # node = random.choice(self.factory.peers.keys())
-        # while node == self.factory.vk:
-        #     node = random.choice(self.factory.peers.keys())
+        self._make_tx(node)
 
-        node = self.factory.neighbour_if_even()
-        if node is None:
-            # we do nothing, since we're not an even index
-            return
-        assert node != self.factory.vk
+    def make_tx_periodically(self, interval, random_node=False):
+        if random_node:
+            lc = task.LoopingCall(self._make_tx, self.factory.random_node)
+        else:
+            node = self.factory.neighbour_if_even()
+            if node is None:
+                # we do nothing, since we're not an even index
+                return
+            assert node != self.factory.vk
 
-        logging.info("TC: making TX with {}".format(b64encode(node)))
-        lc = task.LoopingCall(self._make_random_tx, node)
+            lc = task.LoopingCall(self._make_tx, node)
+
         lc.start(interval).addErrback(my_err_back)
 
-    def _make_random_tx(self, node):
+    def _make_tx(self, node):
         """
         :return: 
         """
-        if self.send_q.qsize() > 20 or self.recv_q.qsize() > 20:
+        if self.send_q.qsize() > 10 or self.recv_q.qsize() > 10:
             return
 
         # cannot be myself
@@ -532,7 +546,7 @@ class TrustChainRunner:
 
         # typical bitcoin tx is 500 bytes
         m = 'a' * random.randint(400, 600)
-        logging.debug("TC: {} making random tx to".format(b64encode(node)))
+        logging.debug("TC: {} making tx to".format(b64encode(node)))
         self.send_syn(node, m)
 
     def bootstrap_promoters(self):

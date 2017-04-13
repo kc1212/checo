@@ -253,6 +253,13 @@ class MyFactory(Factory):
         self.promoters = self.peers.keys()
 
     @property
+    def random_node(self):
+        node = random.choice(self.peers.keys())
+        while node == self.vk:
+            node = random.choice(self.peers.keys())
+        return node
+
+    @property
     def neighbour(self):
         """
         Expect all peers to be connected, return the verification key of the node that's after me, or loop back
@@ -284,15 +291,26 @@ class MyFactory(Factory):
         """
         assert isinstance(msg, InstructionMsg)
         logging.info("NODE: handling instruction {}".format(msg))
-        if msg.instruction == 'bootstrap':
-            call_later(msg.delay, self.tc_runner.bootstrap_promoters)
-        elif msg.instruction == 'tx-only':
+
+        call_later(msg.delay, self.tc_runner.bootstrap_promoters)
+
+        if msg.instruction == 'bootstrap-only':
+            pass
+
+        elif msg.instruction == 'tx-continuously':
+            call_later(msg.delay, self.tc_runner.make_tx_continuously, False)
+
+        elif msg.instruction == 'tx-continuously-random':
+            call_later(msg.delay, self.tc_runner.make_tx_continuously, True)
+
+        elif msg.instruction == 'tx-periodically':
             rate = float(msg.param)
-            call_later(msg.delay, self.tc_runner.make_random_tx_periodically, 1.0 / rate)
-        elif msg.instruction == 'bootstrap-tx':
+            call_later(msg.delay, self.tc_runner.make_tx_periodically, 1.0 / rate, False)
+
+        elif msg.instruction == 'tx-periodically-random':
             rate = float(msg.param)
-            call_later(msg.delay, self.tc_runner.bootstrap_promoters)
-            call_later(msg.delay, self.tc_runner.make_random_tx_periodically, 1.0 / rate)
+            call_later(msg.delay, self.tc_runner.make_tx_periodically, 1.0 / rate, True)
+
         else:
             raise AssertionError("Invalid instruction msg {}".format(msg))
 
@@ -380,9 +398,9 @@ def run(config, bcast, discovery_addr):
         call_later(6, f.acs.start, config.port, 1)
     elif config.test == 'tc':
         if config.tx_rate > 0:
-            call_later(5, f.tc_runner.make_random_tx_periodically, 1.0 / config.tx_rate)
+            call_later(5, f.tc_runner.make_tx_periodically, 1.0 / config.tx_rate, True)
         else:
-            call_later(5, f.tc_runner.make_random_tx_continuously)
+            call_later(5, f.tc_runner.make_tx_continuously, True)
     elif config.test == 'bootstrap':
         call_later(5, f.tc_runner.bootstrap_promoters)
 

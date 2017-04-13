@@ -100,8 +100,8 @@ def test_tx_periodically(n, t, rate, timeout, folder, discover):
 
 
 @pytest.mark.parametrize("n, t, timeout, expected", [
-    (4, 1, 15, 250),
-    (8, 2, 15, 500),
+    (4, 1, 15, 300),
+    (8, 2, 15, 700),
 ])
 def test_tx_continuously(n, t, timeout, expected, folder, discover):
     configs = []
