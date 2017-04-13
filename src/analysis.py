@@ -57,8 +57,8 @@ def plot_consensus(dirs):
         res = extract_data(k)
         plt.plot(res[0], res[1], style, label=legend)
 
-    plt.ylabel('Avg. time for one consensus round')
-    plt.xlabel('No. of promoters')
+    plt.ylabel('Avg. time for one consensus round (seconds)')
+    plt.xlabel('No. of facilitators (promoters)')
     plt.legend(loc='upper left')
     plt.grid()
     plt.show()
@@ -175,7 +175,9 @@ if __name__ == '__main__':
         "$HOME/tudelft/consensus-experiment/consensus-500-2": ("500 tx/s", 'o-'),
         "$HOME/tudelft/consensus-experiment/consensus-500-1": ("250 tx/s", 's-.'),
         "$HOME/tudelft/consensus-experiment/consensus-500-0": ("0 tx/s", '^:'),
-        "$HOME/tudelft/consensus-experiment/consensus-500-4-gossip": ("1000 tx/s (with gossip)", '+--')
+        # "$HOME/tudelft/consensus-experiment/consensus-500-4-gossip": ("1000 tx/s (with gossip)", '+--'),
+        "$HOME/tudelft/consensus-experiment/consensus-500-4-gossip2": ("1000 tx/s (with gossip)", '+--'),
+        "$HOME/tudelft/consensus-experiment/consensus-500-2-gossip2": ("500 tx/s (with gossip)", '+--')
     })
 
     fns = {'consensus': plot_consensus}

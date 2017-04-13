@@ -22,11 +22,30 @@ def check_promoter_match(n, t, r):
     assert tally >= n - t
 
 
-def run_consensus(n, t, m, failure):
+def print_profile_stats():
+    import pstats
+    p = pstats.Stats('profile.stats')
+    p.sort_stats('cumulative').print_stats()
+
+
+@pytest.mark.parametrize("n,t,m,failure,profile", [
+    (4, 1, 4, 'omission', False),
+    (4, 1, 8, 'omission', False),
+    (8, 2, 8, 'omission', False),
+    (8, 2, 16, 'omission', False),
+    (19, 6, 19, 'omission', True),
+    # (19, 6, 30, 'omission'),
+])
+def test_consensus(n, t, m, failure, profile, folder, discover):
     configs = []
+
     for i in range(m - t):
         port = GOOD_PORT + i
-        configs.append(make_args(port, n, t, test='bootstrap', output=DIR + str(port) + '.out', broadcast=False))
+        if profile and i == 0:
+            configs.append(make_args(port, n, t, profile=True, test='bootstrap', output=DIR + str(port) + '.out', broadcast=False))
+        else:
+            configs.append(make_args(port, n, t, test='bootstrap', output=DIR + str(port) + '.out', broadcast=False))
+
     for i in range(t):
         port = BAD_PORT + i
         configs.append(make_args(port, n, t, test='bootstrap', output=DIR + str(port) + '.out', broadcast=False,
@@ -38,17 +57,9 @@ def run_consensus(n, t, m, failure):
     # we use m instead of n because the consensus result should be propagated
     poll_check_f(8 * m, 5, ps, check_multiple_rounds, m, t, 3)
 
-
-@pytest.mark.parametrize("n,t,m,failure", [
-    (4, 1, 4, 'omission'),
-    (4, 1, 8, 'omission'),
-    (8, 2, 8, 'omission'),
-    (8, 2, 16, 'omission'),
-    # (19, 6, 19, 'omission'),
-    # (19, 6, 30, 'omission'),
-])
-def test_consensus(n, t, m, failure, folder, discover):
-    run_consensus(n, t, m, failure)
+    if profile:
+        time.sleep(1)
+        print_profile_stats()
 
 
 def check_tx(expected):

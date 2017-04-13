@@ -445,6 +445,11 @@ if __name__ == '__main__':
         help='fan-out parameter for gossiping'
     )
     parser.add_argument(
+        '--profile',
+        action='store_true',
+        help='run the node with cProfile'
+    )
+    parser.add_argument(
         '--test',
         choices=['dummy', 'bracha', 'mo14', 'acs', 'tc', 'bootstrap'],
         help='[testing] choose an algorithm to initialise'
@@ -476,6 +481,14 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     set_logging(args.loglevel, args.output)
-    run(Config(args.port, args.n, args.t, args.test, args.value, args.failure, args.tx_rate, args.consensus_delay,
-               args.large_network, args.fan_out),
-        args.broadcast, args.discovery)
+
+    def _run():
+        run(Config(args.port, args.n, args.t, args.test, args.value, args.failure, args.tx_rate, args.consensus_delay,
+                   args.large_network, args.fan_out),
+            args.broadcast, args.discovery)
+
+    if args.profile:
+        import cProfile
+        cProfile.run('_run()', 'profile.stats')
+    else:
+        _run()
