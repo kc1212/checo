@@ -260,6 +260,18 @@ class MyFactory(Factory):
         return node
 
     @property
+    def random_node_odd(self):
+        node = random.choice(self.peers.keys())
+        while node == self.vk or self.even_idx(node):
+            node = random.choice(self.peers.keys())
+        return node
+
+    def even_idx(self, node):
+        sorted_keys = sorted(self.peers.keys())
+        their_idx = sorted_keys.index(node)
+        return their_idx % 2 == 0
+
+    @property
     def neighbour(self):
         """
         Expect all peers to be connected, return the verification key of the node that's after me, or loop back

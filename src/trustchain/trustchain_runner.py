@@ -8,7 +8,7 @@ from collections import defaultdict
 
 from trustchain import TrustChain, TxBlock, CpBlock, Signature, Cons
 from src.utils.utils import Replay, Handled, collate_cp_blocks, my_err_back
-from src.utils.messages import SynMsg, AbortMsg, SynAckMsg, AckMsg, SigMsg, CpMsg, ConsMsg
+from src.utils.messages import SynMsg, SynAckMsg, AckMsg, SigMsg, CpMsg, ConsMsg
 
 
 class RoundState:
@@ -94,7 +94,7 @@ class TrustChainRunner:
         self.prev_r = None  # type: str
 
         self.continuous_tx = False
-        self.random_node_for_tx = False
+        self.use_random_node_for_tx = False
 
         # attributes below are states for building new CP blocks
         self.round_states = defaultdict(RoundState)
@@ -325,15 +325,7 @@ class TrustChainRunner:
     def handle(self, msg, src):
         # type: (Union[SynMsg, SynAckMsg, AckMsg]) -> None
         logging.debug("TC: got message".format(msg))
-        if isinstance(msg, AbortMsg):
-            if self.tx_locked and self.tx_id == msg.tx_id:
-                self.reset_state()
-
-                # restart continuous TX after some abort happens
-                if self.continuous_tx:
-                    self.make_tx_continuously(self.random_node_for_tx)
-        else:
-            self.recv_q.put((msg, src))
+        self.recv_q.put((msg, src))
 
     def process_recv_q(self):
         logging.debug("TC: processing recv_q, size: {}".format(self.recv_q.qsize()))
@@ -404,9 +396,8 @@ class TrustChainRunner:
         logging.debug("TC: processing syn msg {}".format(msg))
         # put the processing in queue if I'm locked
         if self.tx_locked:
-            logging.debug("TC: we're locked, aborting")
-            self.send(src, AbortMsg(msg.tx_id))
-            return Handled()
+            logging.debug("TC: we're locked, putting syn in queue")
+            return Replay()
 
         # we're not locked, so proceed
         logging.debug("TC: not locked, proceeding")
@@ -476,8 +467,8 @@ class TrustChainRunner:
 
         # running tx continuously, so we start again
         if self.continuous_tx:
-            if self.random_node_for_tx:
-                self._make_tx(self.factory.random_node)
+            if self.use_random_node_for_tx:
+                self._make_tx(self.factory.random_node_odd)
             else:
                 self._make_tx(self.factory.neighbour)
 
@@ -505,28 +496,31 @@ class TrustChainRunner:
         logging.debug("TC: sending {} to {}".format(self.msg_wrapper_f(msg), b64encode(node)))
         self.factory.send(node, self.msg_wrapper_f(msg))
 
-    def make_tx_continuously(self, random_node=False):
-        self.continuous_tx = True
+    def make_tx_continuously(self, use_random_node=False):
+        if use_random_node:
+            if not self.factory.even_idx(self.tc.vk):
+                return
+            node = self.factory.random_node_odd
+            self.use_random_node_for_tx = use_random_node
 
-        if random_node:
-            node = self.factory.random_node
-            self.random_node_for_tx = random_node
         else:
             node = self.factory.neighbour_if_even()
             if node is None:
-                # we do nothing, since we're not an even index
                 return
             assert node != self.factory.vk
 
+        self.continuous_tx = True
         self._make_tx(node)
 
-    def make_tx_periodically(self, interval, random_node=False):
-        if random_node:
-            lc = task.LoopingCall(self._make_tx, self.factory.random_node)
+    def make_tx_periodically(self, interval, use_random_node=False):
+        if use_random_node:
+            if not self.factory.even_idx(self.tc.vk):
+                return
+            lc = task.LoopingCall(self._make_tx, self.factory.random_node_odd)
+
         else:
             node = self.factory.neighbour_if_even()
             if node is None:
-                # we do nothing, since we're not an even index
                 return
             assert node != self.factory.vk
 

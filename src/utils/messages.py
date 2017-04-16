@@ -93,10 +93,10 @@ class ACSMsg:
 
 class ChainMsg:
     """
-    Simple wrapper around SynMsg, AbortMsg, SynAckMsg and AckMsg
+    Simple wrapper around SynMsg, SynAckMsg and AckMsg
     """
     def __init__(self, body):
-        # type: (Union[SynMsg, AbortMsg, SynAckMsg, AckMsg]) -> None
+        # type: (Union[SynMsg, SynAckMsg, AckMsg]) -> None
         self.body = body
 
 
@@ -107,12 +107,6 @@ class SynMsg:
         self.prev = prev
         self.h = h
         self.m = m
-
-
-class AbortMsg:
-    def __init__(self, tx_id):
-        # type: (int) -> None
-        self.tx_id = tx_id
 
 
 class SynAckMsg:
