@@ -6,9 +6,9 @@ import random
 import logging
 from collections import defaultdict
 
-from trustchain import TrustChain, TxBlock, CpBlock, Signature, Cons
+from trustchain import TrustChain, TxBlock, CpBlock, Signature, Cons, ValidityState
 from src.utils.utils import Replay, Handled, collate_cp_blocks, my_err_back
-from src.utils.messages import SynMsg, AbortMsg, SynAckMsg, AckMsg, SigMsg, CpMsg, ConsMsg
+from src.utils.messages import SynMsg, AbortMsg, SynAckMsg, AckMsg, SigMsg, CpMsg, ConsMsg, ValidationReq, ValidationResp
 
 
 class RoundState:
@@ -95,6 +95,7 @@ class TrustChainRunner:
 
         self.continuous_tx = False
         self.random_node_for_tx = False
+        self.sent_validation_reqs = {}
 
         # attributes below are states for building new CP blocks
         self.round_states = defaultdict(RoundState)
@@ -321,6 +322,64 @@ class TrustChainRunner:
 
         # send new CP to either all promoters
         self.factory.promoter_cast(CpMsg(self.tc.my_chain.latest_cp))
+
+    def handle_validation_req(self, req, remote_vk):
+        # type: (ValidationReq, str) -> None
+        assert isinstance(req, ValidationReq)
+        logging.debug("TC: received validation req from {}".format(b64encode(remote_vk)))
+
+        pieces = self.tc.pieces(req.seq)
+
+        if len(pieces) == 0:
+            self.send(ValidationResp(req.id, False, -1, -1, None), remote_vk)
+            return
+
+        cp_a = pieces[0]
+        cp_b = pieces[-1]
+        r_a = self.tc.consensus_round_of_cp(cp_a)
+        r_b = self.tc.consensus_round_of_cp(cp_b)
+
+        if r_a == -1 or r_b == -1:
+            self.send(ValidationResp(req.id, False, -1, -1, None), remote_vk)
+            return
+
+        self.send(ValidationResp(req.id, True, r_a, r_b, pieces), remote_vk)
+
+    def handle_validation_resp(self, resp, remote_vk):
+        # type: (ValidationResp, str) -> None
+        assert isinstance(resp, ValidationResp)
+        assert resp.id in self.sent_validation_reqs
+        logging.debug("TC: received validation resp from {}".format(b64encode(remote_vk)))
+
+        seq = self.sent_validation_reqs[resp.id]
+        del self.sent_validation_reqs[resp.id]
+
+        if not resp.ok:
+            logging.debug("TC: resp not ready for tx: {}".format(seq))
+            return
+
+        res = self.tc.verify(seq, resp.r_a, resp.r_b, resp.pieces)
+        if res == ValidityState.Valid:
+            logging.info("TC: validation successful for tx: {}".format(seq))
+        else:
+            logging.info("TC: validation failed, tx: {}, res: {}".format(seq, res.value))
+
+    def send_validation_req(self, seq):
+        # type: (int) -> None
+        """
+        Call this function when I want to initiate a instance of the validation protocol.
+        A request ID will be generated and stored in sent_validation_reqs.
+        :param seq: The sequence number on my side for the TX that I want to validate
+        :return: 
+        """
+        block = self.tc.my_chain.chain[seq]
+        seq_r = block.inner.h_r
+        node = block.s_r.vk
+        req_id = random.randint(0, 2**31 - 1)
+        self.send(node, ValidationReq(req_id, seq_r))
+
+        # this needs to be removed when a response is received
+        self.sent_validation_reqs[req_id] = seq
 
     def handle(self, msg, src):
         # type: (Union[SynMsg, SynAckMsg, AckMsg]) -> None

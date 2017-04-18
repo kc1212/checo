@@ -1,7 +1,7 @@
 from base64 import b64encode
-from typing import Union, Dict
+from typing import Union, Dict, List
 
-from src.trustchain.trustchain import Signature, CpBlock, Cons
+from src.trustchain.trustchain import Signature, CpBlock, TxBlock, Cons
 
 
 class DiscoverMsg:
@@ -158,4 +158,21 @@ class ConsMsg:
     def r(self):
         # type: () -> int
         return self.cons.round
+
+
+class ValidationReq:
+    def __init__(self, id, seq):
+        # type: (int, int) -> None
+        self.id = id
+        self.seq = seq
+
+
+class ValidationResp:
+    def __init__(self, id, ok, r_a, r_b, pieces):
+        # type: (int, bool, int, int, List[Union[CpBlock, TxBlock]]) -> None
+        self.id = id
+        self.ok = ok
+        self.r_a = r_a
+        self.r_b = r_b
+        self.pieces = pieces
 

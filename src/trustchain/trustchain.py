@@ -318,16 +318,6 @@ def generate_genesis_block(vk, sk):
 
 
 class Chain:
-    """
-    enum Block {
-        TxBlock,
-        CpBlock,
-    }
-
-    // height (sequence number) should match the index
-    type Chain = List<Block>;
-    """
-
     def __init__(self, vk, sk):
         # type: (str, str) -> None
         self.vk = vk
@@ -519,12 +509,27 @@ class TrustChain:
 
     @property
     def latest_cp(self):
+        # type: () -> CpBlock
         return self.my_chain.latest_cp
+
+    def consensus_round_of_cp(self, cp):
+        # type: (CpBlock) -> int
+        """
+        Given a CP, find the consensus round that contains it
+        :param cp: 
+        :return: 
+        """
+        assert isinstance(cp, CpBlock)
+        for r in range(cp.round, self.my_chain.latest_round + 1):
+            if r in self.consensus:
+                if any(map(lambda b: b.hash == cp.hash, self.consensus[r].blocks)):
+                    return r
+        return -1
 
     def in_consensus(self, cp, r):
         # type: (CpBlock) -> bool
         """
-        Given someone else's CP block, this function checks whether it's in some consensus result
+        Given a CP block and a round, this function checks whether it's in some consensus result
         :param cp: 
         :param r: the round which `cp` is expected to be in
         :return: 

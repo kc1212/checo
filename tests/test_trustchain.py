@@ -279,6 +279,19 @@ def test_validation(seq, n_cp, n_tx, expected):
     :return: 
     """
     tc_s, tc_r = generate_tc_pair(n_cp, n_tx)
+
+    # genesis block should be in consensus in round 1
+    assert tc_s.consensus_round_of_cp(tc_s.my_chain.chain[0]) == 1
+    assert tc_r.consensus_round_of_cp(tc_r.my_chain.chain[0]) == 1
+
+    # final cp block should *not* be in consensus
+    assert tc_s.consensus_round_of_cp(tc_s.my_chain.chain[-1]) == -1
+    assert tc_r.consensus_round_of_cp(tc_r.my_chain.chain[-1]) == -1
+
+    # second to last cp block should be in consensus
+    assert tc_s.consensus_round_of_cp(tc_s.my_chain.chain[-2 - n_tx]) == n_cp
+    assert tc_r.consensus_round_of_cp(tc_r.my_chain.chain[-2 - n_tx]) == n_cp
+
     seq_r = tc_s.my_chain.chain[seq].inner.h_r
     resp = tc_r.pieces(seq_r)
     #
