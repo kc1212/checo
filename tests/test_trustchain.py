@@ -201,6 +201,7 @@ def test_tx_chain(m):
 
     assert chain_s.tx_count == m
     assert chain_r.tx_count == m
+
     assert hash_pointers_ok(chain_s.chain)
     assert hash_pointers_ok(chain_r.chain)
 
@@ -262,6 +263,17 @@ def generate_tc_pair(n_cp, n_tx):
     assert tc_s.my_chain.cp_count == n_cp
 
     return tc_s, tc_r
+
+
+@pytest.mark.parametrize("seq,n_cp,n_tx", [
+    (4, 3, 5),
+    (7, 3, 5),
+    (15, 3, 5),
+])
+def test_pieces(seq, n_cp, n_tx):
+    tc_s, tc_r = generate_tc_pair(n_cp, n_tx)
+    pieces = tc_s.my_chain.pieces(seq)
+    assert hash_pointers_ok(pieces)
 
 
 @pytest.mark.parametrize("seq,n_cp,n_tx,expected", [

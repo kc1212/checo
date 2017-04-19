@@ -297,15 +297,13 @@ class MyFactory(Factory):
         if msg.instruction == 'bootstrap-only':
             pass
 
+        # NOTE continuous transaction is broken and does not make sense when validation is used
+        # use periodic transaction because it gets automatically throttled when validation cannot keep up
         elif msg.instruction == 'tx-continuously':
             call_later(msg.delay, self.tc_runner.make_tx_continuously, False)
 
         elif msg.instruction == 'tx-continuously-random':
             call_later(msg.delay, self.tc_runner.make_tx_continuously, True)
-
-        elif msg.instruction == 'tx-continuously-random-validate':
-            call_later(msg.delay, self.tc_runner.make_tx_continuously, True)
-            call_later(msg.delay + 10, self.tc_runner.make_validation)
 
         elif msg.instruction == 'tx-periodically':
             rate = float(msg.param)

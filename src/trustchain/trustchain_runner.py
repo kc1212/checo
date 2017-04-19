@@ -7,7 +7,7 @@ import logging
 from collections import defaultdict
 
 from trustchain import TrustChain, TxBlock, CpBlock, Signature, Cons, ValidityState
-from src.utils.utils import Replay, Handled, collate_cp_blocks, my_err_back
+from src.utils.utils import Replay, Handled, collate_cp_blocks, my_err_back, hash_pointers_ok
 from src.utils.messages import SynMsg, AbortMsg, SynAckMsg, AckMsg, SigMsg, CpMsg, ConsMsg, ValidationReq, \
     ValidationResp
 
@@ -110,6 +110,7 @@ class TrustChainRunner:
         :return: 
         """
         logging.info("TC: current tx count {}".format(self.tc.tx_count))
+        logging.info("TC: validation tx count {}".format(len(self.tc.get_validated_txs())))
 
     def _reset_state(self):
         self.tx_locked = False
@@ -331,6 +332,7 @@ class TrustChainRunner:
         logging.debug("TC: received validation req from {}".format(b64encode(remote_vk)))
 
         pieces = self.tc.pieces(req.seq)
+        assert hash_pointers_ok(pieces)
 
         if len(pieces) == 0:
             self.send(remote_vk, ValidationResp(req.id, False, -1, -1, None))
@@ -352,7 +354,6 @@ class TrustChainRunner:
         # type: (ValidationResp, str) -> None
         assert isinstance(resp, ValidationResp)
         assert resp.id in self.sent_validation_reqs
-        logging.info("TC: received validation resp from {}".format(b64encode(remote_vk)))
 
         seq = self.sent_validation_reqs[resp.id]
         del self.sent_validation_reqs[resp.id]
@@ -363,9 +364,9 @@ class TrustChainRunner:
 
         res = self.tc.verify_tx(seq, resp.r_a, resp.r_b, resp.pieces)
         if res == ValidityState.Valid:
-            logging.info("TC: validation successful for tx: {}".format(seq))
+            logging.debug("TC: validation successful for tx: {}".format(seq))
         else:
-            logging.info("TC: validation failed, tx: {}, res: {}".format(seq, res.value))
+            logging.debug("TC: validation failed, tx: {}, res: {}".format(seq, res.value))
 
     def _send_validation_req(self, seq):
         # type: (int) -> None
@@ -592,7 +593,7 @@ class TrustChainRunner:
 
     def make_tx_periodically(self, interval, random_node=False):
         if random_node:
-            lc = task.LoopingCall(self._make_tx, self.factory.random_node)
+            lc = task.LoopingCall(self._make_tx_rand)
         else:
             node = self.factory.neighbour_if_even()
             if node is None:
@@ -604,7 +605,16 @@ class TrustChainRunner:
 
         lc.start(interval).addErrback(my_err_back)
 
+    def _make_tx_rand(self):
+        node = self.factory.random_node
+        self._make_tx(node)
+
     def _make_tx(self, node):
+        """
+        only use this in LoopingCall, not continuous transaction
+        :param node: 
+        :return: 
+        """
         if self.send_q.qsize() > 10 or self.recv_q.qsize() > 10:
             return
 

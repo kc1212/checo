@@ -117,7 +117,7 @@ class TxBlock(EqHash):
                     self.s_s, self.s_r, self.inner.m)
 
     def _tuple(self):
-        return self.inner, self.s_s, self.s_r, self.validity
+        return self.inner, self.s_s, self.s_r
 
     def sign(self, vk, sk):
         # type: (str, str) -> Signature
@@ -328,6 +328,7 @@ class Chain:
     def new_tx(self, tx):
         # type: (TxBlock) -> None
         assert tx.prev == self.chain[-1].hash
+        assert tx.h == self.chain[-1].h + 1
 
         self.chain.append(tx)
         self._tx_count += 1
@@ -335,6 +336,7 @@ class Chain:
     def new_cp(self, cp):
         # type: (CpBlock) -> None
         assert cp.prev == self.chain[-1].hash
+        assert cp.h == self.chain[-1].h + 1
 
         prev_cp = self.latest_cp
         assert prev_cp.inner.round < cp.inner.round, \
@@ -445,6 +447,13 @@ class Chain:
         :return: 
         """
         return filter(lambda b: isinstance(b, TxBlock) and b.validity == ValidityState.Unknown, self.chain)
+
+    def get_validated_txs(self):
+        """
+        Opposite of `get_unknown_txs`
+        :return: 
+        """
+        return filter(lambda b: isinstance(b, TxBlock) and b.validity != ValidityState.Unknown, self.chain)
 
 
 class TrustChain:
@@ -613,6 +622,9 @@ class TrustChain:
 
     def get_unknown_txs(self):
         return self.my_chain.get_unknown_txs()
+
+    def get_validated_txs(self):
+        return self.my_chain.get_validated_txs()
 
 # EqHash.register(Signature)
 # EqHash.register(TxBlockInner)
