@@ -309,6 +309,11 @@ class MyFactory(Factory):
             rate = float(msg.param)
             call_later(msg.delay, self.tc_runner.make_tx_periodically, 1.0 / rate, False)
 
+        elif msg.instruction == 'tx-periodically-validate':
+            rate = float(msg.param)
+            call_later(msg.delay, self.tc_runner.make_tx_periodically, 1.0 / rate, False)
+            call_later(msg.delay + 10, self.tc_runner.make_validation)
+
         elif msg.instruction == 'tx-periodically-random':
             rate = float(msg.param)
             call_later(msg.delay, self.tc_runner.make_tx_periodically, 1.0 / rate, True)
