@@ -332,11 +332,13 @@ class TrustChainRunner:
         logging.debug("TC: received validation req from {}".format(b64encode(remote_vk)))
 
         pieces = self.tc.pieces(req.seq)
-        assert hash_pointers_ok(pieces)
 
         if len(pieces) == 0:
             self.send(remote_vk, ValidationResp(req.id, False, -1, -1, None))
             return
+
+        assert len(pieces) > 2
+        assert hash_pointers_ok(pieces)
 
         cp_a = pieces[0]
         cp_b = pieces[-1]
