@@ -424,6 +424,28 @@ class Chain:
 
         return cp_a, cp_b
 
+    def set_validity(self, seq, validity):
+        # type: (int, ValidityState) -> None
+        """
+        Set the validity of a tx block, if it's already Valid or Invalid, it cannot be changed.
+        :param seq: 
+        :param validity: 
+        :return: 
+        """
+        tx = self.chain[seq]
+        assert isinstance(tx, TxBlock)
+        assert validity != ValidityState.Unknown
+
+        if tx.validity == ValidityState.Unknown:
+            tx.validity = validity
+
+    def get_unknown_txs(self):
+        """
+        Return a list of TXs which have unkonwn validity
+        :return: 
+        """
+        return filter(lambda b: isinstance(b, TxBlock) and b.validity == ValidityState.Unknown, self.chain)
+
 
 class TrustChain:
     """
@@ -543,7 +565,7 @@ class TrustChain:
         # type: (int) -> List[Union[CpBlock, TxBlock]]
         return self.my_chain.pieces(seq)
 
-    def verify(self, seq, r_a, r_b, resp=None):
+    def verify_tx(self, seq, r_a, r_b, resp=None):
         # type: (int, int, int, List[Union[CpBlock, TxBlock]]) -> ValidityState
         """
         We want to verify one of our own TX with expected round numbers that contains the consensus result of the piece
@@ -583,9 +605,14 @@ class TrustChain:
             return any(map(lambda b: b.h == h, bs))
 
         if not contains_h(tx.inner.h_r, resp):
+            self.my_chain.set_validity(seq, ValidityState.Invalid)
             return ValidityState.Invalid
 
+        self.my_chain.set_validity(seq, ValidityState.Valid)
         return ValidityState.Valid
+
+    def get_unknown_txs(self):
+        return self.my_chain.get_unknown_txs()
 
 # EqHash.register(Signature)
 # EqHash.register(TxBlockInner)

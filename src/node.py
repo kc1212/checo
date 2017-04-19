@@ -96,12 +96,6 @@ class MyProto(JsonReceiver):
         elif isinstance(obj, ConsMsg):
             self.factory.tc_runner.handle_cons(obj, self.remote_vk)
 
-        elif isinstance(obj, ValidationReq):
-            self.factory.tc_runner.handle_validation_req(obj, self.remote_vk)
-
-        elif isinstance(obj, ValidationResp):
-            self.factory.tc_runner.handle_validation_resp(obj, self.remote_vk)
-
         # NOTE messages below are for testing, bracha/mo14 is normally handled by acs
 
         elif isinstance(obj, BrachaMsg):
@@ -309,6 +303,10 @@ class MyFactory(Factory):
         elif msg.instruction == 'tx-continuously-random':
             call_later(msg.delay, self.tc_runner.make_tx_continuously, True)
 
+        elif msg.instruction == 'tx-continuously-random-validate':
+            call_later(msg.delay, self.tc_runner.make_tx_continuously, True)
+            call_later(msg.delay + 10, self.tc_runner.make_validation)
+
         elif msg.instruction == 'tx-periodically':
             rate = float(msg.param)
             call_later(msg.delay, self.tc_runner.make_tx_periodically, 1.0 / rate, False)
@@ -316,6 +314,11 @@ class MyFactory(Factory):
         elif msg.instruction == 'tx-periodically-random':
             rate = float(msg.param)
             call_later(msg.delay, self.tc_runner.make_tx_periodically, 1.0 / rate, True)
+
+        elif msg.instruction == 'tx-periodically-random-validate':
+            rate = float(msg.param)
+            call_later(msg.delay, self.tc_runner.make_tx_periodically, 1.0 / rate, True)
+            call_later(msg.delay + 10, self.tc_runner.make_validation)
 
         else:
             raise AssertionError("Invalid instruction msg {}".format(msg))
@@ -331,7 +334,7 @@ class Config:
     All the static settings, used in Factory
     Should be singleton
     """
-    def __init__(self, port, n, t, test, value, failure, tx_rate, consensus_delay, large_network, fan_out):
+    def __init__(self, port, n, t, test, value, failure, tx_rate, consensus_delay, large_network, fan_out, validate):
         """
         This only stores the config necessary at runtime, so not necessarily all the information from argparse
         :param port:
@@ -364,6 +367,8 @@ class Config:
         self.large_network = large_network
 
         self.fan_out = fan_out
+
+        self.validate = validate
 
 
 def run(config, bcast, discovery_addr):
@@ -407,6 +412,9 @@ def run(config, bcast, discovery_addr):
             call_later(5, f.tc_runner.make_tx_periodically, 1.0 / config.tx_rate, True)
         else:
             call_later(5, f.tc_runner.make_tx_continuously, True)
+        # optionally use validate
+        if config.validate:
+            call_later(10, f.tc_runner.make_validation)
     elif config.test == 'bootstrap':
         call_later(5, f.tc_runner.bootstrap_promoters)
 
@@ -502,13 +510,18 @@ if __name__ == '__main__':
         help='[testing] overwrite promoters to be all peers',
         action='store_true'
     )
+    parser.add_argument(
+        '--validate',
+        help="[testing] if test=='tc', perform validation",
+        action='store_true'
+    )
     args = parser.parse_args()
 
     set_logging(args.loglevel, args.output)
 
     def _run():
         run(Config(args.port, args.n, args.t, args.test, args.value, args.failure, args.tx_rate, args.consensus_delay,
-                   args.large_network, args.fan_out),
+                   args.large_network, args.fan_out, args.validate),
             args.broadcast, args.discovery)
 
     if args.profile:

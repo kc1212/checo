@@ -280,6 +280,11 @@ def test_validation(seq, n_cp, n_tx, expected):
     """
     tc_s, tc_r = generate_tc_pair(n_cp, n_tx)
 
+    # initially everything should have unkonwn state
+    is_unknowns = map(lambda tx: tx.validity == ValidityState.Unknown, tc_s.get_unknown_txs())
+    assert len(is_unknowns) == n_cp * n_tx
+    assert all(is_unknowns)
+
     # genesis block should be in consensus in round 1
     assert tc_s.consensus_round_of_cp(tc_s.my_chain.chain[0]) == 1
     assert tc_r.consensus_round_of_cp(tc_r.my_chain.chain[0]) == 1
@@ -294,7 +299,10 @@ def test_validation(seq, n_cp, n_tx, expected):
 
     seq_r = tc_s.my_chain.chain[seq].inner.h_r
     resp = tc_r.pieces(seq_r)
-    #
+
     r = seq / (n_tx + 1) + 1
-    assert tc_s.verify(seq, r, r+1, resp) == expected
+    assert tc_s.verify_tx(seq, r, r + 1, resp) == expected
+
+    if expected == ValidityState.Valid:
+        assert len(tc_s.get_unknown_txs()) == len(is_unknowns) - 1
 

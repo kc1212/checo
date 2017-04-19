@@ -154,7 +154,7 @@ def run_subprocesses(prefix, cmds, sleep_interval=0):
 
 
 def make_args(port, n, t, test=None, value=0, failure=None, tx_rate=0, loglevel=logging.INFO, output=None,
-              broadcast=True, consensus_delay=5, large_network=False, fan_out=10, profile=False):
+              broadcast=True, consensus_delay=5, large_network=False, fan_out=10, profile=False, validate=False):
     """
     This function should produce all the parameters accepted by argparse
     :param port:
@@ -169,6 +169,9 @@ def make_args(port, n, t, test=None, value=0, failure=None, tx_rate=0, loglevel=
     :param broadcast:
     :param consensus_delay:
     :param large_network:
+    :param fan_out:
+    :param profile:
+    :param validate:
     :return:
     """
     res = [str(port), str(n), str(t)]
@@ -211,6 +214,9 @@ def make_args(port, n, t, test=None, value=0, failure=None, tx_rate=0, loglevel=
 
     if profile:
         res.append('--profile')
+
+    if validate:
+        res.append('--validate')
 
     return res
 
