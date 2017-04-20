@@ -219,6 +219,9 @@ class TrustChainRunner:
             if is_new:
                 self._try_add_cp(msg.r)
                 self.factory.gossip(msg)
+        else:
+            # NOTE gossip signatures too?
+            pass
 
     def handle_cp(self, msg, remote_vk):
         # type: (CpMsg, str) -> None
@@ -338,6 +341,7 @@ class TrustChainRunner:
         pieces = self.tc.pieces(req.seq)
 
         if len(pieces) == 0:
+            logging.info("TC: no pieces")
             self.send(remote_vk, ValidationResp(req.id, False, -1, -1, []))
             return
 
@@ -350,6 +354,7 @@ class TrustChainRunner:
         r_b = self.tc.consensus_round_of_cp(cp_b)
 
         if r_a == -1 or r_b == -1:
+            logging.info("TC: no consensus, we only have {}".format(sorted(self.tc.consensus.keys())))
             self.send(remote_vk, ValidationResp(req.id, False, -1, -1, []))
             return
 
@@ -368,11 +373,7 @@ class TrustChainRunner:
             logging.debug("TC: resp not ready for tx: {}".format(seq))
             return
 
-        res = self.tc.verify_tx(seq, resp.r_a, resp.r_b, resp.pieces)
-        if res == ValidityState.Valid:
-            logging.debug("TC: validation successful for tx: {}".format(seq))
-        else:
-            logging.debug("TC: validation failed, tx: {}, res: {}".format(seq, res.value))
+        self.tc.verify_tx(seq, resp.r_a, resp.r_b, resp.pieces)
 
     def _send_validation_req(self, seq):
         # type: (int) -> None
