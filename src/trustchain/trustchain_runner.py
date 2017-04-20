@@ -95,7 +95,6 @@ class TrustChainRunner:
         self.m = None  # type: str
         self.prev_r = None  # type: str
 
-        self.continuous_tx = False
         self.random_node_for_tx = False
         self.sent_validation_reqs = {}  # key: id, value seq
 
@@ -395,10 +394,6 @@ class TrustChainRunner:
         if isinstance(msg, AbortMsg):
             if self.tx_locked and self.tx_id == msg.tx_id:
                 self._reset_state()
-
-                # restart continuous TX after some abort happens
-                if self.continuous_tx:
-                    self.make_tx_continuously(self.random_node_for_tx)
         else:
             self.recv_q.put((msg, src))
 
@@ -547,13 +542,6 @@ class TrustChainRunner:
 
         self._reset_state()
 
-        # running tx continuously, so we start again
-        if self.continuous_tx:
-            if self.random_node_for_tx:
-                self._make_tx(self.factory.random_node)
-            else:
-                self._make_tx(self.factory.neighbour)
-
     def _process_ack(self, msg, src):
         # type: (AckMsg, str) -> Union[Handled, Replay]
         logging.debug("TC: processing ack {} from {}".format(msg, b64encode(src)))
@@ -578,22 +566,7 @@ class TrustChainRunner:
         logging.debug("TC: sending {} to {}".format(self.msg_wrapper_f(msg), b64encode(node)))
         self.factory.send(node, self.msg_wrapper_f(msg))
 
-    def make_tx_continuously(self, random_node=False):
-        self.continuous_tx = True
-
-        if random_node:
-            node = self.factory.random_node
-            self.random_node_for_tx = random_node
-        else:
-            node = self.factory.neighbour_if_even()
-            if node is None:
-                # we do nothing, since we're not an even index
-                return
-            assert node != self.factory.vk
-
-        self._make_tx(node)
-
-    def make_tx_periodically(self, interval, random_node=False):
+    def make_tx(self, interval, random_node=False):
         if random_node:
             lc = task.LoopingCall(self._make_tx_rand)
         else:
@@ -621,7 +594,7 @@ class TrustChainRunner:
             return
 
         # throttle transactions if we cannot validate them timely
-        if len(self.tc.get_unknown_txs()) > 50:
+        if len(self.tc.get_unknown_txs()) > 10:
             return
 
         # cannot be myself

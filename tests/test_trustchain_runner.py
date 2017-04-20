@@ -71,14 +71,13 @@ def check_tx(expected):
     assert sum(counts) >= expected
 
 
-# TODO there appears to be some deadlock going on when performing transactions
 @pytest.mark.parametrize("n,t,rate,timeout", [
     (4, 1, 2.0, 10),
     (4, 1, 10.0, 10),
     (8, 2, 4.0, 10),
     (8, 2, 20.0, 20),
 ])
-def test_tx_periodically(n, t, rate, timeout, folder, discover):
+def test_tx(n, t, rate, timeout, folder, discover):
     configs = []
     for i in range(n):
         port = GOOD_PORT + i
@@ -98,26 +97,4 @@ def test_tx_periodically(n, t, rate, timeout, folder, discover):
     check_tx(rate * timeout * 0.9)  # 0.9 for 10% error
     print "Test: tx test passed"
 
-
-# TODO this test is unstable, plan to remove continuous mode
-# @pytest.mark.parametrize("n, t, timeout, expected", [
-#     (4, 1, 15, 300),
-#     (8, 2, 15, 700),
-# ])
-# def test_tx_continuously(n, t, timeout, expected, folder, discover):
-#     configs = []
-#     for i in range(n):
-#         port = GOOD_PORT + i
-#         configs.append(make_args(port, n, t, test='tc', tx_rate=-1.0, output=DIR + str(port) + '.out'))
-#
-#     ps = run_subprocesses(NODE_CMD_PREFIX, configs)
-#     print "Test: tx nodes starting"
-#
-#     time.sleep(timeout + 6)
-#
-#     for p in ps:
-#         p.terminate()
-#
-#     check_tx(expected * 0.9)
-#     print "Test: tx test passed"
 

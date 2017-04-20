@@ -297,34 +297,26 @@ class MyFactory(Factory):
         if msg.instruction == 'bootstrap-only':
             pass
 
-        # NOTE continuous transaction is broken and does not make sense when validation is used
-        # use periodic transaction because it gets automatically throttled when validation cannot keep up
-        elif msg.instruction == 'tx-continuously':
-            call_later(msg.delay, self.tc_runner.make_tx_continuously, False)
-
-        elif msg.instruction == 'tx-continuously-random':
-            call_later(msg.delay, self.tc_runner.make_tx_continuously, True)
-
-        elif msg.instruction == 'tx-periodically':
+        elif msg.instruction == 'tx':
             rate = float(msg.param)
             interval = 1.0 / rate
-            call_later(msg.delay, self.tc_runner.make_tx_periodically, interval, False)
+            call_later(msg.delay, self.tc_runner.make_tx, interval, False)
 
-        elif msg.instruction == 'tx-periodically-validate':
+        elif msg.instruction == 'tx-validate':
             rate = float(msg.param)
             interval = 1.0 / rate
-            call_later(msg.delay, self.tc_runner.make_tx_periodically, interval, False)
+            call_later(msg.delay, self.tc_runner.make_tx, interval, False)
             call_later(msg.delay + 10, self.tc_runner.make_validation, interval / 2)
 
-        elif msg.instruction == 'tx-periodically-random':
+        elif msg.instruction == 'tx-random':
             rate = float(msg.param)
             interval = 1.0 / rate
-            call_later(msg.delay, self.tc_runner.make_tx_periodically, interval, True)
+            call_later(msg.delay, self.tc_runner.make_tx, interval, True)
 
-        elif msg.instruction == 'tx-periodically-random-validate':
+        elif msg.instruction == 'tx-random-validate':
             rate = float(msg.param)
             interval = 1.0 / rate
-            call_later(msg.delay, self.tc_runner.make_tx_periodically, interval, True)
+            call_later(msg.delay, self.tc_runner.make_tx, interval, True)
             call_later(msg.delay + 10, self.tc_runner.make_validation, interval / 2)
 
         else:
@@ -415,10 +407,7 @@ def run(config, bcast, discovery_addr):
         # use port number (unique on local network) as test message
         call_later(6, f.acs.start, config.port, 1)
     elif config.test == 'tc':
-        if config.tx_rate > 0:
-            call_later(5, f.tc_runner.make_tx_periodically, 1.0 / config.tx_rate, True)
-        else:
-            call_later(5, f.tc_runner.make_tx_continuously, True)
+        call_later(5, f.tc_runner.make_tx, 1.0 / config.tx_rate, True)
         # optionally use validate
         if config.validate:
             call_later(10, f.tc_runner.make_validation)
