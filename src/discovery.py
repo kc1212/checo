@@ -25,7 +25,7 @@ class Discovery(JsonReceiver):
     def connection_lost(self, reason):
         if self.vk in self.nodes:
             del self.nodes[self.vk]
-            logging.debug("Discovery: deleted {}".format(b64encode(self.vk)))
+            logging.debug("Discovery: deleted {}".format(self.vk))
 
     def obj_received(self, obj):
         # type: (Union[DiscoverMsg, DiscoverReplyMsg]) -> None

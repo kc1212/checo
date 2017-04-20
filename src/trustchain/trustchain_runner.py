@@ -97,6 +97,7 @@ class TrustChainRunner:
 
         self.random_node_for_tx = False
         self.sent_validation_reqs = {}  # key: id, value seq
+        self.validation_enabled = False
 
         # attributes below are states for building new CP blocks
         self.round_states = defaultdict(RoundState)
@@ -594,7 +595,7 @@ class TrustChainRunner:
             return
 
         # throttle transactions if we cannot validate them timely
-        if len(self.tc.get_unknown_txs()) > 10:
+        if self.validation_enabled and len(self.tc.get_unknown_txs()) > 10:
             return
 
         # cannot be myself
@@ -608,6 +609,7 @@ class TrustChainRunner:
     def make_validation(self, interval=0.5):
         lc = task.LoopingCall(self._validate_random_tx)
         lc.start(interval).addErrback(my_err_back)
+        self.validation_enabled = True
 
     def _validate_random_tx(self):
         if len(self.sent_validation_reqs) > 10:

@@ -194,7 +194,7 @@ class MyFactory(Factory):
                 logging.debug("NODE: client {},{} already exist".format(b64encode(vk), addr))
 
     def make_new_connection(self, host, port):
-        logging.info("NODE: making client connection {}:{}".format(host, port))
+        logging.debug("NODE: making client connection {}:{}".format(host, port))
         point = TCP4ClientEndpoint(reactor, host, port)
         proto = MyProto(self)
         d = connectProtocol(point, proto)
