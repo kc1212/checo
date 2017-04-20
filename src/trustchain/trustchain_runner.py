@@ -97,6 +97,7 @@ class TrustChainRunner:
 
         self.continuous_tx = False
         self.random_node_for_tx = False
+        self.sent_validation_reqs = {}
 
         # attributes below are states for building new CP blocks
         self.round_states = defaultdict(RoundState)
@@ -109,8 +110,7 @@ class TrustChainRunner:
         :return: 
         """
         logging.info("TC: current tx count {}".format(self.tc.tx_count))
-        logging.info("TC: validated {}".format(len(self.tc.get_validated_txs())))
-        logging.info("TC: queue size send {}, recv {}".format(self.send_q.qsize(), self.recv_q.qsize()))
+        logging.info("TC: validation tx count {}".format(len(self.tc.get_validated_txs())))
 
     def _reset_state(self):
         self.tx_locked = False
@@ -326,29 +326,15 @@ class TrustChainRunner:
         # send new CP to either all promoters
         self.factory.promoter_cast(CpMsg(self.tc.my_chain.latest_cp))
 
-    def _send_validation_req(self, seq):
-        # type: (int) -> None
-        """
-        Call this function when I want to initiate a instance of the validation protocol.
-        A request ID will be generated and stored in sent_validation_reqs.
-        :param seq: The sequence number on my side for the TX that I want to validate
-        :return: 
-        """
-        block = self.tc.my_chain.chain[seq]
-        seq_r = block.inner.h_r
-        node = block.s_r.vk
-
-        logging.debug("TC: sent validatio to {}".format(b64encode(node)))
-        self.send(node, ValidationReq(seq_r, seq))
-
     def handle_validation_req(self, req, remote_vk):
         # type: (ValidationReq, str) -> None
         assert isinstance(req, ValidationReq)
         logging.debug("TC: received validation req from {}".format(b64encode(remote_vk)))
 
-        pieces = self.tc.pieces(req.seq_r)
+        pieces = self.tc.pieces(req.seq)
 
         if len(pieces) == 0:
+            self.send(remote_vk, ValidationResp(req.id, False, -1, -1, None))
             return
 
         assert len(pieces) > 2
@@ -360,22 +346,48 @@ class TrustChainRunner:
         r_b = self.tc.consensus_round_of_cp(cp_b)
 
         if r_a == -1 or r_b == -1:
+            self.send(remote_vk, ValidationResp(req.id, False, -1, -1, None))
             return
 
         logging.debug("TC: responding with OK")
-        self.send(remote_vk, ValidationResp(req.seq_s, r_a, r_b, pieces))
+        self.send(remote_vk, ValidationResp(req.id, True, r_a, r_b, pieces))
 
     def handle_validation_resp(self, resp, remote_vk):
         # type: (ValidationResp, str) -> None
         assert isinstance(resp, ValidationResp)
+        assert resp.id in self.sent_validation_reqs
 
-        seq = resp.seq
+        seq = self.sent_validation_reqs[resp.id]
+        del self.sent_validation_reqs[resp.id]
+
+        if not resp.ok:
+            logging.debug("TC: resp not ready for tx: {}".format(seq))
+            return
+
         res = self.tc.verify_tx(seq, resp.r_a, resp.r_b, resp.pieces)
-
         if res == ValidityState.Valid:
             logging.debug("TC: validation successful for tx: {}".format(seq))
         else:
             logging.debug("TC: validation failed, tx: {}, res: {}".format(seq, res.value))
+
+    def _send_validation_req(self, seq):
+        # type: (int) -> None
+        """
+        Call this function when I want to initiate a instance of the validation protocol.
+        A request ID will be generated and stored in sent_validation_reqs.
+        :param seq: The sequence number on my side for the TX that I want to validate
+        :return: 
+        """
+        block = self.tc.my_chain.chain[seq]
+        seq_r = block.inner.h_r
+        node = block.s_r.vk
+        req_id = random.randint(0, 2 ** 31 - 1)
+
+        logging.debug("TC: sent validatio to {}".format(b64encode(node)))
+        self.send(node, ValidationReq(req_id, seq_r))
+
+        # this needs to be removed when a response is received
+        self.sent_validation_reqs[req_id] = seq
 
     def handle(self, msg, src):
         # type: (Union[SynMsg, SynAckMsg, AckMsg]) -> None
@@ -625,14 +637,15 @@ class TrustChainRunner:
         lc.start(interval).addErrback(my_err_back)
 
     def _validate_random_tx(self):
-        # we cannot validate when there's no consensus
+        if len(self.sent_validation_reqs) > 2:
+            return
+
         if self.tc.latest_cp.round < 2:
             return
 
         max_h = self.tc.my_chain.get_cp_of_round(self.tc.latest_cp.round - 1).h
         txs = filter(lambda x: x.h < max_h, self.tc.get_unknown_txs())
 
-        # no unknowns
         if len(txs) == 0:
             return
 
