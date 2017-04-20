@@ -97,7 +97,7 @@ class TrustChainRunner:
 
         self.continuous_tx = False
         self.random_node_for_tx = False
-        self.sent_validation_reqs = {}
+        self.sent_validation_reqs = {}  # key: id, value seq
 
         # attributes below are states for building new CP blocks
         self.round_states = defaultdict(RoundState)
@@ -110,7 +110,7 @@ class TrustChainRunner:
         :return: 
         """
         logging.info("TC: current tx count {}".format(self.tc.tx_count))
-        logging.info("TC: validation tx count {}".format(len(self.tc.get_validated_txs())))
+        logging.info("TC: validated {}".format(len(self.tc.get_validated_txs())))
 
     def _reset_state(self):
         self.tx_locked = False
@@ -334,7 +334,7 @@ class TrustChainRunner:
         pieces = self.tc.pieces(req.seq)
 
         if len(pieces) == 0:
-            self.send(remote_vk, ValidationResp(req.id, False, -1, -1, None))
+            self.send(remote_vk, ValidationResp(req.id, False, -1, -1, []))
             return
 
         assert len(pieces) > 2
@@ -346,7 +346,7 @@ class TrustChainRunner:
         r_b = self.tc.consensus_round_of_cp(cp_b)
 
         if r_a == -1 or r_b == -1:
-            self.send(remote_vk, ValidationResp(req.id, False, -1, -1, None))
+            self.send(remote_vk, ValidationResp(req.id, False, -1, -1, []))
             return
 
         logging.debug("TC: responding with OK")
@@ -632,12 +632,12 @@ class TrustChainRunner:
         logging.debug("TC: {} making tx to".format(b64encode(node)))
         self._send_syn(node, m)
 
-    def make_validation(self, interval=0.2):
+    def make_validation(self, interval=0.5):
         lc = task.LoopingCall(self._validate_random_tx)
         lc.start(interval).addErrback(my_err_back)
 
     def _validate_random_tx(self):
-        if len(self.sent_validation_reqs) > 2:
+        if len(self.sent_validation_reqs) > 10:
             return
 
         if self.tc.latest_cp.round < 2:
@@ -649,8 +649,19 @@ class TrustChainRunner:
         if len(txs) == 0:
             return
 
-        tx = random.choice(txs)
-        self._send_validation_req(tx.h)
+        def already_sent(h):
+            for v in self.sent_validation_reqs.values():
+                if v == h:
+                    return True
+            return False
+
+        for tx in txs:
+            # NOTE realistically, already_sent should have a timeout
+            if already_sent(tx.h):
+                continue
+            else:
+                self._send_validation_req(tx.h)
+                break
 
     def bootstrap_promoters(self):
         """

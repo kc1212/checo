@@ -307,21 +307,25 @@ class MyFactory(Factory):
 
         elif msg.instruction == 'tx-periodically':
             rate = float(msg.param)
-            call_later(msg.delay, self.tc_runner.make_tx_periodically, 1.0 / rate, False)
+            interval = 1.0 / rate
+            call_later(msg.delay, self.tc_runner.make_tx_periodically, interval, False)
 
         elif msg.instruction == 'tx-periodically-validate':
             rate = float(msg.param)
-            call_later(msg.delay, self.tc_runner.make_tx_periodically, 1.0 / rate, False)
-            call_later(msg.delay + 10, self.tc_runner.make_validation)
+            interval = 1.0 / rate
+            call_later(msg.delay, self.tc_runner.make_tx_periodically, interval, False)
+            call_later(msg.delay + 10, self.tc_runner.make_validation, interval / 2)
 
         elif msg.instruction == 'tx-periodically-random':
             rate = float(msg.param)
-            call_later(msg.delay, self.tc_runner.make_tx_periodically, 1.0 / rate, True)
+            interval = 1.0 / rate
+            call_later(msg.delay, self.tc_runner.make_tx_periodically, interval, True)
 
         elif msg.instruction == 'tx-periodically-random-validate':
             rate = float(msg.param)
-            call_later(msg.delay, self.tc_runner.make_tx_periodically, 1.0 / rate, True)
-            call_later(msg.delay + 10, self.tc_runner.make_validation)
+            interval = 1.0 / rate
+            call_later(msg.delay, self.tc_runner.make_tx_periodically, interval, True)
+            call_later(msg.delay + 10, self.tc_runner.make_validation, interval / 2)
 
         else:
             raise AssertionError("Invalid instruction msg {}".format(msg))
