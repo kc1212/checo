@@ -214,6 +214,10 @@ class MyFactory(Factory):
         for promoter in self.promoters:
             self.send(promoter, msg)
 
+    def promoter_cast_t(self, msg):
+        for promoter in random.sample(self.promoters, self.config.t + 1):
+            self.send(promoter, msg)
+
     def non_promoter_cast(self, msg):
         for node in set(self.peers.keys()) - set(self.promoters):
             self.send(node, msg)
@@ -333,7 +337,7 @@ class Config:
     All the static settings, used in Factory
     Should be singleton
     """
-    def __init__(self, port, n, t, test, value, failure, tx_rate, consensus_delay, large_network, fan_out, validate):
+    def __init__(self, port, n, t, test, value, failure, tx_rate, consensus_delay, fan_out, validate):
         """
         This only stores the config necessary at runtime, so not necessarily all the information from argparse
         :param port:
@@ -362,8 +366,6 @@ class Config:
         assert isinstance(consensus_delay, int)
         assert consensus_delay >= 0
         self.consensus_delay = consensus_delay
-
-        self.large_network = large_network
 
         self.fan_out = fan_out
 
@@ -462,11 +464,6 @@ if __name__ == '__main__':
         help='delay in seconds between consensus rounds'
     )
     parser.add_argument(
-        '--large-network',
-        action='store_true',
-        help='use this option when population >> n'
-    )
-    parser.add_argument(
         '--fan-out',
         type=int,
         default=10,
@@ -517,7 +514,7 @@ if __name__ == '__main__':
 
     def _run():
         run(Config(args.port, args.n, args.t, args.test, args.value, args.failure, args.tx_rate, args.consensus_delay,
-                   args.large_network, args.fan_out, args.validate),
+                   args.fan_out, args.validate),
             args.broadcast, args.discovery)
 
     if args.profile:
