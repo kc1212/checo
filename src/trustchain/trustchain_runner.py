@@ -110,7 +110,8 @@ class TrustChainRunner:
         :return: 
         """
         logging.info("TC: current tx count {}".format(self.tc.tx_count))
-        logging.info("TC: validated {}".format(len(self.tc.get_validated_txs())))
+        logging.info("TC: validated {}, pending {}"
+                     .format(len(self.tc.get_validated_txs()), len(self.sent_validation_reqs)))
 
     def _reset_state(self):
         self.tx_locked = False
@@ -234,10 +235,13 @@ class TrustChainRunner:
 
         logging.debug("TC: received ConsMsg {} from {}".format(msg, b64encode(remote_vk)))
         if msg.r >= self.tc.latest_round:
-            is_new = self.round_states[msg.cons.round].new_cons(msg.cons)
+            is_new = self.round_states[msg.r].new_cons(msg.cons)
             if is_new:
                 self._try_add_cp(msg.r)
-                # call_later(1, self.factory.gossip, msg)
+                self.factory.gossip(msg)
+        else:
+            if msg.r not in self.tc.consensus:
+                self.tc.consensus[msg.r] = msg.cons
                 self.factory.gossip(msg)
 
     def _try_add_cp(self, r):
