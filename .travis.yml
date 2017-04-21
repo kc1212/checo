@@ -16,4 +16,4 @@ before_install:
   - pushd liberasurecode-1.4.0 && ./autogen.sh && ./configure && make && sudo make install && popd
   - sudo ldconfig
 install: "pip install -r requirements.txt"
-script: pytest -v -s
+script: pytest -v -x

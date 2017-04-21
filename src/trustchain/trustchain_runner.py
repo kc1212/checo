@@ -314,7 +314,10 @@ class TrustChainRunner:
                     # we don't have enough CPs to start the consensus, so wait for more until some timeout
                     pass
                 else:
-                    self.factory.acs.reset_then_start(_msg, _r)
+                    if len(_msg) > 200:
+                        self.factory.acs.reset_then_start(random.sample(_msg, 200), _r)
+                    else:
+                        self.factory.acs.reset_then_start(_msg, _r)
                     self.new_consensus_lc.stop()
                     self.new_consensus_lc_count = 0
 
@@ -325,7 +328,11 @@ class TrustChainRunner:
             logging.info("TC: I'm NOT a promoter")
 
         # send new CP to either all promoters
-        self.factory.promoter_cast_t(CpMsg(self.tc.my_chain.latest_cp))
+        # TODO having this if statement for test isn't ideal
+        if self.factory.config.test == 'bootstrap':
+            self.factory.promoter_cast(CpMsg(self.tc.my_chain.latest_cp))
+        else:
+            self.factory.promoter_cast_t(CpMsg(self.tc.my_chain.latest_cp))
 
     def handle_validation_req(self, req, remote_vk):
         # type: (ValidationReq, str) -> None
@@ -589,7 +596,7 @@ class TrustChainRunner:
             return
 
         # throttle transactions if we cannot validate them timely
-        if self.validation_enabled and len(self.tc.get_unknown_txs()) > 10:
+        if self.validation_enabled and len(self.tc.get_unknown_txs()) > 5 * self.factory.config.n:
             return
 
         # cannot be myself
