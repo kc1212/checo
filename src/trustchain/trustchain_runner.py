@@ -310,7 +310,7 @@ class TrustChainRunner:
                     self.factory.acs.stop(self.tc.latest_round)
                     self.new_consensus_lc.stop()
                     self.new_consensus_lc_count = 0
-                elif len(_msg) < self.factory.config.n and self.new_consensus_lc_count < 20:
+                elif len(_msg) < self.factory.config.n and self.new_consensus_lc_count < 10:
                     # we don't have enough CPs to start the consensus, so wait for more until some timeout
                     pass
                 else:
@@ -332,7 +332,7 @@ class TrustChainRunner:
         assert isinstance(req, ValidationReq)
         logging.debug("TC: received validation req from {}".format(b64encode(remote_vk)))
 
-        pieces = self.tc.pieces(req.seq)
+        pieces, r_a, r_b = self.tc.agreed_pieces(req.seq)
 
         if len(pieces) == 0:
             logging.info("TC: no pieces")
@@ -341,11 +341,6 @@ class TrustChainRunner:
 
         assert len(pieces) > 2
         assert hash_pointers_ok(pieces)
-
-        cp_a = pieces[0]
-        cp_b = pieces[-1]
-        r_a = self.tc.consensus_round_of_cp(cp_a)
-        r_b = self.tc.consensus_round_of_cp(cp_b)
 
         if r_a == -1 or r_b == -1:
             logging.info("TC: no consensus, we only have {}".format(sorted(self.tc.consensus.keys())))

@@ -4,7 +4,7 @@ import abc
 import copy
 import logging
 from base64 import b64encode
-from typing import List, Union, Dict, Tuple
+from typing import List, Union, Dict, Tuple, Optional
 from enum import Enum
 
 from src.utils import hash_pointers_ok
@@ -393,14 +393,14 @@ class Chain:
         :param seq:
         :return: List<Block>
         """
-        c_a, c_b = self.enclosure(seq)
+        c_a, c_b = self._enclosure(seq)
         if c_a is None or c_b is None:
             return []
 
         # the height (h) should always be correct, since it is checked when adding new CP
         return self.chain[c_a.h:c_b.h + 1]
 
-    def enclosure(self, seq):
+    def _enclosure(self, seq):
         # type: (int) -> Tuple[CpBlock, CpBlock]
         """
         Finds two CP blocks that encloses a TX block with a sequence number `seq`
@@ -574,6 +574,50 @@ class TrustChain:
         # type: (int) -> List[Union[CpBlock, TxBlock]]
         return self.my_chain.pieces(seq)
 
+    def agreed_pieces(self, seq):
+        # type: (int) -> Tuple[List[Union[CpBlock, TxBlock]], int, int]
+        c_a, c_b, r_a, r_b = self._agreed_enclosure(seq)
+        if c_a is None or c_b is None:
+            return [], r_a, r_b
+
+        # the height (h) should always be correct, since it is checked when adding new CP
+        return self.my_chain.chain[c_a.h:c_b.h + 1], r_a, r_b
+
+    def _agreed_enclosure(self, seq):
+        # type: (int) -> Tuple[Optional[CpBlock], Optional[CpBlock], int, int]
+        """
+        search backward for an agreed piece
+        search forward for an agreed pieces
+        get the agreed enclosure
+        get the agreed pieces
+        :param seq: 
+        :return: 
+        """
+
+        tx = self.my_chain.chain[seq]
+        assert isinstance(tx, TxBlock)
+
+        cp_a = cp_b = None
+        r_a = r_b = -1
+
+        for i in xrange(seq - 1, -1, -1):
+            cp = self.my_chain.chain[i]
+            if isinstance(cp, CpBlock):
+                r_a = self.consensus_round_of_cp(cp)
+                if r_a != -1:
+                    cp_a = cp
+                    break
+
+        for i in xrange(seq + 1, len(self.my_chain.chain)):
+            cp = self.my_chain.chain[i]
+            if isinstance(cp, CpBlock):
+                r_b = self.consensus_round_of_cp(cp)
+                if r_b != -1:
+                    cp_b = cp
+                    break
+
+        return cp_a, cp_b, r_a, r_b
+
     def verify_tx(self, seq, r_a, r_b, resp=None):
         # type: (int, int, int, List[Union[CpBlock, TxBlock]]) -> ValidityState
         """
@@ -592,6 +636,9 @@ class TrustChain:
 
         tx = self.my_chain.chain[seq]
         assert isinstance(tx, TxBlock)
+
+        if len(resp) == 0:
+            return ValidityState.Unknown
 
         # check that I also have the same CP blocks
         # hash pointers are ok
