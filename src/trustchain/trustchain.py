@@ -108,7 +108,10 @@ class TxBlock(EqHash):
         self.inner = TxBlockInner(prev, h_s, h_r, m)
         self.s_s = None
         self.s_r = None
+
+        # properties below are used for tracking validation status, not a part of hash
         self.validity = ValidityState.Unknown
+        self.request_sent_r = -1  # a positive value indicate the round at which the request is sent
 
     def __str__(self):
         return '{{"prev": "{}", "h_s": {}, "h_r": {}, "s_s": {}, "s_r": {}, "m": "{}"}}'\

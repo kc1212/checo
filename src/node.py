@@ -310,7 +310,7 @@ class MyFactory(Factory):
             rate = float(msg.param)
             interval = 1.0 / rate
             call_later(msg.delay, self.tc_runner.make_tx, interval, False)
-            call_later(msg.delay + 10, self.tc_runner.make_validation, interval / 2)
+            call_later(msg.delay + 10, self.tc_runner.make_validation, interval * 2)
 
         elif msg.instruction == 'tx-random':
             rate = float(msg.param)
@@ -321,7 +321,7 @@ class MyFactory(Factory):
             rate = float(msg.param)
             interval = 1.0 / rate
             call_later(msg.delay, self.tc_runner.make_tx, interval, True)
-            call_later(msg.delay + 10, self.tc_runner.make_validation, interval / 2)
+            call_later(msg.delay + 10, self.tc_runner.make_validation, interval * 2)
 
         else:
             raise AssertionError("Invalid instruction msg {}".format(msg))

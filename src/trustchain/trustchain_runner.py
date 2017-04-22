@@ -96,7 +96,6 @@ class TrustChainRunner:
         self.prev_r = None  # type: str
 
         self.random_node_for_tx = False
-        self.sent_validation_reqs = {}  # key: id, value seq
         self.validation_enabled = False
 
         # attributes below are states for building new CP blocks
@@ -110,8 +109,7 @@ class TrustChainRunner:
         :return: 
         """
         logging.info("TC: current tx count {}".format(self.tc.tx_count))
-        logging.info("TC: validated {}, pending {}"
-                     .format(len(self.tc.get_validated_txs()), len(self.sent_validation_reqs)))
+        logging.info("TC: validated {}".format(len(self.tc.get_validated_txs())))
 
     def _reset_state(self):
         self.tx_locked = False
@@ -343,7 +341,7 @@ class TrustChainRunner:
 
         if len(pieces) == 0:
             logging.info("TC: no pieces")
-            self.send(remote_vk, ValidationResp(req.id, False, -1, -1, []))
+            self.send(remote_vk, ValidationResp(req.seq, False, -1, -1, []))
             return
 
         assert len(pieces) > 2
@@ -351,25 +349,21 @@ class TrustChainRunner:
 
         if r_a == -1 or r_b == -1:
             logging.info("TC: no consensus, we only have {}".format(sorted(self.tc.consensus.keys())))
-            self.send(remote_vk, ValidationResp(req.id, False, -1, -1, []))
+            self.send(remote_vk, ValidationResp(req.seq, False, -1, -1, []))
             return
 
         logging.debug("TC: responding with OK")
-        self.send(remote_vk, ValidationResp(req.id, True, r_a, r_b, pieces))
+        self.send(remote_vk, ValidationResp(req.seq, True, r_a, r_b, pieces))
 
     def handle_validation_resp(self, resp, remote_vk):
         # type: (ValidationResp, str) -> None
         assert isinstance(resp, ValidationResp)
-        assert resp.id in self.sent_validation_reqs
-
-        seq = self.sent_validation_reqs[resp.id]
-        del self.sent_validation_reqs[resp.id]
 
         if not resp.ok:
-            logging.debug("TC: resp not ready for tx: {}".format(seq))
+            logging.debug("TC: resp not ready for tx: {}".format(resp.seq))
             return
 
-        self.tc.verify_tx(seq, resp.r_a, resp.r_b, resp.pieces)
+        self.tc.verify_tx(resp.seq, resp.r_a, resp.r_b, resp.pieces)
 
     def _send_validation_req(self, seq):
         # type: (int) -> None
@@ -380,15 +374,13 @@ class TrustChainRunner:
         :return: 
         """
         block = self.tc.my_chain.chain[seq]
+        block.request_sent_r = self.tc.latest_round
+
         seq_r = block.inner.h_r
         node = block.s_r.vk
-        req_id = random.randint(0, 2 ** 31 - 1)
 
         logging.debug("TC: sent validatio to {}".format(b64encode(node)))
-        self.send(node, ValidationReq(req_id, seq_r))
-
-        # this needs to be removed when a response is received
-        self.sent_validation_reqs[req_id] = seq
+        self.send(node, ValidationReq(seq_r))
 
     def handle(self, msg, src):
         # type: (Union[SynMsg, SynAckMsg, AckMsg]) -> None
@@ -607,37 +599,29 @@ class TrustChainRunner:
         logging.debug("TC: {} making tx to".format(b64encode(node)))
         self._send_syn(node, m)
 
-    def make_validation(self, interval=0.5):
+    def make_validation(self, interval):
         lc = task.LoopingCall(self._validate_random_tx)
         lc.start(interval).addErrback(my_err_back)
         self.validation_enabled = True
 
     def _validate_random_tx(self):
-        if len(self.sent_validation_reqs) > 10:
-            return
-
+        """
+        Each call sends validation requests for all unvalidated TX
+        :return: 
+        """
         if self.tc.latest_cp.round < 2:
             return
 
         max_h = self.tc.my_chain.get_cp_of_round(self.tc.latest_cp.round - 1).h
-        txs = filter(lambda x: x.h < max_h, self.tc.get_unknown_txs())
 
-        if len(txs) == 0:
-            return
-
-        def already_sent(h):
-            for v in self.sent_validation_reqs.values():
-                if v == h:
-                    return True
-            return False
-
-        for tx in txs:
-            # NOTE realistically, already_sent should have a timeout
-            if already_sent(tx.h):
+        for tx in self.tc.get_unknown_txs():
+            if tx.h >= max_h:
+                continue
+            if tx.request_sent_r >= self.tc.latest_round:
+                assert tx.request_sent_r == self.tc.latest_round
                 continue
             else:
                 self._send_validation_req(tx.h)
-                break
 
     def bootstrap_promoters(self):
         """
