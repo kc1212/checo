@@ -341,7 +341,7 @@ class TrustChainRunner:
 
         if len(pieces) == 0:
             logging.info("TC: no pieces")
-            self.send(remote_vk, ValidationResp(req.seq, False, -1, -1, []))
+            # self.send(remote_vk, ValidationResp(req.seq, False, -1, -1, []))
             return
 
         assert len(pieces) > 2
@@ -349,7 +349,7 @@ class TrustChainRunner:
 
         if r_a == -1 or r_b == -1:
             logging.info("TC: no consensus, we only have {}".format(sorted(self.tc.consensus.keys())))
-            self.send(remote_vk, ValidationResp(req.seq, False, -1, -1, []))
+            # self.send(remote_vk, ValidationResp(req.seq, False, -1, -1, []))
             return
 
         logging.debug("TC: responding with OK")
@@ -360,8 +360,9 @@ class TrustChainRunner:
         assert isinstance(resp, ValidationResp)
 
         if not resp.ok:
-            logging.debug("TC: resp not ready for tx: {}".format(resp.seq))
-            return
+            # logging.debug("TC: resp not ready for tx: {}".format(resp.seq))
+            # return
+            raise AssertionError("Only ok is allowed")
 
         self.tc.verify_tx(resp.seq, resp.r_a, resp.r_b, resp.pieces)
 
@@ -612,9 +613,14 @@ class TrustChainRunner:
         if self.tc.latest_cp.round < 2:
             return
 
+        txs = self.tc.get_unknown_txs()
+
+        if len(txs) < 10:
+            return
+
         max_h = self.tc.my_chain.get_cp_of_round(self.tc.latest_cp.round - 1).h
 
-        for tx in self.tc.get_unknown_txs():
+        for tx in txs[0:-9]:
             if tx.h >= max_h:
                 continue
             if tx.request_sent_r >= self.tc.latest_round:
