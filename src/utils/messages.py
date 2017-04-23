@@ -161,17 +161,23 @@ class ConsMsg:
 
 
 class ValidationReq:
-    def __init__(self, seq):
+    def __init__(self, seq, seq_r):
         # type: (int) -> None
         self.seq = seq
+        self.seq_r = seq_r
+
+    def __str__(self):
+        return "ValidationReq - seq: {}, seq_r: {}".format(self.seq, self.seq_r)
 
 
 class ValidationResp:
-    def __init__(self, seq, ok, r_a, r_b, pieces):
-        # type: (int, bool, int, int, List[Union[CpBlock, TxBlock]]) -> None
+    def __init__(self, seq, seq_r, r_a, r_b, pieces):
+        # type: (int, int, int, int, List[Union[CpBlock, TxBlock]]) -> None
         self.seq = seq
-        self.ok = ok
+        self.seq_r = seq_r
         self.r_a = r_a
         self.r_b = r_b
         self.pieces = pieces
 
+    def __str__(self):
+        return "ValidationResp - seq: {}, seq_r: {}, r_a: {}, r_b: {}".format(self.seq, self.seq_r, self.r_a, self.r_b)
