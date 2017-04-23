@@ -335,13 +335,12 @@ class TrustChainRunner:
     def handle_validation_req(self, req, remote_vk):
         # type: (ValidationReq, str) -> None
         assert isinstance(req, ValidationReq)
-        logging.debug("TC: received validation req from {}".format(b64encode(remote_vk)))
+        logging.debug("TC: received validation req from {}, {}".format(b64encode(remote_vk), req))
 
-        pieces, r_a, r_b = self.tc.agreed_pieces(req.seq)
+        pieces, r_a, r_b = self.tc.agreed_pieces(req.seq_r)
 
         if len(pieces) == 0:
             logging.info("TC: no pieces")
-            # self.send(remote_vk, ValidationResp(req.seq, False, -1, -1, []))
             return
 
         assert len(pieces) > 2
@@ -349,20 +348,14 @@ class TrustChainRunner:
 
         if r_a == -1 or r_b == -1:
             logging.info("TC: no consensus, we only have {}".format(sorted(self.tc.consensus.keys())))
-            # self.send(remote_vk, ValidationResp(req.seq, False, -1, -1, []))
             return
 
-        logging.debug("TC: responding with OK")
-        self.send(remote_vk, ValidationResp(req.seq, True, r_a, r_b, pieces))
+        self.send(remote_vk, ValidationResp(req.seq, req.seq_r, r_a, r_b, pieces))
 
     def handle_validation_resp(self, resp, remote_vk):
         # type: (ValidationResp, str) -> None
         assert isinstance(resp, ValidationResp)
-
-        if not resp.ok:
-            # logging.debug("TC: resp not ready for tx: {}".format(resp.seq))
-            # return
-            raise AssertionError("Only ok is allowed")
+        logging.debug("TC: received validation resp from {}, {}".format(b64encode(remote_vk), resp))
 
         self.tc.verify_tx(resp.seq, resp.r_a, resp.r_b, resp.pieces)
 
@@ -375,13 +368,15 @@ class TrustChainRunner:
         :return: 
         """
         block = self.tc.my_chain.chain[seq]
+        assert isinstance(block, TxBlock)
         block.request_sent_r = self.tc.latest_round
 
         seq_r = block.inner.h_r
         node = block.s_r.vk
 
-        logging.debug("TC: sent validatio to {}".format(b64encode(node)))
-        self.send(node, ValidationReq(seq_r))
+        req = ValidationReq(seq, seq_r)
+        logging.debug("TC: sent validatio to {}, {}".format(b64encode(node), req))
+        self.send(node, req)
 
     def handle(self, msg, src):
         # type: (Union[SynMsg, SynAckMsg, AckMsg]) -> None
@@ -613,14 +608,9 @@ class TrustChainRunner:
         if self.tc.latest_cp.round < 2:
             return
 
-        txs = self.tc.get_unknown_txs()
-
-        if len(txs) < 10:
-            return
-
         max_h = self.tc.my_chain.get_cp_of_round(self.tc.latest_cp.round - 1).h
 
-        for tx in txs[0:-9]:
+        for tx in self.tc.get_unknown_txs():
             if tx.h >= max_h:
                 continue
             if tx.request_sent_r >= self.tc.latest_round:
