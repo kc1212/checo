@@ -180,6 +180,7 @@ class MyFactory(Factory):
         self.vk = self.tc_runner.tc.vk
 
         self._neighbour = None
+        self._sorted_peer_keys = None
 
     def buildProtocol(self, addr):
         return MyProto(self)
@@ -264,15 +265,21 @@ class MyFactory(Factory):
         return node
 
     @property
+    def random_odd_node(self):
+        node = random.choice(self.peers.keys())
+        while node == self.vk or self.is_even_idx(node):
+            node = random.choice(self.peers.keys())
+        return node
+
+    @property
     def neighbour(self):
         """
         Expect all peers to be connected, return the verification key of the node that's after me, or loop back
         :return: 
         """
         if self._neighbour is None:
-            sorted_keys = sorted(self.peers.keys())
-            my_idx = sorted_keys.index(self.vk)
-            self._neighbour = sorted_keys[(my_idx + 1) % len(sorted_keys)]
+            my_idx = self.sorted_peer_keys.index(self.vk)
+            self._neighbour = self.sorted_peer_keys[(my_idx + 1) % len(self.sorted_peer_keys)]
         return self._neighbour
 
     def neighbour_if_even(self):
@@ -281,11 +288,26 @@ class MyFactory(Factory):
         This function returns the neighbour if I'm on an even index otherwise None.
         :return: 
         """
-        sorted_keys = sorted(self.peers.keys())
-        my_idx = sorted_keys.index(self.vk)
-        if my_idx % 2 == 0:
+        if self.is_even_idx(self.vk):
             return self.neighbour
         return None
+
+    def is_even_idx(self, node):
+        """
+        Checks whether a node has even index
+        :param node: 
+        :return: 
+        """
+        idx = self.sorted_peer_keys.index(node)
+        if idx % 2 == 0:
+            return True
+        return False
+
+    @property
+    def sorted_peer_keys(self):
+        if self._sorted_peer_keys is None:
+            self._sorted_peer_keys = sorted(self.peers.keys())
+        return self._sorted_peer_keys
 
     def handle_instruction(self, msg):
         """
