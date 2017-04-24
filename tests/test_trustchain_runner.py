@@ -33,7 +33,7 @@ def print_profile_stats():
     (4, 1, 8, 'omission', False),
     (8, 2, 8, 'omission', False),
     (8, 2, 16, 'omission', False),
-    (19, 6, 19, 'omission', True),
+    # (19, 6, 19, 'omission', True),  # uncomment this for profiling
     # (19, 6, 30, 'omission'),
 ])
 def test_consensus(n, t, m, failure, profile, folder, discover):
@@ -71,17 +71,15 @@ def check_tx(expected):
     assert sum(counts) >= expected
 
 
-@pytest.mark.parametrize("n,t,rate,timeout", [
-    (4, 1, 2.0, 10),
-    (4, 1, 10.0, 10),
-    (8, 2, 4.0, 10),
-    (8, 2, 20.0, 20),
+@pytest.mark.parametrize("n,t,timeout,expected", [
+    (4, 1, 20, 200),
+    (8, 2, 20, 400),
 ])
-def test_tx(n, t, rate, timeout, folder, discover):
+def test_tx(n, t, timeout, expected, folder, discover):
     configs = []
     for i in range(n):
         port = GOOD_PORT + i
-        configs.append(make_args(port, n, t, test='tc', tx_rate=rate / n, output=DIR + str(port) + '.out'))
+        configs.append(make_args(port, n, t, test='tc', tx_rate=5, output=DIR + str(port) + '.out'))
 
     ps = run_subprocesses(NODE_CMD_PREFIX, configs)
     print "Test: tx nodes starting"
@@ -92,9 +90,7 @@ def test_tx(n, t, rate, timeout, folder, discover):
     for p in ps:
         p.terminate()
 
-    # NOTE: *2 not necessary when only using even indexed nodes
-    # check_tx(rate * timeout * 2 * 0.9)
-    check_tx(rate * timeout * 0.9)  # 0.9 for 10% error
+    check_tx(expected)
     print "Test: tx test passed"
 
 
