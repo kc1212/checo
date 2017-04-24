@@ -67,7 +67,7 @@ class TrustChainRunner:
         self.consensus_delay = factory.config.consensus_delay
 
         self.recv_lc = task.LoopingCall(self._process_recv_q)
-        self.recv_lc.start(0.1, False).addErrback(my_err_back)
+        self.recv_lc.start(0.2, False).addErrback(my_err_back)
 
         self.send_lc = task.LoopingCall(self._process_send_q)
         self.send_lc.start(0.2, False).addErrback(my_err_back)
@@ -557,6 +557,8 @@ class TrustChainRunner:
 
     def make_tx(self, interval, random_node=False):
         if random_node:
+            if not self.factory.is_even_idx(self.tc.vk):
+                return
             lc = task.LoopingCall(self._make_tx_rand)
         else:
             node = self.factory.neighbour_if_even()
@@ -570,7 +572,7 @@ class TrustChainRunner:
         lc.start(interval).addErrback(my_err_back)
 
     def _make_tx_rand(self):
-        node = self.factory.random_node
+        node = self.factory.random_odd_node
         self._make_tx(node)
 
     def _make_tx(self, node):
