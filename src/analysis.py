@@ -8,6 +8,25 @@ import zipfile
 import dateutil
 
 
+"""
+Directory structure:
+/root
+    /<promoter1>-<population1>.zip
+    /<promoter2>-<population2>.zip
+    /...
+# file names must be unique
+
+After extracting
+/root
+    /<promoter1>-<population1>.zip
+    /<promoter1>-<population1>
+        /<data files>
+    /<promoter2>-<population2>.zip
+    /<promoter2>-<population2>
+        /<data files>
+"""
+
+
 def extract_file(file_name):
     assert len(file_name.split('.')) == 2
     assert file_name.split('.')[-1] == 'zip'
@@ -31,58 +50,99 @@ def extract_files(folder_name):
                 extract_file(full_path)
 
 
-def plot_consensus(dirs):
+def load_data(folder_name):
     """
-
-    :param dirs: 
+    Assume files are already extracted, read the data files and load them in a numpy array
+    :param folder_name: 
     :return: 
     """
-    def extract_data(folder_name):
-        extract_files(folder_name)
 
-        res = []
-        for item in os.listdir(folder_name):
-            full_path = os.path.join(folder_name, item)
-            if os.path.isdir(full_path):
-                mean, std = _consensus_stats(full_path)
-                res.append([int(item), mean])
+    # iterate the directories once to see what keys we have
+    data_labels = ['consensus mean', 'consensus std', 'throughput mean', 'throughput std']
+    facilitators = []
+    populations = []
+    for path in os.listdir(folder_name):
+        full_path = os.path.join(folder_name, path)
+        if os.path.isdir(full_path):
+            facilitator, population = path.split('-')
+            facilitators.append(int(facilitator))
+            populations.append(int(population))
 
-        res.sort(key=lambda x: x[0])
-        res = np.transpose(res)
-        return res
+    # build empty array using the metadata we have
+    facilitators = list(set(facilitators))
+    facilitators.sort()
 
-    for k, v in sorted(dirs.iteritems()):
-        legend = v[0]
-        style = v[1]
-        res = extract_data(k)
-        plt.plot(res[0], res[1], style, label=legend)
+    populations = list(set(populations))
+    populations.sort()
 
-    plt.ylabel('Avg. time for one consensus round (seconds)')
-    plt.xlabel('No. of facilitators (promoters)')
+    arr = np.empty([len(facilitators), len(populations), len(data_labels)])
+
+    # iterate the directory again to actually read the data
+    for i, facilitator in enumerate(facilitators):
+        for j, population in enumerate(populations):
+            full_path = os.path.join(folder_name, "{}-{}".format(facilitator, population))
+            consensus_mean, consensus_std = _read_consensus_stats(full_path)
+            validation_rate = _read_validation_rate(full_path)
+
+            # NOTE below need to be in sync with `data_labels`
+            arr[i][j][0] = consensus_mean
+            arr[i][j][1] = consensus_std
+            arr[i][j][2] = validation_rate
+
+    return arr, facilitators, populations, data_labels
+
+
+def plot(folder_name):
+    """
+    We have two "inputs" - population and no. of facilitator and two "outputs" - consensus time and throughput
+    thus 4 graphs is needed. More inputs/outputs may be added later.
+    :param folder_name: 
+    :return: 
+    """
+
+    extract_files(folder_name)
+
+    arr, facilitators, populations, data_labels = load_data(folder_name)
+    print arr
+
+    # plot throughput vs population
+    p1 = plt.figure(1)
+    throughtput_idx = 2
+    assert data_labels[throughtput_idx] == 'throughput mean'
+    for i, facilitator in enumerate(facilitators):
+        legend = '{} facilitators'.format(facilitator)
+        # style =
+        plt.plot(populations, arr[i, :, throughtput_idx], label=legend)
+
+    plt.ylabel('Throughput (validated tx / s)')
+    plt.xlabel('Population size')
     plt.legend(loc='upper left')
     plt.grid()
-    plt.show()
+    p1.show()
+
+    # plot consensus vs population
+    p2 = plt.figure(2)
+    consensus_idx = 0
+    assert data_labels[consensus_idx] == 'consensus mean'
+    for i, facilitator in enumerate(facilitators):
+        legend = '{} facilitators'.format(facilitator)
+        plt.plot(populations, arr[i, :, consensus_idx], label=legend)
+    p2.show()
 
 
-def plot_tx_rate(folder_name):
-    pass
-
-
-def _consensus_stats(folder_name):
-    """
-    Find the time difference between `TC: updated new promoters in round...`
-    """
+def list_files_that_match(folder_name, match='.err'):
     fnames = []
     for root, dirs, files in os.walk(folder_name):
         for f in files:
-            if ".err" in f:
+            if match in f:
                 fnames.append(os.path.join(root, f))
+    return fnames
 
-    return _read_inverval_stats('TC: updated new promoters in round', fnames)
 
-
-def _read_inverval_stats(match, fnames):
+def _read_consensus_stats(folder_name):
+    fnames = list_files_that_match(folder_name)
     differences = []
+    match = 'TC: updated new promoters in round'
 
     for fname in fnames:
         lines_of_interest = find_lines_of_interest(match, fname)
@@ -103,28 +163,22 @@ def _read_inverval_stats(match, fnames):
     return np.mean(differences), np.std(differences)
 
 
-def _read_tx_rate(fname):
-    """
-    
-    :param fname: 
-    :return: (count, total_time)
-    """
-    match = 'TC: current tx count'
-    lines_of_interest = find_lines_of_interest(match, fname)
+def _read_validation_rate(folder_name):
+    print "reading validation stats of {}".format(folder_name)
+    fnames = list_files_that_match(folder_name)
+    rates = []
+    match = 'TC: verified'
 
-    # take the start time as the first onee that does not have a 0 count
-    start_t = None
-    for line in lines_of_interest:
-        count = int(line.split(match)[-1])
-        if count != 0:
-            start_t = datetime_from_line(line)
-            break
+    for fname in fnames:
+        lines_of_interest = find_lines_of_interest(match, fname)
 
-    end_t = datetime_from_line(lines_of_interest[-1])
-    end_count = int(lines_of_interest[-1].split(match)[-1])
+        start_t = datetime_from_line(lines_of_interest[0])
+        end_t = datetime_from_line(lines_of_interest[-1])
 
-    # return float(end_count) / difference_in_seconds(start_t, end_t)
-    return end_count, difference_in_seconds(start_t, end_t)
+        rate = float(len(lines_of_interest)) / difference_in_seconds(start_t, end_t)
+        rates.append(rate)
+
+    return np.sum(rates)
 
 
 def datetime_from_line(line):
@@ -165,30 +219,15 @@ def difference_in_seconds(a, b):
     return (b - a).seconds
 
 
-def expand_vars_in_key(s):
-    return {os.path.expandvars(k): v for k, v in s.iteritems()}
-
-
 if __name__ == '__main__':
-    consensus_dirs = expand_vars_in_key({
-        "$HOME/tudelft/consensus-experiment/consensus-500-5": ("1250 tx/s", 'x--'),
-        "$HOME/tudelft/consensus-experiment/consensus-500-2": ("500 tx/s", 'o-'),
-        "$HOME/tudelft/consensus-experiment/consensus-500-1": ("250 tx/s", 's-.'),
-        "$HOME/tudelft/consensus-experiment/consensus-500-0": ("0 tx/s", '^:'),
-        # "$HOME/tudelft/consensus-experiment/consensus-500-4-gossip": ("1000 tx/s (with gossip)", '+--'),
-        "$HOME/tudelft/consensus-experiment/consensus-500-4-gossip2": ("1000 tx/s (with gossip)", '+--'),
-        "$HOME/tudelft/consensus-experiment/consensus-500-2-gossip2": ("500 tx/s (with gossip)", '+--')
-    })
-
-    fns = {'consensus': plot_consensus}
-
     parser = argparse.ArgumentParser(description='Analyse experiment results.')
     parser.add_argument(
-            '-p', '--plot',
-            choices=fns.keys(),
-            help='the type of experiment'
+        '--dir',
+        help='directory containing the data',
+        default='$HOME/tudelft/consensus-experiment/new'
     )
     args = parser.parse_args()
 
-    fns[args.plot](consensus_dirs)
+    plot(os.path.expandvars(args.dir))
 
+    raw_input()
