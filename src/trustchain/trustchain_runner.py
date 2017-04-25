@@ -312,10 +312,7 @@ class TrustChainRunner:
                     # we don't have enough CPs to start the consensus, so wait for more until some timeout
                     pass
                 else:
-                    if len(_msg) > 400:
-                        self.factory.acs.reset_then_start(random.sample(_msg, 400), _r)
-                    else:
-                        self.factory.acs.reset_then_start(_msg, _r)
+                    self.factory.acs.reset_then_start(_msg, _r)
                     self.new_consensus_lc.stop()
                     self.new_consensus_lc_count = 0
 

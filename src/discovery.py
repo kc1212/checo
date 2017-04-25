@@ -1,13 +1,13 @@
 from twisted.internet import reactor, task
 from twisted.internet.protocol import Factory
-from base64 import b64encode
 from typing import Union, Dict
 import logging
 import argparse
+import sys
 
 from src.utils.jsonreceiver import JsonReceiver
 from src.utils.messages import DiscoverMsg, DiscoverReplyMsg, CoinMsg, CoinReplyMsg, InstructionMsg
-from src.utils.utils import set_logging, my_err_back, MAX_LINE_LEN
+from src.utils.utils import set_logging, my_err_back, MAX_LINE_LEN, call_later
 
 
 class Discovery(JsonReceiver):
@@ -98,6 +98,13 @@ class DiscoveryFactory(Factory):
 
             self.lc = task.LoopingCall(self.send_instruction_when_ready)
             self.lc.start(5).addErrback(my_err_back)
+            self.sent = False
+
+            def exit_if_not_sent():
+                if not self.sent:
+                    raise AssertionError("not sent")
+            call_later(120, exit_if_not_sent)
+
         else:
             logging.info("Insufficient params to send instructions")
 
@@ -110,6 +117,7 @@ class DiscoveryFactory(Factory):
             msg = InstructionMsg(self.inst_delay, self.inst_inst, self.inst_param)
             logging.debug("Broadcasting instruction {}".format(msg))
             self.bcast(msg)
+            self.sent = True
             self.lc.stop()
         else:
             logging.debug("Instruction not ready ({} / {})...".format(len(self.nodes), self.m))
