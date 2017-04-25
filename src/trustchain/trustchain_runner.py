@@ -340,13 +340,14 @@ class TrustChainRunner:
         pieces, r_a, r_b = self.tc.agreed_pieces(req.seq_r)
 
         if len(pieces) == 0:
+            logging.warning("TC: no pieces, {}".format(sorted(self.tc.consensus.keys())))
             return
 
         assert len(pieces) > 2
         assert hash_pointers_ok(pieces)
 
         if r_a == -1 or r_b == -1:
-            logging.info("TC: no consensus, we only have {}".format(sorted(self.tc.consensus.keys())))
+            logging.warning("TC: no consensus, {}".format(sorted(self.tc.consensus.keys())))
             return
 
         self.send(remote_vk, ValidationResp(req.seq, req.seq_r, r_a, r_b, pieces))
@@ -356,7 +357,9 @@ class TrustChainRunner:
         assert isinstance(resp, ValidationResp)
         logging.debug("TC: received validation resp from {}, {}".format(b64encode(remote_vk), resp))
 
-        self.tc.verify_tx(resp.seq, resp.r_a, resp.r_b, resp.pieces)
+        res = self.tc.verify_tx(resp.seq, resp.r_a, resp.r_b, resp.pieces)
+        if res == ValidityState.Valid:
+            logging.info("TC: verified {}".format(self.tc.my_chain.chain[resp.seq]))
 
     def _send_validation_req(self, seq):
         # type: (int) -> None
@@ -374,7 +377,7 @@ class TrustChainRunner:
         node = block.s_r.vk
 
         req = ValidationReq(seq, seq_r)
-        logging.debug("TC: sent validatio to {}, {}".format(b64encode(node), req))
+        logging.debug("TC: sent validation to {}, {}".format(b64encode(node), req))
         self.send(node, req)
 
     def handle(self, msg, src):
@@ -518,7 +521,7 @@ class TrustChainRunner:
         s_s = self.block_r.sign(self.tc.vk, self.tc.sk)
         self.block_r.seal(self.tc.vk, s_s, src, s_r, prev_r)
         self.tc.new_tx(self.block_r)
-        logging.debug("TC: added tx {}".format(self.block_r))
+        logging.info("TC: added tx {}".format(self.block_r))
 
         self._send_ack(s_s)
 
@@ -546,7 +549,7 @@ class TrustChainRunner:
         logging.debug("TC: ack")
         self.block_r.seal(self.tc.vk, self.s_s, src, s_r, self.prev_r)
         self.tc.new_tx(self.block_r)
-        logging.debug("TC: added tx {}".format(self.block_r))
+        logging.info("TC: added tx {}".format(self.block_r))
         self._reset_state()
 
         return Handled()
