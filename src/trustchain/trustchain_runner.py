@@ -312,8 +312,8 @@ class TrustChainRunner:
                     # we don't have enough CPs to start the consensus, so wait for more until some timeout
                     pass
                 else:
-                    if len(_msg) > 200:
-                        self.factory.acs.reset_then_start(random.sample(_msg, 200), _r)
+                    if len(_msg) > 400:
+                        self.factory.acs.reset_then_start(random.sample(_msg, 400), _r)
                     else:
                         self.factory.acs.reset_then_start(_msg, _r)
                     self.new_consensus_lc.stop()
@@ -359,7 +359,7 @@ class TrustChainRunner:
 
         res = self.tc.verify_tx(resp.seq, resp.r_a, resp.r_b, resp.pieces)
         if res == ValidityState.Valid:
-            logging.info("TC: verified {}".format(self.tc.my_chain.chain[resp.seq]))
+            logging.info("TC: verified {}".format(b64encode(self.tc.my_chain.chain[resp.seq].hash)))
 
     def _send_validation_req(self, seq):
         # type: (int) -> None
@@ -521,7 +521,7 @@ class TrustChainRunner:
         s_s = self.block_r.sign(self.tc.vk, self.tc.sk)
         self.block_r.seal(self.tc.vk, s_s, src, s_r, prev_r)
         self.tc.new_tx(self.block_r)
-        logging.info("TC: added tx {}".format(self.block_r))
+        logging.info("TC: added tx {}".format(b64encode(self.block_r.hash)))
 
         self._send_ack(s_s)
 
@@ -549,7 +549,7 @@ class TrustChainRunner:
         logging.debug("TC: ack")
         self.block_r.seal(self.tc.vk, self.s_s, src, s_r, self.prev_r)
         self.tc.new_tx(self.block_r)
-        logging.info("TC: added tx {}".format(self.block_r))
+        logging.info("TC: added tx {}".format(b64encode(self.block_r.hash)))
         self._reset_state()
 
         return Handled()

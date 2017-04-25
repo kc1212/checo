@@ -49,14 +49,13 @@ class MyProto(JsonReceiver):
         qsize = self.q.qsize()
         ctr = 0
         while not self.q.empty() and ctr < qsize:
-            # logging.debug("NODE: processing item in queue")
             ctr += 1
             m = self.q.get()
             self.obj_received(m)
 
     def connection_lost(self, reason):
         peer = "<None>" if self.remote_vk is None else b64encode(self.remote_vk)
-        logging.info("NODE: deleting peer {}".format(peer))
+        logging.debug("NODE: deleting peer {}".format(peer))
         try:
             del self.peers[self.remote_vk]
         except KeyError:
