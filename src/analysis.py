@@ -127,6 +127,10 @@ def plot(folder_name):
     for i, facilitator in enumerate(facilitators):
         legend = '{} facilitators'.format(facilitator)
         plt.plot(populations, arr[i, :, consensus_idx], label=legend)
+    plt.ylabel('Consensus duration (s)')
+    plt.xlabel('Population size')
+    plt.legend(loc='upper left')
+    plt.grid()
     p2.show()
 
 
@@ -172,6 +176,9 @@ def _read_validation_rate(folder_name):
     for fname in fnames:
         lines_of_interest = find_lines_of_interest(match, fname)
 
+        if len(lines_of_interest) == 0:
+            print "WARNING: no lines of interest for {}".format(fname)
+            continue
         start_t = datetime_from_line(lines_of_interest[0])
         end_t = datetime_from_line(lines_of_interest[-1])
 

@@ -31,6 +31,7 @@ class EqHash:
 
     @property
     def hash(self):
+        # TODO better to hash the packed tuple
         return libnacl.crypto_hash_sha256(str(self.__hash__()))
 
 

@@ -217,9 +217,6 @@ class TrustChainRunner:
             if is_new:
                 self._try_add_cp(msg.r)
                 self.factory.gossip(msg)
-        else:
-            # NOTE gossip signatures too?
-            pass
 
     def handle_cp(self, msg, remote_vk):
         # type: (CpMsg, str) -> None
@@ -239,10 +236,6 @@ class TrustChainRunner:
             is_new = self.round_states[msg.r].new_cons(msg.cons)
             if is_new:
                 self._try_add_cp(msg.r)
-                self.factory.gossip(msg)
-        else:
-            if msg.r not in self.tc.consensus:
-                self.tc.consensus[msg.r] = msg.cons
                 self.factory.gossip(msg)
 
     def _try_add_cp(self, r):
