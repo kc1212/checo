@@ -1,14 +1,13 @@
 from twisted.internet import task
 from base64 import b64encode
-from Queue import Queue
 from typing import Union
 import random
 import logging
 from collections import defaultdict
 
 from trustchain import TrustChain, TxBlock, CpBlock, Signature, Cons, ValidityState
-from src.utils.utils import Replay, Handled, collate_cp_blocks, my_err_back, hash_pointers_ok
-from src.utils.messages import SynMsg, AbortMsg, SynAckMsg, AckMsg, SigMsg, CpMsg, ConsMsg, ValidationReq, \
+from src.utils.utils import collate_cp_blocks, my_err_back
+from src.utils.messages import TxReq, TxResp, SigMsg, CpMsg, ConsMsg, ValidationReq, \
     ValidationResp
 
 
@@ -61,16 +60,8 @@ class TrustChainRunner:
     def __init__(self, factory, msg_wrapper_f=lambda x: x):
         self.tc = TrustChain()
         self.factory = factory
-        self.recv_q = Queue()
-        self.send_q = Queue()  # only for syn messages
         self.msg_wrapper_f = msg_wrapper_f
         self.consensus_delay = factory.config.consensus_delay
-
-        self.recv_lc = task.LoopingCall(self._process_recv_q)
-        self.recv_lc.start(0.2, False).addErrback(my_err_back)
-
-        self.send_lc = task.LoopingCall(self._process_send_q)
-        self.send_lc.start(0.2, False).addErrback(my_err_back)
 
         self.collect_rubbish_lc = task.LoopingCall(self._collect_rubbish)
         self.collect_rubbish_lc.start(5, False).addErrback(my_err_back)
@@ -81,19 +72,6 @@ class TrustChainRunner:
         self.bootstrap_lc = None
         self.new_consensus_lc = None
         self.new_consensus_lc_count = 0
-        self.cp_q = Queue()
-
-        # states below are states used for negotiating transaction
-        # TODO these states are really ugly and error prone,
-        # TODO refactor them into another class, e.g. IntermediateTX
-        # TODO the lock is also not ideal, prefer to chain up Deferred
-        self.tx_locked = False  # only process one transaction at a time, otherwise there'll be hash pointer collisions
-        self.block_r = None  # type: TxBlock
-        self.tx_id = -1  # type: int
-        self.src = None  # type: str
-        self.s_s = None  # type: Signature
-        self.m = None  # type: str
-        self.prev_r = None  # type: str
 
         self.random_node_for_tx = False
         self.validation_enabled = False
@@ -110,55 +88,6 @@ class TrustChainRunner:
         """
         logging.info("TC: current tx count {}".format(self.tc.tx_count))
         logging.info("TC: validated {}".format(len(self.tc.get_validated_txs())))
-
-    def _reset_state(self):
-        self.tx_locked = False
-        self.tx_id = -1  # the id of the transaction that we're processing
-        self.block_r = None
-        self.src = None
-        self.s_s = None
-        self.m = None
-        self.prev_r = None
-
-        while not self.cp_q.empty():
-            r = self.cp_q.get()
-            self._try_add_cp(r)
-
-    def _assert_unlocked_state(self):
-        assert not self.tx_locked
-        assert self.block_r is None
-        assert self.src is None
-        assert self.tx_id == -1
-        assert self.s_s is None
-        assert self.m is None
-        assert self.prev_r is None
-
-    def _assert_after_syn_state(self):
-        assert self.tx_locked
-        assert self.block_r is None
-        assert self.src is not None
-        assert self.tx_id != -1
-        assert self.s_s is None
-        assert self.m is not None
-        assert self.prev_r is None
-
-    def _assert_full_state(self):
-        assert self.tx_locked
-        assert self.block_r is not None
-        assert self.src is not None
-        assert self.tx_id != -1
-        assert self.s_s is not None
-        assert self.m is not None
-        assert self.prev_r is not None
-
-    def _update_state(self, lock, block, tx_id, src, s_s, m, prev_r):
-        self.tx_locked = lock
-        self.block_r = block
-        self.tx_id = tx_id
-        self.src = src
-        self.s_s = s_s
-        self.m = m
-        self.prev_r = prev_r
 
     def _sufficient_sigs(self, r):
         if len(self.round_states[r].received_sigs) > self.factory.config.t:
@@ -209,6 +138,13 @@ class TrustChainRunner:
 
     def handle_sig(self, msg, remote_vk):
         # type: (SigMsg, str) -> None
+        """
+        Update round_states on new signature,
+        then conditionally gossip
+        :param msg: 
+        :param remote_vk: 
+        :return: 
+        """
         assert isinstance(msg, SigMsg)
 
         logging.debug("TC: received SigMsg {} from {}".format(msg, b64encode(remote_vk)))
@@ -220,6 +156,13 @@ class TrustChainRunner:
 
     def handle_cp(self, msg, remote_vk):
         # type: (CpMsg, str) -> None
+        """
+        When I'm the promoter, I expect other nodes to send CPs to me.
+        This function handles this situation.
+        :param msg: 
+        :param remote_vk: 
+        :return: 
+        """
         assert isinstance(msg, CpMsg)
 
         logging.debug("TC: received CpMsg {} from {}".format(msg, b64encode(remote_vk)))
@@ -229,6 +172,13 @@ class TrustChainRunner:
 
     def handle_cons(self, msg, remote_vk):
         # type: (ConsMsg, str) -> None
+        """
+        Update round_state on new ConsMsg, 
+        then conditionally gossip.
+        :param msg: 
+        :param remote_vk: 
+        :return: 
+        """
         assert isinstance(msg, ConsMsg)
 
         logging.debug("TC: received ConsMsg {} from {}".format(msg, b64encode(remote_vk)))
@@ -256,10 +206,7 @@ class TrustChainRunner:
             logging.debug("TC: insufficient signatures")
             return
 
-        if self.tx_locked:
-            self.cp_q.put(r)
-        else:
-            self._add_cp(r)
+        self._add_cp(r)
 
     def _add_cp(self, r):
         """
@@ -322,35 +269,6 @@ class TrustChainRunner:
         else:
             self.factory.promoter_cast_t(CpMsg(self.tc.my_chain.latest_cp))
 
-    def handle_validation_req(self, req, remote_vk):
-        # type: (ValidationReq, str) -> None
-        assert isinstance(req, ValidationReq)
-        logging.debug("TC: received validation req from {}, {}".format(b64encode(remote_vk), req))
-
-        pieces, r_a, r_b = self.tc.agreed_pieces(req.seq_r)
-
-        if len(pieces) == 0:
-            logging.warning("TC: no pieces, {}".format(sorted(self.tc.consensus.keys())))
-            return
-
-        assert len(pieces) > 2
-        assert hash_pointers_ok(pieces)
-
-        if r_a == -1 or r_b == -1:
-            logging.warning("TC: no consensus, {}".format(sorted(self.tc.consensus.keys())))
-            return
-
-        self.send(remote_vk, ValidationResp(req.seq, req.seq_r, r_a, r_b, pieces))
-
-    def handle_validation_resp(self, resp, remote_vk):
-        # type: (ValidationResp, str) -> None
-        assert isinstance(resp, ValidationResp)
-        logging.debug("TC: received validation resp from {}, {}".format(b64encode(remote_vk), resp))
-
-        res = self.tc.verify_tx(resp.seq, resp.r_a, resp.r_b, resp.pieces)
-        if res == ValidityState.Valid:
-            logging.info("TC: verified {}".format(b64encode(self.tc.my_chain.chain[resp.seq].hash)))
-
     def _send_validation_req(self, seq):
         # type: (int) -> None
         """
@@ -363,186 +281,77 @@ class TrustChainRunner:
         assert isinstance(block, TxBlock)
         block.request_sent_r = self.tc.latest_round
 
-        seq_r = block.inner.h_r
-        node = block.s_r.vk
+        assert block.other_half is not None
+        seq_r = block.other_half.inner.seq
+        node = block.inner.counterparty
 
         req = ValidationReq(seq, seq_r)
         logging.debug("TC: sent validation to {}, {}".format(b64encode(node), req))
         self.send(node, req)
 
+    def _handle_validation_req(self, req, remote_vk):
+        # type: (ValidationReq, str) -> None
+        assert isinstance(req, ValidationReq)
+        logging.debug("TC: received validation req from {}, {}".format(b64encode(remote_vk), req))
+
+        pieces, r_a, r_b = self.tc.agreed_pieces(req.seq_r)
+
+        if len(pieces) == 0:
+            logging.warning("TC: no pieces, {}".format(sorted(self.tc.consensus.keys())))
+            return
+
+        assert len(pieces) > 2
+
+        if r_a == -1 or r_b == -1:
+            logging.warning("TC: no consensus, {}".format(sorted(self.tc.consensus.keys())))
+            return
+
+        self.send(remote_vk, ValidationResp(req.seq, req.seq_r, r_a, r_b, pieces))
+
+    def _handle_validation_resp(self, resp, remote_vk):
+        # type: (ValidationResp, str) -> None
+        assert isinstance(resp, ValidationResp)
+        logging.debug("TC: received validation resp from {}, {}".format(b64encode(remote_vk), resp))
+
+        res = self.tc.verify_tx(resp.seq, resp.r_a, resp.r_b, resp.pieces)
+        if res == ValidityState.Valid:
+            logging.info("TC: verified {}".format(b64encode(self.tc.my_chain.chain[resp.seq].hash)))
+
     def handle(self, msg, src):
-        # type: (Union[SynMsg, SynAckMsg, AckMsg]) -> None
-        logging.debug("TC: got message".format(msg))
-        if isinstance(msg, AbortMsg):
-            if self.tx_locked and self.tx_id == msg.tx_id:
-                self._reset_state()
-        else:
-            self.recv_q.put((msg, src))
-
-    def _process_recv_q(self):
-        logging.debug("TC: processing recv_q, size: {}".format(self.recv_q.qsize()))
-        qsize = self.recv_q.qsize()
-
-        cnt = 0
-        while not self.recv_q.empty() and cnt < qsize:
-            cnt += 1
-            msg, src = self.recv_q.get()
-
-            if isinstance(msg, SynMsg):
-                res = self._process_syn(msg, src)
-                if isinstance(res, Replay):
-                    self.recv_q.put((msg, src))
-
-            elif isinstance(msg, SynAckMsg):
-                res = self._process_synack(msg, src)
-                if isinstance(res, Replay):
-                    self.recv_q.put((msg, src))
-
-            elif isinstance(msg, AckMsg):
-                res = self._process_ack(msg, src)
-                if isinstance(res, Replay):
-                    self.recv_q.put((msg, src))
-
-            elif isinstance(msg, ValidationReq):
-                self.factory.tc_runner.handle_validation_req(msg, src)
-
-            elif isinstance(msg, ValidationResp):
-                self.factory.tc_runner.handle_validation_resp(msg, src)
-
-            else:
-                raise AssertionError("Incorrect message type")
-
-    def _process_send_q(self):
+        # type: (Union[TxReq, TxResp]) -> None
         """
-        Only process one at a time, because if the state gets locked after processing one until we receive SynAck
+        Handle messages that are sent using self.send, primarily transaction messages.
+        :param msg: 
+        :param src: 
         :return: 
         """
-        logging.debug("TC: processing send_q, size: {}".format(self.send_q.qsize()))
-        if not self.send_q.empty():
-            if self.tx_locked:
-                return
+        logging.debug("TC: got message".format(msg))
+        if isinstance(msg, TxReq):
+            nonce = msg.tx.inner.nonce
+            m = msg.tx.inner.m
+            assert src == msg.tx.sig.vk, "{} != {}".format(b64encode(src), b64encode(msg.tx.sig.vk))
+            self.tc.new_tx(src, m, nonce)
 
-            m, node = self.send_q.get()
+            tx = self.tc.my_chain.chain[-1]
+            tx.add_other_half(msg.tx)
+            self.send(src, TxResp(msg.tx.inner.seq, tx))
+            logging.info("TC: added tx {}".format(b64encode(tx.hash)))
 
-            tx_id = random.randint(0, 2 ** 31 - 1)
-            msg = SynMsg(tx_id, self.tc.latest_hash, self.tc.next_h, m)
+        elif isinstance(msg, TxResp):
+            assert src == msg.tx.sig.vk, "{} != {}".format(b64encode(src), b64encode(msg.tx.sig.vk))
+            # TODO index access not safe
+            tx = self.tc.my_chain.chain[msg.seq]
+            tx.add_other_half(msg.tx)
+            logging.info("TC: other half {}".format(b64encode(msg.tx.hash), msg.seq))
 
-            self._update_state(True, None, tx_id, node, None, m, None)
-            self.send(node, msg)
+        elif isinstance(msg, ValidationReq):
+            self._handle_validation_req(msg, src)
 
-            logging.debug("TC: sent {} to node {}".format(msg, b64encode(node)))
+        elif isinstance(msg, ValidationResp):
+            self._handle_validation_resp(msg, src)
 
-    def _send_syn(self, node, m):
-        """
-        puts the message into the queue for sending on a later time (when we're unlocked)
-        we need to do this because we cannot start a transaction at any time, only when we're unlocked
-        :param node:
-        :param m:
-        :return:
-        """
-        logging.debug('TC: putting {{ "node": {}, "m": {} }} in send_q'.format(b64encode(node), m))
-        self.send_q.put((m, node))
-
-    def _process_syn(self, msg, src):
-        # type: (SynMsg, str) -> Union[Handled, Replay]
-        """
-        I receive a syn, so I can initiate a block, but cannot seal it (missing signature)
-        :param msg: message
-        :param src: source/sender of the message
-        :return:
-        """
-        logging.debug("TC: processing syn msg {}".format(msg))
-        # put the processing in queue if I'm locked
-        if self.tx_locked:
-            logging.debug("TC: we're locked, aborting")
-            self.send(src, AbortMsg(msg.tx_id))
-            return Handled()
-
-        # we're not locked, so proceed
-        logging.debug("TC: not locked, proceeding")
-        tx_id = msg.tx_id
-        prev_r = msg.prev
-        h_r = msg.h  # height of receiver
-        m = msg.m
-
-        # make sure we're in the initial state
-        self._assert_unlocked_state()
-        block = TxBlock(self.tc.latest_hash, self.tc.next_h, h_r, m)  # generate s_s from this
-        self._update_state(True,
-                           block,
-                           tx_id,
-                           src,
-                           block.sign(self.tc.vk, self.tc.sk),  # store my signature
-                           m,
-                           prev_r)
-        self._send_synack()
-        return Handled()
-
-    def _send_synack(self):
-        self._assert_full_state()
-        assert not self.block_r.is_sealed()
-        msg = SynAckMsg(self.tx_id,
-                        self.tc.latest_hash,
-                        self.tc.next_h,
-                        self.s_s)
-        self.send(self.src, msg)
-
-    def _process_synack(self, msg, src):
-        # type: (SynAckMsg, str) -> Union[Handled, Replay]
-        """
-        I should have all the information to make and seal a new tx block
-        :param msg:
-        :param src:
-        :return:
-        """
-        logging.debug("TC: processing synack {} from {}".format(msg, b64encode(src)))
-        tx_id = msg.tx_id
-        prev_r = msg.prev
-        h_r = msg.h
-        s_r = msg.s
-        assert tx_id == self.tx_id, "TC: not the tx_id we're expecting"
-
-        self._assert_after_syn_state()  # we initiated the syn
-        assert src == self.src
-        assert src == s_r.vk
-
-        logging.debug("TC: synack")
-        self.block_r = TxBlock(self.tc.latest_hash, self.tc.next_h, h_r, self.m)
-        s_s = self.block_r.sign(self.tc.vk, self.tc.sk)
-        self.block_r.seal(self.tc.vk, s_s, src, s_r, prev_r)
-        self.tc.new_tx(self.block_r)
-        logging.info("TC: added tx {}".format(b64encode(self.block_r.hash)))
-
-        self._send_ack(s_s)
-
-        return Handled()
-
-    def _send_ack(self, s_s):
-        # type: (Signature) -> None
-        msg = AckMsg(self.tx_id, s_s)
-        self.send(self.src, msg)
-
-        self._reset_state()
-
-    def _process_ack(self, msg, src):
-        # type: (AckMsg, str) -> Union[Handled, Replay]
-        logging.debug("TC: processing ack {} from {}".format(msg, b64encode(src)))
-        tx_id = msg.tx_id
-        s_r = msg.s
-        if tx_id != self.tx_id:
-            logging.debug("TC: not the tx_id we're expecting, putting it back to queue")
-            return Replay()
-
-        assert src == self.src
-        assert not self.block_r.is_sealed()
-
-        logging.debug("TC: ack")
-        self.block_r.seal(self.tc.vk, self.s_s, src, s_r, self.prev_r)
-        self.tc.new_tx(self.block_r)
-        logging.info("TC: added tx {}".format(b64encode(self.block_r.hash)))
-        self._reset_state()
-
-        return Handled()
+        else:
+            raise AssertionError("Incorrect message type")
 
     def send(self, node, msg):
         logging.debug("TC: sending {} to {}".format(self.msg_wrapper_f(msg), b64encode(node)))
@@ -550,8 +359,6 @@ class TrustChainRunner:
 
     def make_tx(self, interval, random_node=False):
         if random_node:
-            if not self.factory.is_even_idx(self.tc.vk):
-                return
             lc = task.LoopingCall(self._make_tx_rand)
         else:
             node = self.factory.neighbour_if_even()
@@ -565,7 +372,7 @@ class TrustChainRunner:
         lc.start(interval).addErrback(my_err_back)
 
     def _make_tx_rand(self):
-        node = self.factory.random_odd_node
+        node = self.factory.random_node
         self._make_tx(node)
 
     def _make_tx(self, node):
@@ -574,9 +381,6 @@ class TrustChainRunner:
         :param node: 
         :return: 
         """
-        if self.send_q.qsize() > 10 or self.recv_q.qsize() > 10:
-            return
-
         # throttle transactions if we cannot validate them timely
         if self.validation_enabled and len(self.tc.get_unknown_txs()) > 10 * self.factory.config.n:
             return
@@ -587,7 +391,12 @@ class TrustChainRunner:
         # typical bitcoin tx is 500 bytes
         m = 'a' * random.randint(400, 600)
         logging.debug("TC: {} making tx to".format(b64encode(node)))
-        self._send_syn(node, m)
+
+        # create the tx and send the request
+        self.tc.new_tx(node, m)
+        tx = self.tc.my_chain.chain[-1]
+        self.send(node, TxReq(tx))
+        logging.info("TC: added tx {}".format(b64encode(tx.hash)))
 
     def make_validation(self, interval):
         lc = task.LoopingCall(self._validate_random_tx)

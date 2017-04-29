@@ -1,7 +1,7 @@
 from base64 import b64encode
 from typing import Union, Dict, List
 
-from src.trustchain.trustchain import Signature, CpBlock, TxBlock, Cons
+from src.trustchain.trustchain import Signature, CpBlock, TxBlock, Cons, CompactBlock
 
 
 class DiscoverMsg:
@@ -93,42 +93,30 @@ class ACSMsg:
 
 class ChainMsg:
     """
-    Simple wrapper around SynMsg, AbortMsg, SynAckMsg and AckMsg
+    Simple wrapper around the transaction related messages
     """
     def __init__(self, body):
-        # type: (Union[SynMsg, AbortMsg, SynAckMsg, AckMsg]) -> None
+        # type: (Union[TxReq, TxResp, ValidationReq, ValidationResp]) -> None
         self.body = body
 
 
-class SynMsg:
-    def __init__(self, tx_id, prev, h, m):
-        # type: (int, str, int, str) -> None
-        self.tx_id = tx_id
-        self.prev = prev
-        self.h = h
-        self.m = m
+class TxReq:
+    def __init__(self, tx):
+        # type: (TxBlock) -> None
+        self.tx = tx
+
+    def __str__(self):
+        return "TxReq - tx: {}".format(self.tx)
 
 
-class AbortMsg:
-    def __init__(self, tx_id):
-        # type: (int) -> None
-        self.tx_id = tx_id
+class TxResp:
+    def __init__(self, seq, tx):
+        # type: (int, TxBlock) -> None
+        self.seq = seq
+        self.tx = tx
 
-
-class SynAckMsg:
-    def __init__(self, tx_id, prev, h, s):
-        # type: (int, str, int, Signature) -> None
-        self.tx_id = tx_id
-        self.prev = prev
-        self.h = h
-        self.s = s
-
-
-class AckMsg:
-    def __init__(self, tx_id, s):
-        # type: (int, Signature) -> None
-        self.tx_id = tx_id
-        self.s = s
+    def __str__(self):
+        return "TxResp - seq: {}, tx: {}".format(self.seq, self.tx)
 
 
 class CpMsg:
@@ -172,7 +160,7 @@ class ValidationReq:
 
 class ValidationResp:
     def __init__(self, seq, seq_r, r_a, r_b, pieces):
-        # type: (int, int, int, int, List[Union[CpBlock, TxBlock]]) -> None
+        # type: (int, int, int, int, List[CompactBlock]) -> None
         self.seq = seq
         self.seq_r = seq_r
         self.r_a = r_a

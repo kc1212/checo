@@ -31,7 +31,7 @@ class EqHash:
 
     @property
     def hash(self):
-        # TODO better to hash the packed tuple
+        # TODO better to hash the packed tuple, use __repr__?
         return libnacl.crypto_hash_sha256(str(self.__hash__()))
 
 
@@ -45,16 +45,17 @@ class Signature(EqHash):
 
         if vk is None and sk is None and msg is None:
             self.vk = None
-            self.sig = None
+            self._sig = None
         else:
             self.vk = vk
-            self.sig = libnacl.crypto_sign(msg, sk)
+            self._sig = libnacl.crypto_sign(msg, sk)
 
     def __str__(self):
-        return '{{"vk": "{}", "sig": "{}"}}'.format(b64encode(self.vk), b64encode(self.sig))
+        # type: () -> str
+        return '{{"vk": "{}", "sig": "{}"}}'.format(b64encode(self.vk), b64encode(self._sig))
 
     def _tuple(self):
-        return self.vk,  self.sig
+        return self.vk,  self._sig
 
     def verify(self, vk, msg):
         # type: (str, str) -> None
@@ -64,7 +65,7 @@ class Signature(EqHash):
         """
         if vk != self.vk:
             raise ValueError("Mismatch verification key")
-        expected_msg = libnacl.crypto_sign_open(self.sig, self.vk)
+        expected_msg = libnacl.crypto_sign_open(self._sig, self.vk)
         if expected_msg != msg:
             raise ValueError("Mismatch message")
 
@@ -73,118 +74,84 @@ class TxBlockInner(EqHash):
     """
     Ideally this should be defined inside TxBlock, but jsonpickle won't decode correctly if we do that...
     """
-    def __init__(self, prev, h_s, h_r, m):
-        # type: (str, int, int, str) -> None
+    def __init__(self, prev, seq, counterparty, nonce, m):
+        # type: (str, int, str, str, str) -> None
         self.prev = prev
-        self.h_s = h_s
-        self.h_r = h_r
+        self.seq = seq
+        self.counterparty = counterparty
+        self.nonce = nonce
         self.m = m
 
     def _tuple(self):
-        return self.prev, self.h_s, self.h_r, self.m
+        return self.prev, self.seq, self.counterparty, self.m
 
 
 class TxBlock(EqHash):
-    """
-    In the network, TxBlock needs to be created using 3 way handshake.
-    1, s -> r: prev, h_s, m // syn
-    2, s <- r: prev, h_r, s_r // synack, s seals block
-    3, s -> r: s_s // ack, r seals block
-    I'm always the sender, regardless of who initialised the handshake.
-    This protocol is not Byzantine fault tolerant, ongoing work for "double signature"
-    struct TxBlock {
-        prev: Digest,
-        h_s: u64,
-        h_r: u64,
-        s_s: Signature,
-        s_r: Signature,
-        m: String,
-
-        // items below are not a part of the block digest
-        validity: Valid | Invalid | Unknown
-    }
-    """
-    def __init__(self, prev, h_s, h_r, m):
-        # type: (str, int, int, str) -> None
-        self.inner = TxBlockInner(prev, h_s, h_r, m)
-        self.s_s = None
-        self.s_r = None
+    def __init__(self, prev, seq, counterparty, m, vk, sk, nonce=None):
+        """
+        
+        :param prev: 
+        :param seq: 
+        :param counterparty: 
+        :param m: 
+        :param vk: 
+        :param sk: 
+        """
+        # type: (str, int, str, str, str, str) -> None
+        if nonce is None:
+            nonce = libnacl.randombytes(32)
+        self.inner = TxBlockInner(prev, seq, counterparty, nonce, m)
+        self.sig = Signature(vk, sk, self.inner.hash)
+        self.other_half = None
 
         # properties below are used for tracking validation status, not a part of hash
         self.validity = ValidityState.Unknown
         self.request_sent_r = -1  # a positive value indicate the round at which the request is sent
 
     def __str__(self):
-        return '{{"prev": "{}", "h_s": {}, "h_r": {}, "s_s": {}, "s_r": {}, "m": "{}"}}'\
+        return '{{"prev": "{}", "seq": {}, "counterparty": "{}", "nonce": "{}", "msg": "{}", "sig": {}}}'\
             .format(b64encode(self.prev),
-                    self.inner.h_s, self.inner.h_r,
-                    self.s_s, self.s_r, self.inner.m)
+                    self.inner.seq,
+                    b64encode(self.inner.counterparty),
+                    b64encode(self.inner.nonce),
+                    self.inner.m,
+                    self.sig)
 
     def _tuple(self):
-        return self.inner, self.s_s, self.s_r
+        return self.inner, self.sig
 
-    def sign(self, vk, sk):
-        # type: (str, str) -> Signature
+    def to_compact(self):
+        # type: () -> CompactBlock
         """
-        Note that this does not populate the signature field
-        :param vk:
-        :param sk:
-        :return:
+        returns a compact version of this block, the compact version should be used to compute the chain
+        :return: 
         """
-        return Signature(vk, sk, self.inner.hash)
-
-    def seal(self, vk_s, s_s, vk_r, s_r, prev_r):
-        # type: (str, Signature, str, Signature, str) -> TxBlock
-        """
-        Expect to have obtained s_r from the receiver
-        :param vk_s:
-        :param s_s:
-        :param vk_r: receiver verification key
-        :param s_r: the previous digest of the receiver
-        :param prev_r:
-        :return:
-        """
-        assert self.s_s is None
-        assert self.s_r is None
-
-        s_r.verify(vk_r, self.make_pair(prev_r).inner.hash)
-        self.s_r = s_r
-
-        s_s.verify(vk_s, self.inner.hash)
-        self.s_s = s_s
-
-        return self
-
-    def is_sealed(self):
-        if self.s_s is None or self.s_r is None:
-            return False
-        return True
-
-    def make_pair(self, prev):
-        # type: (str) -> TxBlock
-        """
-        Note we reverse h_s and h_r
-        :param prev:
-        :return: a TxBlock without signatures
-        """
-        return TxBlock(prev=prev, h_s=self.inner.h_r, h_r=self.inner.h_s, m=self.inner.m)
+        return CompactBlock(self.hash, self.prev)
 
     @property
     def h(self):
         # type: () -> int
-        return self.inner.h_s
+        return self.inner.seq
 
     @property
     def prev(self):
         # type: () -> str
         return self.inner.prev
 
+    def add_other_half(self, other_half):
+        # type: (TxBlock) -> ()
+        assert self.inner.nonce == other_half.inner.nonce
+        assert self.inner.m == other_half.inner.m
+        other_half.sig.verify(self.inner.counterparty, other_half.inner.hash)
+
+        self.other_half = copy.deepcopy(other_half)
+
 
 class CpBlockInner(EqHash):
-    def __init__(self, prev, h, cons, ss, p):
+    def __init__(self, prev, seq, cons, ss, p):
         # type: (str, int, Cons, List[Signature], int) -> None
         self.prev = prev
-        self.h_s = h
+        self.seq = seq
         self.round = cons.round
         self.cons_hash = cons.hash
         self.ss = ss
@@ -192,7 +159,7 @@ class CpBlockInner(EqHash):
 
     def _tuple(self):
         self.ss.sort(key=lambda x: x.vk)
-        return self.prev, self.h_s, self.round, self.cons_hash, tuple(self.ss), self.p
+        return self.prev, self.seq, self.round, self.cons_hash, tuple(self.ss), self.p
 
 
 class CpBlock(EqHash):
@@ -225,7 +192,7 @@ class CpBlock(EqHash):
         assert p in (0, 1)
         self.inner = CpBlockInner(prev, h, cons, ss, p)
 
-        if cons.round != -1 or len(ss) != 0 or len(vks) != 0 or self.inner.h_s != 0:
+        if cons.round != -1 or len(ss) != 0 or len(vks) != 0 or self.inner.seq != 0:
             t = math.floor((len(vks) - 1) / 3.0)
             self._verify_signatures(ss, vks, int(t))
         else:
@@ -259,10 +226,14 @@ class CpBlock(EqHash):
         if not oks > t:
             raise ValueError("verification failed, oks = {}, t = {}".format(oks, t))
 
+    def to_compact(self):
+        # type: () -> CompactBlock
+        return CompactBlock(self.hash, self.prev)
+
     @property
     def h(self):
         # type: () -> int
-        return self.inner.h_s
+        return self.inner.seq
 
     @property
     def prev(self):
@@ -272,6 +243,16 @@ class CpBlock(EqHash):
     @property
     def round(self):
         return self.inner.round
+
+
+class CompactBlock(EqHash):
+    def __init__(self, digest, prev):
+        # type: (str, str) -> None
+        self.digest = digest
+        self.prev = prev
+
+    def _tuple(self):
+        return self.digest, self.prev
 
 
 class Cons(EqHash):
@@ -296,6 +277,7 @@ class Cons(EqHash):
         self.blocks = blocks
 
     def __str__(self):
+        # type () -> str
         return '{{"r": {}, "blocks": {}}}'.format(self.round, len(self.blocks))
 
     def _tuple(self):
@@ -331,7 +313,7 @@ class Chain:
 
     def new_tx(self, tx):
         # type: (TxBlock) -> None
-        assert tx.prev == self.chain[-1].hash
+        assert tx.prev == self.chain[-1].to_compact().hash
         assert tx.h == self.chain[-1].h + 1
 
         self.chain.append(tx)
@@ -339,7 +321,7 @@ class Chain:
 
     def new_cp(self, cp):
         # type: (CpBlock) -> None
-        assert cp.prev == self.chain[-1].hash
+        assert cp.prev == self.chain[-1].to_compact().hash
         assert cp.h == self.chain[-1].h + 1
 
         prev_cp = self.latest_cp
@@ -350,12 +332,18 @@ class Chain:
         self._cp_count += 1
 
     def get_cp_of_round(self, r):
+        # type: (int) -> Optional[CpBlock]
         # TODO an optimisation would be to begin from the back side if 'r' is large
         for block in self.chain:
             if isinstance(block, CpBlock):
                 if block.round == r:
                     return block
         return None
+
+    @property
+    def latest_compact_hash(self):
+        # type: () -> str
+        return self.chain[-1].to_compact().hash
 
     @property
     def latest_hash(self):
@@ -391,7 +379,7 @@ class Chain:
         return self._cp_count
 
     def pieces(self, seq):
-        # type: (int) -> List[Union[CpBlock, TxBlock]]
+        # type: (int) -> List[CompactBlock]
         """
         tx must exist, return the pieces of tx
         :param seq:
@@ -402,7 +390,7 @@ class Chain:
             return []
 
         # the height (h) should always be correct, since it is checked when adding new CP
-        return self.chain[c_a.h:c_b.h + 1]
+        return [b.to_compact() for b in self.chain[c_a.h:c_b.h + 1]]
 
     def _enclosure(self, seq):
         # type: (int) -> Tuple[CpBlock, CpBlock]
@@ -446,13 +434,17 @@ class Chain:
             tx.validity = validity
 
     def get_unknown_txs(self):
+        # type: () -> List[TxBlock]
         """
         Return a list of TXs which have unkonwn validity
         :return: 
         """
-        return filter(lambda b: isinstance(b, TxBlock) and b.validity == ValidityState.Unknown, self.chain)
+        return filter(
+            lambda b: isinstance(b, TxBlock) and b.validity == ValidityState.Unknown and b.other_half is not None,
+            self.chain)
 
     def get_validated_txs(self):
+        # type: () -> List[TxBlock]
         """
         Opposite of `get_unknown_txs`
         :return: 
@@ -478,13 +470,25 @@ class TrustChain:
         self.consensus = {}  # type: Dict[int, Cons]
         logging.info("TC: my VK is {}".format(b64encode(self.vk)))
 
-    def new_tx(self, tx):
+    def new_tx(self, counterparty, m, nonce=None):
+        # type: (str, str, str) -> None
+        """
+        
+        :param counterparty: 
+        :param m: 
+        :param nonce: 
+        :return: 
+        """
+        tx = TxBlock(self.latest_compact_hash, self.next_seq, counterparty, m, self.vk, self.sk, nonce)
+        self._new_tx(tx)
+
+    def _new_tx(self, tx):
         # type: (TxBlock) -> None
         """
         Verify tx, follow the rules and mutates the state to add it
         :return: None
         """
-        assert tx.h == self.next_h, "{} != {}".format(tx.h, self.next_h)
+        assert tx.h == self.next_seq, "{} != {}".format(tx.h, self.next_seq)
         self.my_chain.new_tx(copy.deepcopy(tx))
 
     def new_cp(self, p, cons, ss, vks):
@@ -499,7 +503,7 @@ class TrustChain:
         """
         assert cons.round not in self.consensus
         self.consensus[cons.round] = cons
-        cp = CpBlock(self.latest_hash, self.next_h, cons, p, self.vk, self.sk, ss, vks)
+        cp = CpBlock(self.latest_compact_hash, self.next_seq, cons, p, self.vk, self.sk, ss, vks)
         self._new_cp(cp)
 
     def _new_cp(self, cp):
@@ -513,18 +517,23 @@ class TrustChain:
         self.my_chain.new_cp(copy.deepcopy(cp))
 
     @property
-    def next_h(self):
+    def next_seq(self):
         # type: () -> int
         return len(self.my_chain.chain)
 
     @property
     def latest_hash(self):
-        # type () -> str
+        # type: () -> str
         return self.my_chain.latest_hash
 
     @property
+    def latest_compact_hash(self):
+        # type: () -> str
+        return self.my_chain.latest_compact_hash
+
+    @property
     def genesis(self):
-        # type () -> CpBlock
+        # type: () -> CpBlock
         return self.my_chain.genesis
 
     @property
@@ -561,31 +570,25 @@ class TrustChain:
                     return r
         return -1
 
-    def in_consensus(self, cp, r):
-        # type: (CpBlock) -> bool
-        """
-        Given a CP block and a round, this function checks whether it's in some consensus result
-        :param cp: 
-        :param r: the round which `cp` is expected to be in
-        :return: 
-        """
+    def compact_cp_in_consensus(self, cp, r):
+        # type: (CompactBlock) -> bool
         if r not in self.consensus:
             return False
         cons = self.consensus[r]
-        return any(map(lambda b: b.hash == cp.hash and b.round == cp.round, cons.blocks))
+        return any(map(lambda b: b.to_compact().hash == cp.hash, cons.blocks))
 
     def pieces(self, seq):
-        # type: (int) -> List[Union[CpBlock, TxBlock]]
+        # type: (int) -> List[CompactBlock]
         return self.my_chain.pieces(seq)
 
     def agreed_pieces(self, seq):
-        # type: (int) -> Tuple[List[Union[CpBlock, TxBlock]], int, int]
+        # type: (int) -> Tuple[List[CompactBlock], int, int]
         c_a, c_b, r_a, r_b = self._agreed_enclosure(seq)
         if c_a is None or c_b is None:
             return [], r_a, r_b
 
         # the height (h) should always be correct, since it is checked when adding new CP
-        return self.my_chain.chain[c_a.h:c_b.h + 1], r_a, r_b
+        return [b.to_compact() for b in self.my_chain.chain[c_a.h:c_b.h + 1]], r_a, r_b
 
     def _agreed_enclosure(self, seq):
         # type: (int) -> Tuple[Optional[CpBlock], Optional[CpBlock], int, int]
@@ -622,8 +625,8 @@ class TrustChain:
 
         return cp_a, cp_b, r_a, r_b
 
-    def verify_tx(self, seq, r_a, r_b, resp=None):
-        # type: (int, int, int, List[Union[CpBlock, TxBlock]]) -> ValidityState
+    def verify_tx(self, seq, r_a, r_b, compact_chain):
+        # type: (int, int, int, List[CompactBlock]) -> ValidityState
         """
         We want to verify one of our own TX with expected round numbers that contains the consensus result of the piece
         and the sequence number (height) `seq` that contains the pair
@@ -632,16 +635,17 @@ class TrustChain:
         :param seq:
         :param r_a: round which resp[0] is in consensus
         :param r_b: round which resp[-1] is in consensus
-        :param resp:
+        :param compact_chain:
+        :param block: full block received from the countery party
         :return:
         """
-        if resp is None:
+        if compact_chain is None:
             raise NotImplemented
 
         tx = self.my_chain.chain[seq]
         assert isinstance(tx, TxBlock)
 
-        if len(resp) == 0:
+        if len(compact_chain) == 0:
             return ValidityState.Unknown
 
         # check that I also have the same CP blocks
@@ -649,32 +653,30 @@ class TrustChain:
         # check the pair is in the received blocks
         # TODO what about the round diff?
 
-        peer_cp_a = resp[0]
-        peer_cp_b = resp[-1]
-        assert isinstance(peer_cp_a, CpBlock)
-        assert isinstance(peer_cp_b, CpBlock)
+        peer_cp_a = compact_chain[0]
+        peer_cp_b = compact_chain[-1]
+        assert isinstance(peer_cp_a, CompactBlock)
+        assert isinstance(peer_cp_b, CompactBlock)
 
-        if not (self.in_consensus(peer_cp_a, r_a) and self.in_consensus(peer_cp_b, r_b)):
+        if not (self.compact_cp_in_consensus(peer_cp_a, r_a) and self.compact_cp_in_consensus(peer_cp_b, r_b)):
             return ValidityState.Unknown
 
-        if not hash_pointers_ok(resp):
-            # we return Unknown here instead of Invalid because the message may be corrupted
+        if not hash_pointers_ok(compact_chain):
             return ValidityState.Unknown
 
-        def contains_h(h, bs):
-            return any(map(lambda b: b.h == h, bs))
+        for b in compact_chain:
+            if b.hash == tx.other_half.to_compact().hash:
+                self.my_chain.set_validity(seq, ValidityState.Valid)
+                return ValidityState.Valid
 
-        if not contains_h(tx.inner.h_r, resp):
-            self.my_chain.set_validity(seq, ValidityState.Invalid)
-            return ValidityState.Invalid
-
-        self.my_chain.set_validity(seq, ValidityState.Valid)
-        return ValidityState.Valid
+        return ValidityState.Unknown
 
     def get_unknown_txs(self):
+        # type: () -> List[TxBlock]
         return self.my_chain.get_unknown_txs()
 
     def get_validated_txs(self):
+        # type: () -> List[TxBlock]
         return self.my_chain.get_validated_txs()
 
 # EqHash.register(Signature)
@@ -684,9 +686,9 @@ class TrustChain:
 # EqHash.register(CpBlock)
 # EqHash.register(Cons)
 
-if __name__ == '__main__':
-    vk, sk = libnacl.crypto_sign_keypair()
-    s = Signature(vk, sk, "test")
-    s.verify(vk, "test")
-
-    generate_genesis_block(vk, sk)
+# if __name__ == '__main__':
+#     vk, sk = libnacl.crypto_sign_keypair()
+#     s = Signature(vk, sk, "test")
+#     s.verify(vk, "test")
+#
+#     generate_genesis_block(vk, sk)

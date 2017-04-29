@@ -44,44 +44,30 @@ def gen_txblock(prev_s, prev_r, vk_s, sk_s, vk_r, sk_r, h_s, h_r, m):
     :param m:
     :return:
     """
-    # r received h_s, h_r so he initialises a TxBlock and creates its signature
-    r_block = TxBlock(prev_r, h_r, h_s, m)
-    s_r = r_block.sign(vk_r, sk_r)
+    tx_s = TxBlock(prev_s, h_s, vk_r, m, vk_s, sk_s)
+    tx_r = TxBlock(prev_r, h_r, vk_s, m, vk_r, sk_r, tx_s.inner.nonce)
 
-    # s <- r: prev, h_r, s_r // s creates block
-    s_block = TxBlock(prev_s, h_s, h_r, m)
-    s_s = s_block.sign(vk_s, sk_s)
-    s_block.seal(vk_s, s_s, vk_r, s_r, prev_r)
+    tx_s.add_other_half(tx_r)
+    tx_r.add_other_half(tx_s)
 
-    # s -> r: s_s // r seals block
-    r_block.seal(vk_r, s_r, vk_s, s_s, prev_s)
-
-    return s_block, r_block
+    return tx_s, tx_r
 
 
 def test_txblock():
     """
-    locally simulate the 3 way handshake
-    exceptions are thrown if there are any failure
+    test creation of a single block
     :return:
     """
     m, vk_s, sk_s = sigs()
     _, vk_r, sk_r = sigs()
 
-    # s -> r: prev, h_s, m
-    prev_s = generate_genesis_block(vk_s, sk_s).hash
-    prev_r = generate_genesis_block(vk_r, sk_r).hash
+    prev_s = generate_genesis_block(vk_s, sk_s).to_compact().hash
+    prev_r = generate_genesis_block(vk_r, sk_r).to_compact().hash
     h_s = 1
     h_r = 1
 
-    # the following parts of the protocol are covered in gen_txblock
-    # r received h_s, h_r so he initialises a TxBlock and creates its signature
-    # s <- r: prev, h_r, s_r // s creates block
-    # s -> r: s_s // r seals block
-    s_block, r_block = gen_txblock(prev_s, prev_r, vk_s, sk_s, vk_r, sk_r, h_s, h_r, m)
-
-    assert s_block.make_pair(prev_r).inner.hash == r_block.inner.hash
-    assert r_block.make_pair(prev_s).inner.hash == s_block.inner.hash
+    # assertions are mostly in `add_other_half`
+    gen_txblock(prev_s, prev_r, vk_s, sk_s, vk_r, sk_r, h_s, h_r, m)
 
 
 @pytest.mark.parametrize("n,x", [
@@ -104,7 +90,7 @@ def test_cpblock(n, x):
     _, my_vk, my_sk = sigs()
     my_genesis = generate_genesis_block(my_vk, my_sk)
 
-    t = math.floor((n - 1) / 3.0)
+    t = (n - 1) / 3
     if x - 1 >= t:  # number of signatures - 1 is greater than t
         CpBlock(my_genesis.hash, 1, cons, 1, my_vk, my_sk, ss, vks)
     else:
@@ -154,12 +140,12 @@ def test_cp_chain(n, m):
     """
     _, vk, sk = sigs()
     chain = Chain(vk, sk)
-    prev = chain.chain[0].hash
+    prev = chain.chain[0].to_compact().hash
 
     for i in range(m):
         vks, ss, cons = gen_cons(n, i + 1)
         cp = CpBlock(prev, i + 1, cons, 0, vk, sk, ss, vks)
-        prev = cp.hash
+        prev = cp.to_compact().hash
         chain.new_cp(cp)
 
         with pytest.raises(AssertionError):
@@ -167,7 +153,7 @@ def test_cp_chain(n, m):
             chain.new_cp(cp)
 
     assert chain.cp_count == m
-    assert hash_pointers_ok(chain.chain)
+    assert hash_pointers_ok([b.to_compact() for b in chain.chain])
 
 
 @pytest.mark.parametrize("m", [
@@ -182,28 +168,28 @@ def test_tx_chain(m):
     """
     _, vk_s, sk_s = sigs()
     chain_s = Chain(vk_s, sk_s)
-    prev_s = chain_s.chain[0].hash
+    prev_s = chain_s.chain[0].to_compact().hash
 
     _, vk_r, sk_r = sigs()
     chain_r = Chain(vk_r, sk_r)
-    prev_r = chain_r.chain[0].hash
+    prev_r = chain_r.chain[0].to_compact().hash
 
     for i in range(m):
         block_s, block_r = gen_txblock(prev_s, prev_r, vk_s, sk_s, vk_r, sk_r, i + 1, i + 1, "test123")
-        prev_s = block_s.hash
-        prev_r = block_r.hash
+        prev_s = block_s.to_compact().hash
+        prev_r = block_r.to_compact().hash
 
         chain_s.new_tx(block_s)
         chain_r.new_tx(block_r)
 
-        assert chain_s.latest_hash == block_s.hash
-        assert chain_r.latest_hash == block_r.hash
+        assert chain_s.latest_compact_hash == block_s.to_compact().hash
+        assert chain_r.latest_compact_hash == block_r.to_compact().hash
 
     assert chain_s.tx_count == m
     assert chain_r.tx_count == m
 
-    assert hash_pointers_ok(chain_s.chain)
-    assert hash_pointers_ok(chain_r.chain)
+    assert hash_pointers_ok([b.to_compact() for b in chain_s.chain])
+    assert hash_pointers_ok([b.to_compact() for b in chain_r.chain])
 
 
 @pytest.mark.parametrize("n, x, ps", [
@@ -243,11 +229,11 @@ def generate_tc_pair(n_cp, n_tx):
 
     for i in range(n_cp):
         for j in range(n_tx):
-            block_s, block_r = gen_txblock(tc_s.latest_hash, tc_r.latest_hash,
-                                           vk_s, sk_s, vk_r, sk_r,
-                                           tc_s.next_h, tc_r.next_h, "123test")
-            tc_s.new_tx(block_s)
-            tc_r.new_tx(block_r)
+            tx_s, tx_r = gen_txblock(tc_s.latest_compact_hash, tc_r.latest_compact_hash,
+                                     vk_s, sk_s, vk_r, sk_r,
+                                     tc_s.next_seq, tc_r.next_seq, "123test")
+            tc_s._new_tx(tx_s)
+            tc_r._new_tx(tx_r)
 
         r = i + 1
         cons = Cons(r, [tc_s.latest_cp, tc_r.latest_cp])
@@ -311,7 +297,7 @@ def test_validation(seq, n_cp, n_tx, expected):
     assert tc_s.consensus_round_of_cp(tc_s.my_chain.chain[-2 - n_tx]) == n_cp
     assert tc_r.consensus_round_of_cp(tc_r.my_chain.chain[-2 - n_tx]) == n_cp
 
-    seq_r = tc_s.my_chain.chain[seq].inner.h_r
+    seq_r = tc_s.my_chain.chain[seq].inner.seq
     resp, r_a, r_b = tc_r.agreed_pieces(seq_r)
 
     assert tc_s.verify_tx(seq, r_a, r_b, resp) == expected

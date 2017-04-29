@@ -72,8 +72,8 @@ def check_tx(expected):
 
 
 @pytest.mark.parametrize("n,t,timeout,expected", [
-    (4, 1, 20, 200),
-    (8, 2, 20, 400),
+    (4, 1, 20, 400),
+    (8, 2, 20, 800),
 ])
 def test_tx(n, t, timeout, expected, folder, discover):
     configs = []
