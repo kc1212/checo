@@ -44,44 +44,30 @@ def gen_txblock(prev_s, prev_r, vk_s, sk_s, vk_r, sk_r, h_s, h_r, m):
     :param m:
     :return:
     """
-    # r received h_s, h_r so he initialises a TxBlock and creates its signature
-    r_block = TxBlock(prev_r, h_r, h_s, m)
-    s_r = r_block.sign(vk_r, sk_r)
+    tx_s = TxBlock(prev_s, h_s, vk_r, m, vk_s, sk_s)
+    tx_r = TxBlock(prev_r, h_r, vk_s, m, vk_r, sk_r, tx_s.inner.nonce)
 
-    # s <- r: prev, h_r, s_r // s creates block
-    s_block = TxBlock(prev_s, h_s, h_r, m)
-    s_s = s_block.sign(vk_s, sk_s)
-    s_block.seal(vk_s, s_s, vk_r, s_r, prev_r)
+    tx_s.add_other_half(tx_r)
+    tx_r.add_other_half(tx_s)
 
-    # s -> r: s_s // r seals block
-    r_block.seal(vk_r, s_r, vk_s, s_s, prev_s)
-
-    return s_block, r_block
+    return tx_s, tx_r
 
 
 def test_txblock():
     """
-    locally simulate the 3 way handshake
-    exceptions are thrown if there are any failure
+    test creation of a single block
     :return:
     """
     m, vk_s, sk_s = sigs()
     _, vk_r, sk_r = sigs()
 
-    # s -> r: prev, h_s, m
-    prev_s = generate_genesis_block(vk_s, sk_s).hash
-    prev_r = generate_genesis_block(vk_r, sk_r).hash
+    prev_s = generate_genesis_block(vk_s, sk_s).to_compact().hash
+    prev_r = generate_genesis_block(vk_r, sk_r).to_compact().hash
     h_s = 1
     h_r = 1
 
-    # the following parts of the protocol are covered in gen_txblock
-    # r received h_s, h_r so he initialises a TxBlock and creates its signature
-    # s <- r: prev, h_r, s_r // s creates block
-    # s -> r: s_s // r seals block
-    s_block, r_block = gen_txblock(prev_s, prev_r, vk_s, sk_s, vk_r, sk_r, h_s, h_r, m)
-
-    assert s_block.make_pair(prev_r).inner.hash == r_block.inner.hash
-    assert r_block.make_pair(prev_s).inner.hash == s_block.inner.hash
+    # assertions are mostly in `add_other_half`
+    gen_txblock(prev_s, prev_r, vk_s, sk_s, vk_r, sk_r, h_s, h_r, m)
 
 
 @pytest.mark.parametrize("n,x", [

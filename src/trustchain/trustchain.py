@@ -31,7 +31,7 @@ class EqHash:
 
     @property
     def hash(self):
-        # TODO better to hash the packed tuple
+        # TODO better to hash the packed tuple, use __repr__?
         return libnacl.crypto_hash_sha256(str(self.__hash__()))
 
 
@@ -45,16 +45,16 @@ class Signature(EqHash):
 
         if vk is None and sk is None and msg is None:
             self.vk = None
-            self.sig = None
+            self._sig = None
         else:
             self.vk = vk
-            self.sig = libnacl.crypto_sign(msg, sk)
+            self._sig = libnacl.crypto_sign(msg, sk)
 
     def __str__(self):
-        return '{{"vk": "{}", "sig": "{}"}}'.format(b64encode(self.vk), b64encode(self.sig))
+        return '{{"vk": "{}", "sig": "{}"}}'.format(b64encode(self.vk), b64encode(self._sig))
 
     def _tuple(self):
-        return self.vk,  self.sig
+        return self.vk,  self._sig
 
     def verify(self, vk, msg):
         # type: (str, str) -> None
@@ -64,7 +64,7 @@ class Signature(EqHash):
         """
         if vk != self.vk:
             raise ValueError("Mismatch verification key")
-        expected_msg = libnacl.crypto_sign_open(self.sig, self.vk)
+        expected_msg = libnacl.crypto_sign_open(self._sig, self.vk)
         if expected_msg != msg:
             raise ValueError("Mismatch message")
 
@@ -73,118 +73,84 @@ class TxBlockInner(EqHash):
     """
     Ideally this should be defined inside TxBlock, but jsonpickle won't decode correctly if we do that...
     """
-    def __init__(self, prev, h_s, h_r, m):
-        # type: (str, int, int, str) -> None
+    def __init__(self, prev, seq, counterparty, nonce, m):
+        # type: (str, int, str, str, str) -> None
         self.prev = prev
-        self.h_s = h_s
-        self.h_r = h_r
+        self.seq = seq
+        self.counterparty = counterparty
+        self.nonce = nonce
         self.m = m
 
     def _tuple(self):
-        return self.prev, self.h_s, self.h_r, self.m
+        return self.prev, self.seq, self.counterparty, self.m
 
 
 class TxBlock(EqHash):
-    """
-    In the network, TxBlock needs to be created using 3 way handshake.
-    1, s -> r: prev, h_s, m // syn
-    2, s <- r: prev, h_r, s_r // synack, s seals block
-    3, s -> r: s_s // ack, r seals block
-    I'm always the sender, regardless of who initialised the handshake.
-    This protocol is not Byzantine fault tolerant, ongoing work for "double signature"
-    struct TxBlock {
-        prev: Digest,
-        h_s: u64,
-        h_r: u64,
-        s_s: Signature,
-        s_r: Signature,
-        m: String,
-
-        // items below are not a part of the block digest
-        validity: Valid | Invalid | Unknown
-    }
-    """
-    def __init__(self, prev, h_s, h_r, m):
-        # type: (str, int, int, str) -> None
-        self.inner = TxBlockInner(prev, h_s, h_r, m)
-        self.s_s = None
-        self.s_r = None
+    def __init__(self, prev, seq, counterparty, m, vk, sk, nonce=None):
+        """
+        
+        :param prev: 
+        :param seq: 
+        :param counterparty: 
+        :param m: 
+        :param vk: 
+        :param sk: 
+        """
+        # type: (str, int, str, str, str, str) -> None
+        if nonce is None:
+            nonce = libnacl.randombytes(32)
+        self.inner = TxBlockInner(prev, seq, counterparty, nonce, m)
+        self.sig = Signature(vk, sk, self.inner.hash)
+        self.other_half = None
 
         # properties below are used for tracking validation status, not a part of hash
         self.validity = ValidityState.Unknown
         self.request_sent_r = -1  # a positive value indicate the round at which the request is sent
 
     def __str__(self):
-        return '{{"prev": "{}", "h_s": {}, "h_r": {}, "s_s": {}, "s_r": {}, "m": "{}"}}'\
+        return '{{"prev": "{}", "seq": {}, "counterparty": "{}", "nonce": "{}", "msg": "{}", "sig": {}}}'\
             .format(b64encode(self.prev),
-                    self.inner.h_s, self.inner.h_r,
-                    self.s_s, self.s_r, self.inner.m)
+                    self.inner.seq,
+                    b64encode(self.inner.counterparty),
+                    b64encode(self.inner.nonce),
+                    self.inner.m,
+                    self.sig)
 
     def _tuple(self):
-        return self.inner, self.s_s, self.s_r
+        return self.inner, self.sig
 
-    def sign(self, vk, sk):
-        # type: (str, str) -> Signature
+    def to_compact(self):
+        # type: () -> CompactBlock
         """
-        Note that this does not populate the signature field
-        :param vk:
-        :param sk:
-        :return:
+        returns a compact version of this block, the compact version should be used to compute the chain
+        :return: 
         """
-        return Signature(vk, sk, self.inner.hash)
-
-    def seal(self, vk_s, s_s, vk_r, s_r, prev_r):
-        # type: (str, Signature, str, Signature, str) -> TxBlock
-        """
-        Expect to have obtained s_r from the receiver
-        :param vk_s:
-        :param s_s:
-        :param vk_r: receiver verification key
-        :param s_r: the previous digest of the receiver
-        :param prev_r:
-        :return:
-        """
-        assert self.s_s is None
-        assert self.s_r is None
-
-        s_r.verify(vk_r, self.make_pair(prev_r).inner.hash)
-        self.s_r = s_r
-
-        s_s.verify(vk_s, self.inner.hash)
-        self.s_s = s_s
-
-        return self
-
-    def is_sealed(self):
-        if self.s_s is None or self.s_r is None:
-            return False
-        return True
-
-    def make_pair(self, prev):
-        # type: (str) -> TxBlock
-        """
-        Note we reverse h_s and h_r
-        :param prev:
-        :return: a TxBlock without signatures
-        """
-        return TxBlock(prev=prev, h_s=self.inner.h_r, h_r=self.inner.h_s, m=self.inner.m)
+        return CompactBlock(self.hash, self.prev)
 
     @property
     def h(self):
         # type: () -> int
-        return self.inner.h_s
+        return self.inner.seq
 
     @property
     def prev(self):
         # type: () -> str
         return self.inner.prev
 
+    def add_other_half(self, other_half):
+        # type: (TxBlock) -> ()
+        assert self.inner.nonce == other_half.inner.nonce
+        assert self.inner.m == other_half.inner.m
+        other_half.sig.verify(self.inner.counterparty, other_half.inner.hash)
+
+        self.other_half = other_half
+
 
 class CpBlockInner(EqHash):
-    def __init__(self, prev, h, cons, ss, p):
+    def __init__(self, prev, seq, cons, ss, p):
         # type: (str, int, Cons, List[Signature], int) -> None
         self.prev = prev
-        self.h_s = h
+        self.seq = seq
         self.round = cons.round
         self.cons_hash = cons.hash
         self.ss = ss
@@ -192,7 +158,7 @@ class CpBlockInner(EqHash):
 
     def _tuple(self):
         self.ss.sort(key=lambda x: x.vk)
-        return self.prev, self.h_s, self.round, self.cons_hash, tuple(self.ss), self.p
+        return self.prev, self.seq, self.round, self.cons_hash, tuple(self.ss), self.p
 
 
 class CpBlock(EqHash):
@@ -225,7 +191,7 @@ class CpBlock(EqHash):
         assert p in (0, 1)
         self.inner = CpBlockInner(prev, h, cons, ss, p)
 
-        if cons.round != -1 or len(ss) != 0 or len(vks) != 0 or self.inner.h_s != 0:
+        if cons.round != -1 or len(ss) != 0 or len(vks) != 0 or self.inner.seq != 0:
             t = math.floor((len(vks) - 1) / 3.0)
             self._verify_signatures(ss, vks, int(t))
         else:
@@ -259,10 +225,14 @@ class CpBlock(EqHash):
         if not oks > t:
             raise ValueError("verification failed, oks = {}, t = {}".format(oks, t))
 
+    def to_compact(self):
+        # type: () -> CompactBlock
+        return CompactBlock(self.hash, self.prev)
+
     @property
     def h(self):
         # type: () -> int
-        return self.inner.h_s
+        return self.inner.seq
 
     @property
     def prev(self):
@@ -272,6 +242,16 @@ class CpBlock(EqHash):
     @property
     def round(self):
         return self.inner.round
+
+
+class CompactBlock(EqHash):
+    def __init__(self, digest, prev):
+        # type: (str, str) -> None
+        self.digest = digest
+        self.prev = prev
+
+    def _tuple(self):
+        return self.digest, self.prev
 
 
 class Cons(EqHash):
@@ -684,9 +664,9 @@ class TrustChain:
 # EqHash.register(CpBlock)
 # EqHash.register(Cons)
 
-if __name__ == '__main__':
-    vk, sk = libnacl.crypto_sign_keypair()
-    s = Signature(vk, sk, "test")
-    s.verify(vk, "test")
-
-    generate_genesis_block(vk, sk)
+# if __name__ == '__main__':
+#     vk, sk = libnacl.crypto_sign_keypair()
+#     s = Signature(vk, sk, "test")
+#     s.verify(vk, "test")
+#
+#     generate_genesis_block(vk, sk)
