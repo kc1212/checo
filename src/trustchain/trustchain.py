@@ -51,6 +51,7 @@ class Signature(EqHash):
             self._sig = libnacl.crypto_sign(msg, sk)
 
     def __str__(self):
+        # type: () -> str
         return '{{"vk": "{}", "sig": "{}"}}'.format(b64encode(self.vk), b64encode(self._sig))
 
     def _tuple(self):
@@ -276,6 +277,7 @@ class Cons(EqHash):
         self.blocks = blocks
 
     def __str__(self):
+        # type () -> str
         return '{{"r": {}, "blocks": {}}}'.format(self.round, len(self.blocks))
 
     def _tuple(self):
@@ -330,6 +332,7 @@ class Chain:
         self._cp_count += 1
 
     def get_cp_of_round(self, r):
+        # type: (int) -> Optional[CpBlock]
         # TODO an optimisation would be to begin from the back side if 'r' is large
         for block in self.chain:
             if isinstance(block, CpBlock):
@@ -431,6 +434,7 @@ class Chain:
             tx.validity = validity
 
     def get_unknown_txs(self):
+        # type: () -> List[TxBlock]
         """
         Return a list of TXs which have unkonwn validity
         :return: 
@@ -440,6 +444,7 @@ class Chain:
             self.chain)
 
     def get_validated_txs(self):
+        # type: () -> List[TxBlock]
         """
         Opposite of `get_unknown_txs`
         :return: 
@@ -667,9 +672,11 @@ class TrustChain:
         return ValidityState.Unknown
 
     def get_unknown_txs(self):
+        # type: () -> List[TxBlock]
         return self.my_chain.get_unknown_txs()
 
     def get_validated_txs(self):
+        # type: () -> List[TxBlock]
         return self.my_chain.get_validated_txs()
 
 # EqHash.register(Signature)

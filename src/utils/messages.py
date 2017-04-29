@@ -93,7 +93,7 @@ class ACSMsg:
 
 class ChainMsg:
     """
-    Simple wrapper around SynMsg, AbortMsg, SynAckMsg and AckMsg
+    Simple wrapper around the transaction related messages
     """
     def __init__(self, body):
         # type: (Union[TxReq, TxResp, ValidationReq, ValidationResp]) -> None
@@ -105,12 +105,18 @@ class TxReq:
         # type: (TxBlock) -> None
         self.tx = tx
 
+    def __str__(self):
+        return "TxReq - tx: {}".format(self.tx)
+
 
 class TxResp:
     def __init__(self, seq, tx):
         # type: (int, TxBlock) -> None
         self.seq = seq
         self.tx = tx
+
+    def __str__(self):
+        return "TxResp - seq: {}, tx: {}".format(self.seq, self.tx)
 
 
 class CpMsg:

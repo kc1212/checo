@@ -16,7 +16,7 @@ from src.utils.messages import \
     DummyMsg, PingMsg, PongMsg, \
     BrachaMsg, Mo14Msg, ACSMsg, \
     ChainMsg, SigMsg, CpMsg, ConsMsg, \
-    InstructionMsg, ValidationReq, ValidationResp
+    InstructionMsg
 from src.utils import Replay, Handled, set_logging, my_err_back, call_later, MAX_LINE_LEN
 from src.consensus.bracha import Bracha
 from src.consensus.acs import ACS
@@ -33,25 +33,9 @@ class MyProto(JsonReceiver):
         self.factory = factory
         self.config = factory.config
         self.vk = factory.vk
-        self.q = Queue.Queue()  # used for replaying un-handled messages
         self.peers = factory.peers
         self.remote_vk = None
         self.state = 'SERVER'
-
-        # start looping call on the queue
-        self.lc = task.LoopingCall(self.process_queue)
-        self.lc.start(1).addErrback(my_err_back)
-
-    def process_queue(self):
-        # we use counter to stop this routine from running forever,
-        # because self.json_received can put item back into the queue
-        logging.debug("NODE: processing queue, size {}".format(self.q.qsize()))
-        qsize = self.q.qsize()
-        ctr = 0
-        while not self.q.empty() and ctr < qsize:
-            ctr += 1
-            m = self.q.get()
-            self.obj_received(m)
 
     def connection_lost(self, reason):
         peer = "<None>" if self.remote_vk is None else b64encode(self.remote_vk)
@@ -124,7 +108,7 @@ class MyProto(JsonReceiver):
 
         if isinstance(o, Replay):
             logging.debug("NODE: putting {} into msg queue".format(m))
-            self.q.put(m)
+            self.factory.q.put((self.remote_vk, m))
         elif isinstance(o, Handled):
             if self.factory.config.test == 'acs':
                 logging.debug("NODE: testing ACS, not handling the result")
@@ -177,9 +161,25 @@ class MyFactory(Factory):
         self.acs = ACS(self)
         self.tc_runner = TrustChainRunner(self, lambda m: ChainMsg(m))
         self.vk = self.tc_runner.tc.vk
+        self.q = Queue.Queue()  # (str, msg)
 
         self._neighbour = None
         self._sorted_peer_keys = None
+
+        # start looping call on the queue
+        self.lc = task.LoopingCall(self.process_queue)
+        self.lc.start(1).addErrback(my_err_back)
+
+    def process_queue(self):
+        # we use counter to stop this routine from running forever,
+        # because self.json_received can put item back into the queue
+        logging.debug("NODE: processing queue, size {}".format(self.q.qsize()))
+        qsize = self.q.qsize()
+        ctr = 0
+        while ctr < qsize:
+            ctr += 1
+            node, m = self.q.get()
+            self.peers[node][2].obj_received(m)
 
     def buildProtocol(self, addr):
         return MyProto(self)

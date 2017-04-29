@@ -1,13 +1,12 @@
 from twisted.internet import task
 from base64 import b64encode
-from Queue import Queue
 from typing import Union
 import random
 import logging
 from collections import defaultdict
 
 from trustchain import TrustChain, TxBlock, CpBlock, Signature, Cons, ValidityState
-from src.utils.utils import Replay, Handled, collate_cp_blocks, my_err_back
+from src.utils.utils import collate_cp_blocks, my_err_back
 from src.utils.messages import TxReq, TxResp, SigMsg, CpMsg, ConsMsg, ValidationReq, \
     ValidationResp
 
@@ -61,8 +60,6 @@ class TrustChainRunner:
     def __init__(self, factory, msg_wrapper_f=lambda x: x):
         self.tc = TrustChain()
         self.factory = factory
-        self.recv_q = Queue()
-        self.send_q = Queue()  # only for syn messages
         self.msg_wrapper_f = msg_wrapper_f
         self.consensus_delay = factory.config.consensus_delay
 
@@ -141,6 +138,13 @@ class TrustChainRunner:
 
     def handle_sig(self, msg, remote_vk):
         # type: (SigMsg, str) -> None
+        """
+        Update round_states on new signature,
+        then conditionally gossip
+        :param msg: 
+        :param remote_vk: 
+        :return: 
+        """
         assert isinstance(msg, SigMsg)
 
         logging.debug("TC: received SigMsg {} from {}".format(msg, b64encode(remote_vk)))
@@ -152,6 +156,13 @@ class TrustChainRunner:
 
     def handle_cp(self, msg, remote_vk):
         # type: (CpMsg, str) -> None
+        """
+        When I'm the promoter, I expect other nodes to send CPs to me.
+        This function handles this situation.
+        :param msg: 
+        :param remote_vk: 
+        :return: 
+        """
         assert isinstance(msg, CpMsg)
 
         logging.debug("TC: received CpMsg {} from {}".format(msg, b64encode(remote_vk)))
@@ -161,6 +172,13 @@ class TrustChainRunner:
 
     def handle_cons(self, msg, remote_vk):
         # type: (ConsMsg, str) -> None
+        """
+        Update round_state on new ConsMsg, 
+        then conditionally gossip.
+        :param msg: 
+        :param remote_vk: 
+        :return: 
+        """
         assert isinstance(msg, ConsMsg)
 
         logging.debug("TC: received ConsMsg {} from {}".format(msg, b64encode(remote_vk)))
@@ -301,6 +319,12 @@ class TrustChainRunner:
 
     def handle(self, msg, src):
         # type: (Union[TxReq, TxResp]) -> None
+        """
+        Handle messages that are sent using self.send, primarily transaction messages.
+        :param msg: 
+        :param src: 
+        :return: 
+        """
         logging.debug("TC: got message".format(msg))
         if isinstance(msg, TxReq):
             nonce = msg.tx.inner.nonce
@@ -359,9 +383,6 @@ class TrustChainRunner:
         :param node: 
         :return: 
         """
-        if self.send_q.qsize() > 10 or self.recv_q.qsize() > 10:
-            return
-
         # throttle transactions if we cannot validate them timely
         if self.validation_enabled and len(self.tc.get_unknown_txs()) > 10 * self.factory.config.n:
             return
