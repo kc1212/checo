@@ -435,7 +435,9 @@ class Chain:
         Return a list of TXs which have unkonwn validity
         :return: 
         """
-        return filter(lambda b: isinstance(b, TxBlock) and b.validity == ValidityState.Unknown, self.chain)
+        return filter(
+            lambda b: isinstance(b, TxBlock) and b.validity == ValidityState.Unknown and b.other_half is not None,
+            self.chain)
 
     def get_validated_txs(self):
         """
@@ -463,13 +465,25 @@ class TrustChain:
         self.consensus = {}  # type: Dict[int, Cons]
         logging.info("TC: my VK is {}".format(b64encode(self.vk)))
 
-    def new_tx(self, tx):
+    def new_tx(self, counterparty, m, nonce=None):
+        # type: (str, str, str) -> None
+        """
+        
+        :param counterparty: 
+        :param m: 
+        :param nonce: 
+        :return: 
+        """
+        tx = TxBlock(self.latest_compact_hash, self.next_seq, counterparty, m, self.vk, self.sk, nonce)
+        self._new_tx(tx)
+
+    def _new_tx(self, tx):
         # type: (TxBlock) -> None
         """
         Verify tx, follow the rules and mutates the state to add it
         :return: None
         """
-        assert tx.h == self.next_h, "{} != {}".format(tx.h, self.next_h)
+        assert tx.h == self.next_seq, "{} != {}".format(tx.h, self.next_seq)
         self.my_chain.new_tx(copy.deepcopy(tx))
 
     def new_cp(self, p, cons, ss, vks):
@@ -484,7 +498,7 @@ class TrustChain:
         """
         assert cons.round not in self.consensus
         self.consensus[cons.round] = cons
-        cp = CpBlock(self.latest_compact_hash, self.next_h, cons, p, self.vk, self.sk, ss, vks)
+        cp = CpBlock(self.latest_compact_hash, self.next_seq, cons, p, self.vk, self.sk, ss, vks)
         self._new_cp(cp)
 
     def _new_cp(self, cp):
@@ -498,7 +512,7 @@ class TrustChain:
         self.my_chain.new_cp(copy.deepcopy(cp))
 
     @property
-    def next_h(self):
+    def next_seq(self):
         # type: () -> int
         return len(self.my_chain.chain)
 
@@ -550,19 +564,6 @@ class TrustChain:
                 if any(map(lambda b: b.hash == cp.hash, self.consensus[r].blocks)):
                     return r
         return -1
-
-    def cp_in_consensus(self, cp, r):
-        # type: (CpBlock) -> bool
-        """
-        Given a CP block and a round, this function checks whether it's in some consensus result
-        :param cp: 
-        :param r: the round which `cp` is expected to be in
-        :return: 
-        """
-        if r not in self.consensus:
-            return False
-        cons = self.consensus[r]
-        return any(map(lambda b: b.hash == cp.hash and b.round == cp.round, cons.blocks))
 
     def compact_cp_in_consensus(self, cp, r):
         # type: (CompactBlock) -> bool

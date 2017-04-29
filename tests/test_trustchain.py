@@ -231,9 +231,9 @@ def generate_tc_pair(n_cp, n_tx):
         for j in range(n_tx):
             tx_s, tx_r = gen_txblock(tc_s.latest_compact_hash, tc_r.latest_compact_hash,
                                      vk_s, sk_s, vk_r, sk_r,
-                                     tc_s.next_h, tc_r.next_h, "123test")
-            tc_s.new_tx(tx_s)
-            tc_r.new_tx(tx_r)
+                                     tc_s.next_seq, tc_r.next_seq, "123test")
+            tc_s._new_tx(tx_s)
+            tc_r._new_tx(tx_r)
 
         r = i + 1
         cons = Cons(r, [tc_s.latest_cp, tc_r.latest_cp])
