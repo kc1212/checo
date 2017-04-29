@@ -359,8 +359,6 @@ class TrustChainRunner:
 
     def make_tx(self, interval, random_node=False):
         if random_node:
-            if not self.factory.is_even_idx(self.tc.vk):
-                return
             lc = task.LoopingCall(self._make_tx_rand)
         else:
             node = self.factory.neighbour_if_even()
@@ -374,7 +372,7 @@ class TrustChainRunner:
         lc.start(interval).addErrback(my_err_back)
 
     def _make_tx_rand(self):
-        node = self.factory.random_odd_node
+        node = self.factory.random_node
         self._make_tx(node)
 
     def _make_tx(self, node):
