@@ -159,13 +159,11 @@ class ValidationReq:
 
 
 class ValidationResp:
-    def __init__(self, seq, seq_r, r_a, r_b, pieces):
-        # type: (int, int, int, int, List[CompactBlock]) -> None
+    def __init__(self, seq, seq_r, pieces):
+        # type: (int, int, List[CompactBlock]) -> None
         self.seq = seq
         self.seq_r = seq_r
-        self.r_a = r_a
-        self.r_b = r_b
         self.pieces = pieces
 
     def __str__(self):
-        return "ValidationResp - seq: {}, seq_r: {}, r_a: {}, r_b: {}".format(self.seq, self.seq_r, self.r_a, self.r_b)
+        return "ValidationResp - seq: {}, seq_r: {}".format(self.seq, self.seq_r)

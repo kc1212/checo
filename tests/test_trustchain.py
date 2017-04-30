@@ -258,8 +258,9 @@ def generate_tc_pair(n_cp, n_tx):
 def test_pieces(seq, n_cp, n_tx):
     tc_s, tc_r = generate_tc_pair(n_cp, n_tx)
     pieces = tc_s.my_chain.pieces(seq)
-    pieces2, _, _ = tc_s.agreed_pieces(seq)
+    pieces2 = tc_s.agreed_pieces(seq)
 
+    # note that this only compares the parts in _tuple
     assert pieces == pieces2
     assert hash_pointers_ok(pieces)
 
@@ -298,10 +299,9 @@ def test_validation(seq, n_cp, n_tx, expected):
     assert tc_r.consensus_round_of_cp(tc_r.my_chain.chain[-2 - n_tx]) == n_cp
 
     seq_r = tc_s.my_chain.chain[seq].inner.seq
-    resp, r_a, r_b = tc_r.agreed_pieces(seq_r)
+    resp = tc_r.agreed_pieces(seq_r)
 
-    assert tc_s.verify_tx(seq, r_a, r_b, resp) == expected
+    assert tc_s.verify_tx(seq, resp) == expected
 
     if expected == ValidityState.Valid:
         assert len(tc_s.get_unknown_txs()) == len(is_unknowns) - 1
-

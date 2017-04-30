@@ -294,7 +294,7 @@ class TrustChainRunner:
         assert isinstance(req, ValidationReq)
         logging.debug("TC: received validation req from {}, {}".format(b64encode(remote_vk), req))
 
-        pieces, r_a, r_b = self.tc.agreed_pieces(req.seq_r)
+        pieces = self.tc.agreed_pieces(req.seq_r)
 
         if len(pieces) == 0:
             logging.warning("TC: no pieces, {}".format(sorted(self.tc.consensus.keys())))
@@ -302,18 +302,14 @@ class TrustChainRunner:
 
         assert len(pieces) > 2
 
-        if r_a == -1 or r_b == -1:
-            logging.warning("TC: no consensus, {}".format(sorted(self.tc.consensus.keys())))
-            return
-
-        self.send(remote_vk, ValidationResp(req.seq, req.seq_r, r_a, r_b, pieces))
+        self.send(remote_vk, ValidationResp(req.seq, req.seq_r, pieces))
 
     def _handle_validation_resp(self, resp, remote_vk):
         # type: (ValidationResp, str) -> None
         assert isinstance(resp, ValidationResp)
         logging.debug("TC: received validation resp from {}, {}".format(b64encode(remote_vk), resp))
 
-        res = self.tc.verify_tx(resp.seq, resp.r_a, resp.r_b, resp.pieces)
+        res = self.tc.verify_tx(resp.seq, resp.pieces)
         if res == ValidityState.Valid:
             logging.info("TC: verified {}".format(b64encode(self.tc.my_chain.chain[resp.seq].hash)))
 
@@ -382,7 +378,7 @@ class TrustChainRunner:
         :return: 
         """
         # throttle transactions if we cannot validate them timely
-        if self.validation_enabled and len(self.tc.get_unknown_txs()) > 10 * self.factory.config.n:
+        if self.validation_enabled and len(self.tc.get_unknown_txs()) > 20 * self.factory.config.n:
             return
 
         # cannot be myself
@@ -411,16 +407,16 @@ class TrustChainRunner:
         if self.tc.latest_cp.round < 2:
             return
 
-        max_h = self.tc.my_chain.get_cp_of_round(self.tc.latest_cp.round - 1).h
+        max_h = self.tc.my_chain.get_cp_of_round(self.tc.latest_cp.round - 1).seq
 
         for tx in self.tc.get_unknown_txs():
-            if tx.h >= max_h:
+            if tx.seq >= max_h:
                 continue
             if tx.request_sent_r >= self.tc.latest_round:
                 assert tx.request_sent_r == self.tc.latest_round
                 continue
             else:
-                self._send_validation_req(tx.h)
+                self._send_validation_req(tx.seq)
 
     def bootstrap_promoters(self):
         """

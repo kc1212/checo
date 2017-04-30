@@ -7,7 +7,7 @@ from base64 import b64encode
 from typing import List, Union, Dict, Tuple, Optional
 from enum import Enum
 
-from src.utils import hash_pointers_ok
+from src.utils import hash_pointers_ok, GrowingList
 
 ValidityState = Enum('ValidityState', 'Valid Invalid Unknown')
 
@@ -126,10 +126,10 @@ class TxBlock(EqHash):
         returns a compact version of this block, the compact version should be used to compute the chain
         :return: 
         """
-        return CompactBlock(self.hash, self.prev)
+        return CompactBlock(self.hash, self.prev, self.seq)
 
     @property
-    def h(self):
+    def seq(self):
         # type: () -> int
         return self.inner.seq
 
@@ -203,7 +203,7 @@ class CpBlock(EqHash):
     def __str__(self):
         return '{{"prev": "{}", "cons": "{}", "h": {}, "r": {}, "p": {}, "s": {}}}'\
             .format(b64encode(self.prev), b64encode(self.inner.cons_hash),
-                    self.h, self.inner.round, self.inner.p, self.s)
+                    self.seq, self.inner.round, self.inner.p, self.s)
 
     def _tuple(self):
         return self.inner, self.s
@@ -228,10 +228,10 @@ class CpBlock(EqHash):
 
     def to_compact(self):
         # type: () -> CompactBlock
-        return CompactBlock(self.hash, self.prev)
+        return CompactBlock(self.hash, self.prev, self.seq)
 
     @property
-    def h(self):
+    def seq(self):
         # type: () -> int
         return self.inner.seq
 
@@ -246,10 +246,14 @@ class CpBlock(EqHash):
 
 
 class CompactBlock(EqHash):
-    def __init__(self, digest, prev):
-        # type: (str, str) -> None
+    def __init__(self, digest, prev, seq):
+        # type: (str, str, int) -> None
         self.digest = digest
         self.prev = prev
+
+        # not hashed
+        self.seq = seq
+        self.agreed_round = -1
 
     def _tuple(self):
         return self.digest, self.prev
@@ -314,7 +318,7 @@ class Chain:
     def new_tx(self, tx):
         # type: (TxBlock) -> None
         assert tx.prev == self.chain[-1].to_compact().hash
-        assert tx.h == self.chain[-1].h + 1
+        assert tx.seq == self.chain[-1].seq + 1
 
         self.chain.append(tx)
         self._tx_count += 1
@@ -322,7 +326,7 @@ class Chain:
     def new_cp(self, cp):
         # type: (CpBlock) -> None
         assert cp.prev == self.chain[-1].to_compact().hash
-        assert cp.h == self.chain[-1].h + 1
+        assert cp.seq == self.chain[-1].seq + 1
 
         prev_cp = self.latest_cp
         assert prev_cp.inner.round < cp.inner.round, \
@@ -390,7 +394,7 @@ class Chain:
             return []
 
         # the height (h) should always be correct, since it is checked when adding new CP
-        return [b.to_compact() for b in self.chain[c_a.h:c_b.h + 1]]
+        return [b.to_compact() for b in self.chain[c_a.seq:c_b.seq + 1]]
 
     def _enclosure(self, seq):
         # type: (int) -> Tuple[CpBlock, CpBlock]
@@ -465,8 +469,8 @@ class TrustChain:
     def __init__(self):
         # type: () -> None
         self.vk, self.sk = libnacl.crypto_sign_keypair()
-        self.chains = {self.vk: Chain(self.vk, self.sk)}  # type: Dict[str, Chain]
-        self.my_chain = self.chains[self.vk]
+        self.other_chains = {}  # type: Dict[str, GrowingList]
+        self.my_chain = Chain(self.vk, self.sk)
         self.consensus = {}  # type: Dict[int, Cons]
         logging.info("TC: my VK is {}".format(b64encode(self.vk)))
 
@@ -488,7 +492,7 @@ class TrustChain:
         Verify tx, follow the rules and mutates the state to add it
         :return: None
         """
-        assert tx.h == self.next_seq, "{} != {}".format(tx.h, self.next_seq)
+        assert tx.seq == self.next_seq, "{} != {}".format(tx.seq, self.next_seq)
         self.my_chain.new_tx(copy.deepcopy(tx))
 
     def new_cp(self, p, cons, ss, vks):
@@ -513,7 +517,7 @@ class TrustChain:
         NOTE: this does not cache the consensus result
         :return: None
         """
-        assert cp.h == len(self.my_chain.chain)
+        assert cp.seq == len(self.my_chain.chain)
         self.my_chain.new_cp(copy.deepcopy(cp))
 
     @property
@@ -582,13 +586,16 @@ class TrustChain:
         return self.my_chain.pieces(seq)
 
     def agreed_pieces(self, seq):
-        # type: (int) -> Tuple[List[CompactBlock], int, int]
+        # type: (int) -> List[CompactBlock]
         c_a, c_b, r_a, r_b = self._agreed_enclosure(seq)
-        if c_a is None or c_b is None:
-            return [], r_a, r_b
+        if c_a is None or c_b is None or r_a == -1 or r_b == -1:
+            return []
 
         # the height (h) should always be correct, since it is checked when adding new CP
-        return [b.to_compact() for b in self.my_chain.chain[c_a.h:c_b.h + 1]], r_a, r_b
+        blocks = [b.to_compact() for b in self.my_chain.chain[c_a.seq:c_b.seq + 1]]
+        blocks[0].agreed_round = r_a
+        blocks[-1].agreed_round = r_b
+        return blocks
 
     def _agreed_enclosure(self, seq):
         # type: (int) -> Tuple[Optional[CpBlock], Optional[CpBlock], int, int]
@@ -625,27 +632,25 @@ class TrustChain:
 
         return cp_a, cp_b, r_a, r_b
 
-    def verify_tx(self, seq, r_a, r_b, compact_chain):
-        # type: (int, int, int, List[CompactBlock]) -> ValidityState
+    def verify_tx(self, seq, compact_blocks):
+        # type: (int, List[CompactBlock]) -> ValidityState
         """
         We want to verify one of our own TX with expected round numbers that contains the consensus result of the piece
         and the sequence number (height) `seq` that contains the pair
         against some result `resp` we got from the counterparty.
-        If the `resp` is empty, we try to use data in the cache (TODO).
+
+        If successful, we store the compact_chain in cache.
         :param seq:
-        :param r_a: round which resp[0] is in consensus
-        :param r_b: round which resp[-1] is in consensus
-        :param compact_chain:
-        :param block: full block received from the countery party
+        :param compact_blocks:
         :return:
         """
-        if compact_chain is None:
+        if compact_blocks is None:
             raise NotImplemented
 
         tx = self.my_chain.chain[seq]
         assert isinstance(tx, TxBlock)
 
-        if len(compact_chain) == 0:
+        if len(compact_blocks) == 0:
             return ValidityState.Unknown
 
         # check that I also have the same CP blocks
@@ -653,23 +658,42 @@ class TrustChain:
         # check the pair is in the received blocks
         # TODO what about the round diff?
 
-        peer_cp_a = compact_chain[0]
-        peer_cp_b = compact_chain[-1]
+        peer_cp_a = compact_blocks[0]
+        peer_cp_b = compact_blocks[-1]
+        r_a = peer_cp_a.agreed_round
+        r_b = peer_cp_b.agreed_round
         assert isinstance(peer_cp_a, CompactBlock)
         assert isinstance(peer_cp_b, CompactBlock)
 
         if not (self.compact_cp_in_consensus(peer_cp_a, r_a) and self.compact_cp_in_consensus(peer_cp_b, r_b)):
             return ValidityState.Unknown
 
-        if not hash_pointers_ok(compact_chain):
+        if not hash_pointers_ok(compact_blocks):
             return ValidityState.Unknown
 
-        for b in compact_chain:
+        for b in compact_blocks:
             if b.hash == tx.other_half.to_compact().hash:
+                assert b.seq == tx.other_half.seq
+                self._cache_compact_blocks(tx.inner.counterparty, compact_blocks)
                 self.my_chain.set_validity(seq, ValidityState.Valid)
                 return ValidityState.Valid
 
         return ValidityState.Unknown
+
+    def _cache_compact_blocks(self, vk, compact_blocks):
+        if vk not in self.other_chains:
+            self.other_chains[vk] = GrowingList()
+
+        blocks_cache = self.other_chains[vk]
+
+        idx = compact_blocks[0].seq
+        for compact_block in compact_blocks:
+            assert idx == compact_block.seq
+            if blocks_cache[idx] is not None:
+                assert blocks_cache[idx] == compact_block
+            else:
+                blocks_cache[idx] = compact_block
+            idx += 1
 
     def get_unknown_txs(self):
         # type: () -> List[TxBlock]
