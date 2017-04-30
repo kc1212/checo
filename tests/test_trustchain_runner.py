@@ -63,12 +63,11 @@ def test_consensus(n, t, m, failure, profile, folder, discover):
 
 
 def check_tx(expected):
-    target = 'TC: current tx count'
-    counts = search_for_last_string_in_dir(DIR, target, json.loads)
+    target = 'TC: added tx'
+    strings = search_for_all_string_in_dir(DIR, target)
 
-    # *2 because every tx creates 2 tx blocks
-    print sum(counts)
-    assert sum(counts) >= expected
+    print len(strings)
+    assert len(strings) >= expected
 
 
 @pytest.mark.parametrize("n,t,timeout,expected", [

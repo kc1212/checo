@@ -64,10 +64,10 @@ class TrustChainRunner:
         self.consensus_delay = factory.config.consensus_delay
 
         self.collect_rubbish_lc = task.LoopingCall(self._collect_rubbish)
-        self.collect_rubbish_lc.start(5, False).addErrback(my_err_back)
+        self.collect_rubbish_lc.start(30, False).addErrback(my_err_back)
 
         self.log_tx_count_lc = task.LoopingCall(self._log_tx_count)
-        self.log_tx_count_lc.start(5, False).addErrback(my_err_back)
+        self.log_tx_count_lc.start(30, False).addErrback(my_err_back)
 
         self.bootstrap_lc = None
         self.new_consensus_lc = None
