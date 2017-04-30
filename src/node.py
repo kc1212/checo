@@ -264,6 +264,16 @@ class MyFactory(Factory):
         return node
 
     @property
+    def random_non_promoter(self):
+        if self.vk in self.promoters:
+            return None
+
+        node = random.choice(self.peers.keys())
+        while node == self.vk or node in self.promoters:
+            node = random.choice(self.peers.keys())
+        return node
+
+    @property
     def random_odd_node(self):
         node = random.choice(self.peers.keys())
         while node == self.vk or self.is_even_idx(node):

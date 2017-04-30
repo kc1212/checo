@@ -219,11 +219,11 @@ def generate_tc_pair(n_cp, n_tx):
     """
     tc_s = TrustChain()
     vk_s = tc_s.vk
-    sk_s = tc_s.sk
+    sk_s = tc_s._sk
 
     tc_r = TrustChain()
     vk_r = tc_r.vk
-    sk_r = tc_r.sk
+    sk_r = tc_r._sk
 
     vks = [vk_s, vk_r]
 
@@ -301,7 +301,13 @@ def test_validation(seq, n_cp, n_tx, expected):
     seq_r = tc_s.my_chain.chain[seq].inner.seq
     resp = tc_r.agreed_pieces(seq_r)
 
+    assert len(tc_s.load_cache_for_verification(seq)) == 0
     assert tc_s.verify_tx(seq, resp) == expected
 
     if expected == ValidityState.Valid:
         assert len(tc_s.get_unknown_txs()) == len(is_unknowns) - 1
+        assert tc_r.vk in tc_s._other_chains
+        assert set(tc_s._other_chains[tc_r.vk]).issuperset(resp)
+
+        assert tc_s.load_cache_for_verification(seq) == resp
+

@@ -122,7 +122,7 @@ class TrustChainRunner:
             self.round_states[r].new_cons(cons)
 
             future_promoters = cons.get_promoters(self.factory.config.n)
-            s = Signature(self.tc.vk, self.tc.sk, cons.hash)
+            s = Signature(self.tc.vk, self.tc._sk, cons.hash)
 
             self.factory.gossip_except(future_promoters, ConsMsg(cons))
             self.factory.multicast(future_promoters, ConsMsg(cons))
@@ -273,10 +273,17 @@ class TrustChainRunner:
         # type: (int) -> None
         """
         Call this function when I want to initiate a instance of the validation protocol.
-        A request ID will be generated and stored in sent_validation_reqs.
+        First we check the cache and try to validate, if there's nothing in cache send the request.
         :param seq: The sequence number on my side for the TX that I want to validate
         :return: 
         """
+        blocks_cache = self.tc.load_cache_for_verification(seq)
+        if len(blocks_cache) != 0:
+            res = self.tc.verify_tx(seq, blocks_cache)
+            if res == ValidityState.Valid:
+                logging.info("TC: verified {}".format(b64encode(self.tc.my_chain.chain[seq].hash)))
+            return
+
         block = self.tc.my_chain.chain[seq]
         assert isinstance(block, TxBlock)
         block.request_sent_r = self.tc.latest_round
@@ -377,6 +384,9 @@ class TrustChainRunner:
         :param node: 
         :return: 
         """
+        if self.factory.config.test is None and self.tc.vk in self.factory.promoters:
+            return
+
         # throttle transactions if we cannot validate them timely
         if self.validation_enabled and len(self.tc.get_unknown_txs()) > 20 * self.factory.config.n:
             return
@@ -404,6 +414,9 @@ class TrustChainRunner:
         Each call sends validation requests for all unvalidated TX
         :return: 
         """
+        if self.factory.config.test is None and self.tc.vk in self.factory.promoters:
+            return
+
         if self.tc.latest_cp.round < 2:
             return
 

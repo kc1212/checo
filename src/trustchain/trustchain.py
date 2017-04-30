@@ -468,9 +468,9 @@ class TrustChain:
 
     def __init__(self):
         # type: () -> None
-        self.vk, self.sk = libnacl.crypto_sign_keypair()
-        self.other_chains = {}  # type: Dict[str, GrowingList]
-        self.my_chain = Chain(self.vk, self.sk)
+        self.vk, self._sk = libnacl.crypto_sign_keypair()
+        self._other_chains = {}  # type: Dict[str, GrowingList]
+        self.my_chain = Chain(self.vk, self._sk)
         self.consensus = {}  # type: Dict[int, Cons]
         logging.info("TC: my VK is {}".format(b64encode(self.vk)))
 
@@ -483,7 +483,7 @@ class TrustChain:
         :param nonce: 
         :return: 
         """
-        tx = TxBlock(self.latest_compact_hash, self.next_seq, counterparty, m, self.vk, self.sk, nonce)
+        tx = TxBlock(self.latest_compact_hash, self.next_seq, counterparty, m, self.vk, self._sk, nonce)
         self._new_tx(tx)
 
     def _new_tx(self, tx):
@@ -507,7 +507,7 @@ class TrustChain:
         """
         assert cons.round not in self.consensus
         self.consensus[cons.round] = cons
-        cp = CpBlock(self.latest_compact_hash, self.next_seq, cons, p, self.vk, self.sk, ss, vks)
+        cp = CpBlock(self.latest_compact_hash, self.next_seq, cons, p, self.vk, self._sk, ss, vks)
         self._new_cp(cp)
 
     def _new_cp(self, cp):
@@ -632,6 +632,56 @@ class TrustChain:
 
         return cp_a, cp_b, r_a, r_b
 
+    def load_cache_for_verification(self, seq):
+        # type: (int) -> List[CompactBlock]
+        """
+        Check that we can verify using cached results, 
+        :param seq: 
+        :return: 
+        """
+        tx = self.my_chain.chain[seq]
+        assert isinstance(tx, TxBlock)
+        assert tx.other_half is not None
+
+        if tx.inner.counterparty not in self._other_chains:
+            return []
+
+        blocks_cache = self._other_chains[tx.inner.counterparty]
+        other_seq = tx.other_half.seq
+
+        if len(blocks_cache) <= other_seq:
+            return []
+
+        if blocks_cache[other_seq] is None:
+            return []
+
+        # iterate starting from other_seq (both sides)
+        # check that there exist some agreed_round
+
+        idx_a = -1
+        idx_b = -1
+
+        for i in xrange(other_seq - 1, -1, -1):
+            block = blocks_cache[i]
+            if block is None:
+                return []
+            if block.agreed_round != -1:
+                idx_a = i
+                break
+
+        for i in xrange(other_seq + 1, len(blocks_cache)):
+            block = blocks_cache[i]
+            if block is None:
+                return []
+            if block.agreed_round != -1:
+                idx_b = i
+                break
+
+        if idx_a == -1 or idx_b == -1:
+            return []
+
+        return blocks_cache[idx_a:idx_b+1]
+
     def verify_tx(self, seq, compact_blocks):
         # type: (int, List[CompactBlock]) -> ValidityState
         """
@@ -649,6 +699,7 @@ class TrustChain:
 
         tx = self.my_chain.chain[seq]
         assert isinstance(tx, TxBlock)
+        assert tx.other_half is not None
 
         if len(compact_blocks) == 0:
             return ValidityState.Unknown
@@ -681,19 +732,21 @@ class TrustChain:
         return ValidityState.Unknown
 
     def _cache_compact_blocks(self, vk, compact_blocks):
-        if vk not in self.other_chains:
-            self.other_chains[vk] = GrowingList()
+        if vk not in self._other_chains:
+            self._other_chains[vk] = GrowingList()
 
-        blocks_cache = self.other_chains[vk]
+        blocks_cache = self._other_chains[vk]
 
         idx = compact_blocks[0].seq
         for compact_block in compact_blocks:
             assert idx == compact_block.seq
-            if blocks_cache[idx] is not None:
+            if len(blocks_cache) > idx:
                 assert blocks_cache[idx] == compact_block
             else:
                 blocks_cache[idx] = compact_block
             idx += 1
+
+        self._other_chains[vk] = blocks_cache
 
     def get_unknown_txs(self):
         # type: () -> List[TxBlock]
