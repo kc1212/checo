@@ -272,13 +272,6 @@ class TrustChainRunner:
         :param seq: The sequence number on my side for the TX that I want to validate
         :return: 
         """
-        blocks_cache = self.tc.load_cache_for_verification(seq)
-        if len(blocks_cache) != 0:
-            res = self.tc.verify_tx(seq, blocks_cache)
-            if res == ValidityState.Valid:
-                logging.info("TC: verified (from cache) {}".format(b64encode(self.tc.my_chain.chain[seq].hash)))
-            return
-
         block = self.tc.my_chain.chain[seq]
         assert isinstance(block, TxBlock)
         block.request_sent_r = self.tc.latest_round
@@ -421,21 +414,28 @@ class TrustChainRunner:
             return
 
         max_h = self.tc.my_chain.get_cp_of_round(self.tc.latest_cp.round - 1).seq
-        txs = self.tc.get_unknown_txs()
-        if len(txs) == 0:
+        txs_before_cache = filter(lambda _tx: _tx.seq < max_h and _tx.request_sent_r < self.tc.latest_round,
+                                  self.tc.get_unknown_txs())
+
+        if len(txs_before_cache) == 0:
             return
 
-        tx = txs[0]
+        # first try verify everything from cache
+        for tx in txs_before_cache:
+            blocks_cache = self.tc.load_cache_for_verification(tx.seq)
+            if len(blocks_cache) != 0:
+                res = self.tc.verify_tx(tx.seq, blocks_cache)
+                if res == ValidityState.Valid:
+                    logging.info("TC: verified (from cache) {}".format(b64encode(self.tc.my_chain.chain[tx.seq].hash)))
 
-        if tx.seq >= max_h:
+        # then send a single request
+        txs_after_cache = filter(lambda _tx: _tx.seq < max_h and _tx.request_sent_r < self.tc.latest_round,
+                                 self.tc.get_unknown_txs())
+
+        if len(txs_after_cache) == 0:
             return
 
-        if tx.request_sent_r >= self.tc.latest_round:
-            assert tx.request_sent_r == self.tc.latest_round
-            return
-
-        else:
-            self._send_validation_req(tx.seq)
+        self._send_validation_req(random.choice(txs_after_cache).seq)
 
     def bootstrap_promoters(self):
         """
