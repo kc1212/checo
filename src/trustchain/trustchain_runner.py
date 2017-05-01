@@ -421,21 +421,13 @@ class TrustChainRunner:
             return
 
         max_h = self.tc.my_chain.get_cp_of_round(self.tc.latest_cp.round - 1).seq
-        txs = self.tc.get_unknown_txs()
+        txs = filter(lambda _tx: _tx.seq < max_h and _tx.request_sent_r < self.tc.latest_round,
+                     self.tc.get_unknown_txs())
+
         if len(txs) == 0:
             return
 
-        tx = txs[0]
-
-        if tx.seq >= max_h:
-            return
-
-        if tx.request_sent_r >= self.tc.latest_round:
-            assert tx.request_sent_r == self.tc.latest_round
-            return
-
-        else:
-            self._send_validation_req(tx.seq)
+        self._send_validation_req(txs[0].seq)
 
     def bootstrap_promoters(self):
         """
