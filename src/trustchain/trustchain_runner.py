@@ -333,7 +333,7 @@ class TrustChainRunner:
             tx = self.tc.my_chain.chain[-1]
             tx.add_other_half(msg.tx)
             self.send(src, TxResp(msg.tx.inner.seq, tx))
-            logging.info("TC: added tx (req) {}, from {}".format(b64encode(tx.hash), b64encode(src)))
+            logging.info("TC: added tx (req) {}, from {}".format(b64encode(msg.tx.hash), b64encode(src)))
 
         elif isinstance(msg, TxResp):
             assert src == msg.tx.sig.vk, "{} != {}".format(b64encode(src), b64encode(msg.tx.sig.vk))
@@ -421,15 +421,21 @@ class TrustChainRunner:
             return
 
         max_h = self.tc.my_chain.get_cp_of_round(self.tc.latest_cp.round - 1).seq
+        txs = self.tc.get_unknown_txs()
+        if len(txs) == 0:
+            return
 
-        for tx in self.tc.get_unknown_txs():
-            if tx.seq >= max_h:
-                continue
-            if tx.request_sent_r >= self.tc.latest_round:
-                assert tx.request_sent_r == self.tc.latest_round
-                continue
-            else:
-                self._send_validation_req(tx.seq)
+        tx = txs[0]
+
+        if tx.seq >= max_h:
+            return
+
+        if tx.request_sent_r >= self.tc.latest_round:
+            assert tx.request_sent_r == self.tc.latest_round
+            return
+
+        else:
+            self._send_validation_req(tx.seq)
 
     def bootstrap_promoters(self):
         """
