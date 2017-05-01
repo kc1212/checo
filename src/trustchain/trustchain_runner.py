@@ -64,10 +64,10 @@ class TrustChainRunner:
         self.consensus_delay = factory.config.consensus_delay
 
         self.collect_rubbish_lc = task.LoopingCall(self._collect_rubbish)
-        self.collect_rubbish_lc.start(30, False).addErrback(my_err_back)
+        self.collect_rubbish_lc.start(20, False).addErrback(my_err_back)
 
         self.log_tx_count_lc = task.LoopingCall(self._log_tx_count)
-        self.log_tx_count_lc.start(30, False).addErrback(my_err_back)
+        self.log_tx_count_lc.start(20, False).addErrback(my_err_back)
 
         self.bootstrap_lc = None
         self.new_consensus_lc = None
@@ -82,12 +82,7 @@ class TrustChainRunner:
         random.seed()
 
     def _log_tx_count(self):
-        """
-        Too much spam if we log all TX, thus use this in a LoopingCall
-        :return: 
-        """
-        logging.info("TC: current tx count {}".format(self.tc.tx_count))
-        logging.info("TC: validated {}".format(len(self.tc.get_validated_txs())))
+        logging.info("TC: current tx count {}, validated {}".format(self.tc.tx_count, len(self.tc.get_validated_txs())))
 
     def _sufficient_sigs(self, r):
         if len(self.round_states[r].received_sigs) > self.factory.config.t:
@@ -281,7 +276,7 @@ class TrustChainRunner:
         if len(blocks_cache) != 0:
             res = self.tc.verify_tx(seq, blocks_cache)
             if res == ValidityState.Valid:
-                logging.info("TC: verified {}".format(b64encode(self.tc.my_chain.chain[seq].hash)))
+                logging.info("TC: verified (from cache) {}".format(b64encode(self.tc.my_chain.chain[seq].hash)))
             return
 
         block = self.tc.my_chain.chain[seq]
@@ -338,7 +333,7 @@ class TrustChainRunner:
             tx = self.tc.my_chain.chain[-1]
             tx.add_other_half(msg.tx)
             self.send(src, TxResp(msg.tx.inner.seq, tx))
-            logging.info("TC: added tx {}".format(b64encode(tx.hash)))
+            logging.info("TC: added tx (req) {}, from {}".format(b64encode(tx.hash), b64encode(src)))
 
         elif isinstance(msg, TxResp):
             assert src == msg.tx.sig.vk, "{} != {}".format(b64encode(src), b64encode(msg.tx.sig.vk))
@@ -375,7 +370,12 @@ class TrustChainRunner:
         lc.start(interval).addErrback(my_err_back)
 
     def _make_tx_rand(self):
-        node = self.factory.random_node
+        if not self.factory.config.test == 'tc':
+            node = self.factory.random_non_promoter
+            if node is None:
+                return
+        else:
+            node = self.factory.random_node
         self._make_tx(node)
 
     def _make_tx(self, node):
@@ -384,7 +384,7 @@ class TrustChainRunner:
         :param node: 
         :return: 
         """
-        if self.factory.config.test is None and self.tc.vk in self.factory.promoters:
+        if not self.factory.config.test == 'tc' and self.tc.vk in self.factory.promoters:
             return
 
         # throttle transactions if we cannot validate them timely
@@ -402,7 +402,7 @@ class TrustChainRunner:
         self.tc.new_tx(node, m)
         tx = self.tc.my_chain.chain[-1]
         self.send(node, TxReq(tx))
-        logging.info("TC: added tx {}".format(b64encode(tx.hash)))
+        logging.info("TC: added tx {}, from {}".format(b64encode(tx.hash), b64encode(self.tc.vk)))
 
     def make_validation(self, interval):
         lc = task.LoopingCall(self._validate_random_tx)
@@ -414,7 +414,7 @@ class TrustChainRunner:
         Each call sends validation requests for all unvalidated TX
         :return: 
         """
-        if self.factory.config.test is None and self.tc.vk in self.factory.promoters:
+        if not self.factory.config.test == 'tc' and self.tc.vk in self.factory.promoters:
             return
 
         if self.tc.latest_cp.round < 2:
