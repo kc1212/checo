@@ -210,10 +210,13 @@ class TrustChainRunner:
         """
         # here we create a new CP from the consensus result (both of round r)
         logging.debug("TC: adding CP in round {}".format(r))
+        _prev_cp = self.tc.latest_cp.to_compact()  # this is just for logging
         self.tc.new_cp(1,
                        self.round_states[r].received_cons,
                        self.round_states[r].received_sigs.values(),
                        self.factory.promoters)
+        if not self.tc.compact_cp_in_consensus(_prev_cp, self.tc.latest_round):
+            logging.info("TC: my previous CP not in consensus")
 
         # new promoters are selected using the latest CP, these promoters are responsible for round r+1
         # no need to continue the ACS for earlier rounds
