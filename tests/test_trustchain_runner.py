@@ -22,19 +22,19 @@ def check_promoter_match(n, t, r):
     assert tally >= n - t
 
 
-def print_profile_stats():
+def print_profile_stats(file_name):
     import pstats
-    p = pstats.Stats('profile.stats')
+    p = pstats.Stats(file_name)
     p.sort_stats('cumulative').print_stats()
 
 
 @pytest.mark.parametrize("n,t,m,failure,profile", [
-    (4, 1, 4, 'omission', False),
-    (4, 1, 8, 'omission', False),
-    (8, 2, 8, 'omission', False),
-    (8, 2, 16, 'omission', False),
-    # (19, 6, 19, 'omission', True),  # uncomment this for profiling
-    # (19, 6, 30, 'omission'),
+    (4, 1, 4, 'omission', None),
+    (4, 1, 8, 'omission', None),
+    (8, 2, 8, 'omission', None),
+    (8, 2, 16, 'omission', None),
+    (19, 6, 19, 'omission', 'profile.stats'),  # uncomment this for profiling
+    # (19, 6, 30, 'omission', None),
 ])
 def test_consensus(n, t, m, failure, profile, folder, discover):
     configs = []
@@ -42,7 +42,7 @@ def test_consensus(n, t, m, failure, profile, folder, discover):
     for i in range(m - t):
         port = GOOD_PORT + i
         if profile and i == 0:
-            configs.append(make_args(port, n, t, profile=True, test='bootstrap', output=DIR + str(port) + '.out', broadcast=False))
+            configs.append(make_args(port, n, t, profile=profile, test='bootstrap', output=DIR + str(port) + '.out', broadcast=False))
         else:
             configs.append(make_args(port, n, t, test='bootstrap', output=DIR + str(port) + '.out', broadcast=False))
 
@@ -58,8 +58,8 @@ def test_consensus(n, t, m, failure, profile, folder, discover):
     poll_check_f(8 * m, 5, ps, check_multiple_rounds, m, t, 3)
 
     if profile:
-        time.sleep(1)
-        print_profile_stats()
+        time.sleep(2)
+        print_profile_stats(profile)
 
 
 def check_tx(expected):

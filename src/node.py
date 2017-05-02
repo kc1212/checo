@@ -502,7 +502,7 @@ if __name__ == '__main__':
     )
     parser.add_argument(
         '--profile',
-        action='store_true',
+        metavar='NAME',
         help='run the node with cProfile'
     )
     parser.add_argument(
@@ -550,6 +550,6 @@ if __name__ == '__main__':
 
     if args.profile:
         import cProfile
-        cProfile.run('_run()', 'profile.stats')
+        cProfile.run('_run()', args.profile)
     else:
         _run()

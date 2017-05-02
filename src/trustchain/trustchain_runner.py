@@ -6,7 +6,7 @@ import logging
 from collections import defaultdict
 
 from trustchain import TrustChain, TxBlock, CpBlock, Signature, Cons, ValidityState
-from src.utils.utils import collate_cp_blocks, my_err_back
+from src.utils.utils import collate_cp_blocks, my_err_back, encode_n
 from src.utils.messages import TxReq, TxResp, SigMsg, CpMsg, ConsMsg, ValidationReq, \
     ValidationResp
 
@@ -279,7 +279,7 @@ class TrustChainRunner:
         if len(blocks_cache) != 0:
             res = self.tc.verify_tx(seq, blocks_cache)
             if res == ValidityState.Valid:
-                logging.info("TC: verified (from cache) {}".format(b64encode(self.tc.my_chain.chain[seq].hash)))
+                logging.info("TC: verified (from cache) {}".format(encode_n(self.tc.my_chain.chain[seq].hash)))
             return
 
         block = self.tc.my_chain.chain[seq]
@@ -316,7 +316,7 @@ class TrustChainRunner:
 
         res = self.tc.verify_tx(resp.seq, resp.pieces)
         if res == ValidityState.Valid:
-            logging.info("TC: verified {}".format(b64encode(self.tc.my_chain.chain[resp.seq].hash)))
+            logging.info("TC: verified {}".format(encode_n(self.tc.my_chain.chain[resp.seq].hash)))
 
     def handle(self, msg, src):
         # type: (Union[TxReq, TxResp]) -> None
@@ -336,14 +336,14 @@ class TrustChainRunner:
             tx = self.tc.my_chain.chain[-1]
             tx.add_other_half(msg.tx)
             self.send(src, TxResp(msg.tx.inner.seq, tx))
-            logging.info("TC: added tx (req) {}, from {}".format(b64encode(msg.tx.hash), b64encode(src)))
+            logging.info("TC: added tx (req) {}, from {}".format(encode_n(msg.tx.hash), encode_n(src)))
 
         elif isinstance(msg, TxResp):
             assert src == msg.tx.sig.vk, "{} != {}".format(b64encode(src), b64encode(msg.tx.sig.vk))
             # TODO index access not safe
             tx = self.tc.my_chain.chain[msg.seq]
             tx.add_other_half(msg.tx)
-            logging.info("TC: other half {}".format(b64encode(msg.tx.hash), msg.seq))
+            logging.info("TC: other half {}".format(encode_n(msg.tx.hash), msg.seq))
 
         elif isinstance(msg, ValidationReq):
             self._handle_validation_req(msg, src)
@@ -373,12 +373,12 @@ class TrustChainRunner:
         lc.start(interval).addErrback(my_err_back)
 
     def _make_tx_rand(self):
-        if not self.factory.config.test == 'tc':
+        if self.factory.config.test == 'tc':
+            node = self.factory.random_node
+        else:
             node = self.factory.random_non_promoter
             if node is None:
                 return
-        else:
-            node = self.factory.random_node
         self._make_tx(node)
 
     def _make_tx(self, node):
@@ -392,6 +392,7 @@ class TrustChainRunner:
 
         # throttle transactions if we cannot validate them timely
         if self.validation_enabled and len(self.tc.get_unknown_txs()) > 20 * self.factory.config.n:
+            logging.info("TC: throttling")
             return
 
         # cannot be myself
@@ -399,13 +400,13 @@ class TrustChainRunner:
 
         # typical bitcoin tx is 500 bytes
         m = 'a' * random.randint(400, 600)
-        logging.debug("TC: {} making tx to".format(b64encode(node)))
+        logging.debug("TC: {} making tx to".format(encode_n(node)))
 
         # create the tx and send the request
         self.tc.new_tx(node, m)
         tx = self.tc.my_chain.chain[-1]
         self.send(node, TxReq(tx))
-        logging.info("TC: added tx {}, from {}".format(b64encode(tx.hash), b64encode(self.tc.vk)))
+        logging.info("TC: added tx {}, from {}".format(encode_n(tx.hash), encode_n(self.tc.vk)))
 
     def make_validation(self, interval):
         lc = task.LoopingCall(self._validate_random_tx)

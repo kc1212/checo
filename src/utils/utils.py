@@ -1,4 +1,5 @@
 from twisted.internet import reactor, task
+from base64 import b64encode
 
 import jsonpickle
 import logging
@@ -97,3 +98,6 @@ class GrowingList(list):
             self.extend([None] * (index + 1 - len(self)))
         list.__setitem__(self, index, value)
 
+
+def encode_n(s, n=8):
+    return b64encode(s)[0:n]
