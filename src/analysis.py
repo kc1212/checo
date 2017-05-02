@@ -27,6 +27,11 @@ After extracting
 """
 
 
+LINE_STYLES = ['-', '--', '-.', ':']
+MARKER_STYLES = ['x', '.', 'o', 's', '*', ',']
+STYLES = [m + l for l in LINE_STYLES for m in MARKER_STYLES]
+
+
 def extract_file(file_name):
     assert len(file_name.split('.')) == 2
     assert file_name.split('.')[-1] == 'zip'
@@ -112,7 +117,7 @@ def plot(folder_name):
     for i, facilitator in enumerate(facilitators):
         legend = '{} facilitators'.format(facilitator)
         # style =
-        plt.plot(populations, arr[i, :, throughtput_idx], label=legend)
+        plt.plot(populations, arr[i, :, throughtput_idx], STYLES[i], label=legend)
 
     plt.ylabel('Throughput (validated tx / s)')
     plt.xlabel('Population size')
@@ -126,7 +131,7 @@ def plot(folder_name):
     assert data_labels[consensus_idx] == 'consensus mean'
     for i, facilitator in enumerate(facilitators):
         legend = '{} facilitators'.format(facilitator)
-        plt.plot(populations, arr[i, :, consensus_idx], label=legend)
+        plt.plot(populations, arr[i, :, consensus_idx], STYLES[i], label=legend)
     plt.ylabel('Consensus duration (s)')
     plt.xlabel('Population size')
     plt.legend(loc='upper left')
@@ -199,17 +204,23 @@ def datetime_from_line(line):
     return dateutil.parser.parse(line.split(' - ')[0])
 
 
-def find_lines_of_interest(match, fname):
+def find_lines_of_interest(match, fname, until=None, ignore=None):
     """
     return lines that contain `match`
     :param match: 
     :param fname: 
+    :param until: match a string for a cut-off point
+    :param ignore: return empty list if there's a match
     :return: 
     """
     lines_of_interest = []
     with open(fname, 'r') as f:
         for line in f:
             if match in line:
+                if ignore is not None and ignore in line:
+                    return []
+                if until is not None and until in line:
+                    return lines_of_interest
                 lines_of_interest.append(line)
 
     return lines_of_interest
