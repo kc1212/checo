@@ -61,8 +61,8 @@ def test_txblock():
     m, vk_s, sk_s = sigs()
     _, vk_r, sk_r = sigs()
 
-    prev_s = generate_genesis_block(vk_s, sk_s).to_compact().hash
-    prev_r = generate_genesis_block(vk_r, sk_r).to_compact().hash
+    prev_s = generate_genesis_block(vk_s, sk_s).compact.hash
+    prev_r = generate_genesis_block(vk_r, sk_r).compact.hash
     h_s = 1
     h_r = 1
 
@@ -140,12 +140,12 @@ def test_cp_chain(n, m):
     """
     _, vk, sk = sigs()
     chain = Chain(vk, sk)
-    prev = chain.chain[0].to_compact().hash
+    prev = chain.chain[0].compact.hash
 
     for i in range(m):
         vks, ss, cons = gen_cons(n, i + 1)
         cp = CpBlock(prev, i + 1, cons, 0, vk, sk, ss, vks)
-        prev = cp.to_compact().hash
+        prev = cp.compact.hash
         chain.new_cp(cp)
 
         with pytest.raises(AssertionError):
@@ -153,7 +153,7 @@ def test_cp_chain(n, m):
             chain.new_cp(cp)
 
     assert chain.cp_count == m
-    assert hash_pointers_ok([b.to_compact() for b in chain.chain])
+    assert hash_pointers_ok([b.compact for b in chain.chain])
 
 
 @pytest.mark.parametrize("m", [
@@ -168,28 +168,28 @@ def test_tx_chain(m):
     """
     _, vk_s, sk_s = sigs()
     chain_s = Chain(vk_s, sk_s)
-    prev_s = chain_s.chain[0].to_compact().hash
+    prev_s = chain_s.chain[0].compact.hash
 
     _, vk_r, sk_r = sigs()
     chain_r = Chain(vk_r, sk_r)
-    prev_r = chain_r.chain[0].to_compact().hash
+    prev_r = chain_r.chain[0].compact.hash
 
     for i in range(m):
         block_s, block_r = gen_txblock(prev_s, prev_r, vk_s, sk_s, vk_r, sk_r, i + 1, i + 1, "test123")
-        prev_s = block_s.to_compact().hash
-        prev_r = block_r.to_compact().hash
+        prev_s = block_s.compact.hash
+        prev_r = block_r.compact.hash
 
         chain_s.new_tx(block_s)
         chain_r.new_tx(block_r)
 
-        assert chain_s.latest_compact_hash == block_s.to_compact().hash
-        assert chain_r.latest_compact_hash == block_r.to_compact().hash
+        assert chain_s.latest_compact_hash == block_s.compact.hash
+        assert chain_r.latest_compact_hash == block_r.compact.hash
 
     assert chain_s.tx_count == m
     assert chain_r.tx_count == m
 
-    assert hash_pointers_ok([b.to_compact() for b in chain_s.chain])
-    assert hash_pointers_ok([b.to_compact() for b in chain_r.chain])
+    assert hash_pointers_ok([b.compact for b in chain_s.chain])
+    assert hash_pointers_ok([b.compact for b in chain_r.chain])
 
 
 @pytest.mark.parametrize("n, x, ps", [

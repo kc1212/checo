@@ -210,7 +210,7 @@ class TrustChainRunner:
         """
         # here we create a new CP from the consensus result (both of round r)
         logging.debug("TC: adding CP in round {}".format(r))
-        _prev_cp = self.tc.latest_cp.to_compact()  # this is just for logging
+        _prev_cp = self.tc.latest_cp.compact  # this is just for logging
         self.tc.new_cp(1,
                        self.round_states[r].received_cons,
                        self.round_states[r].received_sigs.values(),

@@ -13,7 +13,13 @@ ValidityState = Enum('ValidityState', 'Valid Invalid Unknown')
 
 
 class EqHash:
+    """
+    Objects that implement EqHash *must* be immutable
+    """
     __metaclass__ = abc.ABCMeta
+
+    def __init__(self):
+        self._hash = ''
 
     @abc.abstractmethod
     def _tuple(self):
@@ -32,7 +38,9 @@ class EqHash:
     @property
     def hash(self):
         # TODO better to hash the packed tuple, use __repr__?
-        return libnacl.crypto_hash_sha256(str(self.__hash__()))
+        if len(self._hash) == 0:
+            self._hash = libnacl.crypto_hash_sha256(str(self.__hash__()))
+        return self._hash
 
 
 class Signature(EqHash):
@@ -40,15 +48,11 @@ class Signature(EqHash):
     Data structure stores the verification key along with the signature,
     we expect the original message to be small, preferably a digest
     """
-    def __init__(self, vk=None, sk=None, msg=None):
+    def __init__(self, vk, sk, msg):
         # type: (str, str, str) -> None
-
-        if vk is None and sk is None and msg is None:
-            self.vk = None
-            self._sig = None
-        else:
-            self.vk = vk
-            self._sig = libnacl.crypto_sign(msg, sk)
+        EqHash.__init__(self)
+        self.vk = vk
+        self._sig = libnacl.crypto_sign(msg, sk)
 
     def __str__(self):
         # type: () -> str
@@ -76,6 +80,7 @@ class TxBlockInner(EqHash):
     """
     def __init__(self, prev, seq, counterparty, nonce, m):
         # type: (str, int, str, str, str) -> None
+        EqHash.__init__(self)
         self.prev = prev
         self.seq = seq
         self.counterparty = counterparty
@@ -98,6 +103,7 @@ class TxBlock(EqHash):
         :param sk: 
         """
         # type: (str, int, str, str, str, str) -> None
+        EqHash.__init__(self)
         if nonce is None:
             nonce = libnacl.randombytes(32)
         self.inner = TxBlockInner(prev, seq, counterparty, nonce, m)
@@ -107,6 +113,8 @@ class TxBlock(EqHash):
         # properties below are used for tracking validation status, not a part of hash
         self.validity = ValidityState.Unknown
         self.request_sent_r = -1  # a positive value indicate the round at which the request is sent
+
+        self._compact = None
 
     def __str__(self):
         return '{{"prev": "{}", "seq": {}, "counterparty": "{}", "nonce": "{}", "msg": "{}", "sig": {}}}'\
@@ -120,13 +128,16 @@ class TxBlock(EqHash):
     def _tuple(self):
         return self.inner, self.sig
 
-    def to_compact(self):
+    @property
+    def compact(self):
         # type: () -> CompactBlock
         """
         returns a compact version of this block, the compact version should be used to compute the chain
         :return: 
         """
-        return CompactBlock(self.hash, self.prev, self.seq)
+        if self._compact is None:
+            self._compact = CompactBlock(self.hash, self.prev, self.seq)
+        return self._compact
 
     @property
     def seq(self):
@@ -150,6 +161,7 @@ class TxBlock(EqHash):
 class CpBlockInner(EqHash):
     def __init__(self, prev, seq, cons, ss, p):
         # type: (str, int, Cons, List[Signature], int) -> None
+        EqHash.__init__(self)
         self.prev = prev
         self.seq = seq
         self.round = cons.round
@@ -189,6 +201,7 @@ class CpBlock(EqHash):
         :param ss: signatures of the promoters, at least t-1 of them must be valid
         :param vks: all verification keys of promoters
         """
+        EqHash.__init__(self)
         assert p in (0, 1)
         self.inner = CpBlockInner(prev, h, cons, ss, p)
 
@@ -226,7 +239,8 @@ class CpBlock(EqHash):
         if not oks > t:
             raise ValueError("verification failed, oks = {}, t = {}".format(oks, t))
 
-    def to_compact(self):
+    @property
+    def compact(self):
         # type: () -> CompactBlock
         return CompactBlock(self.hash, self.prev, self.seq)
 
@@ -248,6 +262,7 @@ class CpBlock(EqHash):
 class CompactBlock(EqHash):
     def __init__(self, digest, prev, seq):
         # type: (str, str, int) -> None
+        EqHash.__init__(self)
         self.digest = digest
         self.prev = prev
 
@@ -277,6 +292,7 @@ class Cons(EqHash):
         """
         # assert len(blocks) > 0
         # assert isinstance(blocks[0], CpBlock)
+        EqHash.__init__(self)
         self.round = round
         self.blocks = blocks
 
@@ -315,9 +331,11 @@ class Chain:
         self._tx_count = 0
         self._cp_count = 0
 
+        self._unk_txs_at_round = (-1, [])
+
     def new_tx(self, tx):
         # type: (TxBlock) -> None
-        assert tx.prev == self.chain[-1].to_compact().hash
+        assert tx.prev == self.chain[-1].compact.hash
         assert tx.seq == self.chain[-1].seq + 1
 
         self.chain.append(tx)
@@ -325,7 +343,7 @@ class Chain:
 
     def new_cp(self, cp):
         # type: (CpBlock) -> None
-        assert cp.prev == self.chain[-1].to_compact().hash
+        assert cp.prev == self.chain[-1].compact.hash
         assert cp.seq == self.chain[-1].seq + 1
 
         prev_cp = self.latest_cp
@@ -347,7 +365,7 @@ class Chain:
     @property
     def latest_compact_hash(self):
         # type: () -> str
-        return self.chain[-1].to_compact().hash
+        return self.chain[-1].compact.hash
 
     @property
     def latest_hash(self):
@@ -394,7 +412,7 @@ class Chain:
             return []
 
         # the height (h) should always be correct, since it is checked when adding new CP
-        return [b.to_compact() for b in self.chain[c_a.seq:c_b.seq + 1]]
+        return [b.compact for b in self.chain[c_a.seq:c_b.seq + 1]]
 
     def _enclosure(self, seq):
         # type: (int) -> Tuple[CpBlock, CpBlock]
@@ -443,9 +461,12 @@ class Chain:
         Return a list of TXs which have unkonwn validity
         :return: 
         """
-        return filter(
-            lambda b: isinstance(b, TxBlock) and b.validity == ValidityState.Unknown and b.other_half is not None,
-            self.chain)
+        if self._unk_txs_at_round[0] < self.latest_round:
+            def _is_valid(b):
+                return isinstance(b, TxBlock) and b.validity == ValidityState.Unknown and b.other_half is not None
+            self._unk_txs_at_round = (self.latest_round, filter(_is_valid, self.chain))
+
+        return self._unk_txs_at_round[1]
 
     def get_validated_txs(self):
         # type: () -> List[TxBlock]
@@ -579,7 +600,7 @@ class TrustChain:
         if r not in self.consensus:
             return False
         cons = self.consensus[r]
-        return any(map(lambda b: b.to_compact().hash == cp.hash, cons.blocks))
+        return any(map(lambda b: b.compact.hash == cp.hash, cons.blocks))
 
     def pieces(self, seq):
         # type: (int) -> List[CompactBlock]
@@ -592,7 +613,7 @@ class TrustChain:
             return []
 
         # the height (h) should always be correct, since it is checked when adding new CP
-        blocks = [b.to_compact() for b in self.my_chain.chain[c_a.seq:c_b.seq + 1]]
+        blocks = [b.compact for b in self.my_chain.chain[c_a.seq:c_b.seq + 1]]
         blocks[0].agreed_round = r_a
         blocks[-1].agreed_round = r_b
         return blocks
@@ -723,7 +744,7 @@ class TrustChain:
             return ValidityState.Unknown
 
         for b in compact_blocks:
-            if b.hash == tx.other_half.to_compact().hash:
+            if b.hash == tx.other_half.compact.hash:
                 assert b.seq == tx.other_half.seq
                 self._cache_compact_blocks(tx.inner.counterparty, compact_blocks)
                 self.my_chain.set_validity(seq, ValidityState.Valid)
