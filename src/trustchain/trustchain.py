@@ -331,8 +331,6 @@ class Chain:
         self._tx_count = 0
         self._cp_count = 0
 
-        self._unk_txs_at_round = (-1, [])
-
     def new_tx(self, tx):
         # type: (TxBlock) -> None
         assert tx.prev == self.chain[-1].compact.hash
@@ -375,7 +373,8 @@ class Chain:
     @property
     def latest_cp(self):
         # type: () -> CpBlock
-        for b in reversed(self.chain):
+        for i in xrange(len(self.chain) - 1, -1, -1):
+            b = self.chain[i]
             if isinstance(b, CpBlock):
                 return b
         raise ValueError("No CpBlock in Chain")
@@ -458,15 +457,12 @@ class Chain:
     def get_unknown_txs(self):
         # type: () -> List[TxBlock]
         """
-        Return a list of TXs which have unkonwn validity
+        Return a list of TXs which have unknown validity
         :return: 
         """
-        if self._unk_txs_at_round[0] < self.latest_round:
-            def _is_valid(b):
-                return isinstance(b, TxBlock) and b.validity == ValidityState.Unknown and b.other_half is not None
-            self._unk_txs_at_round = (self.latest_round, filter(_is_valid, self.chain))
-
-        return self._unk_txs_at_round[1]
+        def _is_valid(b):
+            return isinstance(b, TxBlock) and b.validity == ValidityState.Unknown and b.other_half is not None
+        return filter(_is_valid, self.chain)
 
     def get_validated_txs(self):
         # type: () -> List[TxBlock]
