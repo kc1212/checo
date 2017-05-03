@@ -93,6 +93,7 @@ class TxBlockInner(EqHash):
 
 class TxBlock(EqHash):
     def __init__(self, prev, seq, counterparty, m, vk, sk, nonce=None):
+        # type: (str, int, str, str, str, str, str) -> None
         """
         
         :param prev: 
@@ -101,8 +102,8 @@ class TxBlock(EqHash):
         :param m: 
         :param vk: 
         :param sk: 
+        :param nonce:
         """
-        # type: (str, int, str, str, str, str) -> None
         EqHash.__init__(self)
         if nonce is None:
             nonce = libnacl.randombytes(32)
@@ -114,9 +115,11 @@ class TxBlock(EqHash):
         self.validity = ValidityState.Unknown
         self.request_sent_r = -1  # a positive value indicate the round at which the request is sent
 
-        self._compact = None
+        # make sure the arguments of CompactBlock constructor are initialised, especially _tuple
+        self.compact = CompactBlock(self.hash, self.prev, self.seq)
 
     def __str__(self):
+        # type: () -> str
         return '{{"prev": "{}", "seq": {}, "counterparty": "{}", "nonce": "{}", "msg": "{}", "sig": {}}}'\
             .format(b64encode(self.prev),
                     self.inner.seq,
@@ -127,17 +130,6 @@ class TxBlock(EqHash):
 
     def _tuple(self):
         return self.inner, self.sig
-
-    @property
-    def compact(self):
-        # type: () -> CompactBlock
-        """
-        returns a compact version of this block, the compact version should be used to compute the chain
-        :return: 
-        """
-        if self._compact is None:
-            self._compact = CompactBlock(self.hash, self.prev, self.seq)
-        return self._compact
 
     @property
     def seq(self):
@@ -213,7 +205,11 @@ class CpBlock(EqHash):
             pass
         self.s = Signature(vk, sk, self.inner.hash)
 
+        # make sure the arguments of CompactBlock are initialised
+        self.compact = CompactBlock(self.hash, self.prev, self.seq)
+
     def __str__(self):
+        # type: () -> str
         return '{{"prev": "{}", "cons": "{}", "h": {}, "r": {}, "p": {}, "s": {}}}'\
             .format(b64encode(self.prev), b64encode(self.inner.cons_hash),
                     self.seq, self.inner.round, self.inner.p, self.s)
@@ -223,6 +219,7 @@ class CpBlock(EqHash):
 
     @property
     def luck(self):
+        # type: () -> str
         return libnacl.crypto_hash_sha256(self.hash + self.s.vk)
 
     def _verify_signatures(self, ss, vks, t):
@@ -240,11 +237,6 @@ class CpBlock(EqHash):
             raise ValueError("verification failed, oks = {}, t = {}".format(oks, t))
 
     @property
-    def compact(self):
-        # type: () -> CompactBlock
-        return CompactBlock(self.hash, self.prev, self.seq)
-
-    @property
     def seq(self):
         # type: () -> int
         return self.inner.seq
@@ -256,6 +248,7 @@ class CpBlock(EqHash):
 
     @property
     def round(self):
+        # type: () -> int
         return self.inner.round
 
 
@@ -297,7 +290,7 @@ class Cons(EqHash):
         self.blocks = blocks
 
     def __str__(self):
-        # type () -> str
+        # type: () -> str
         return '{{"r": {}, "blocks": {}}}'.format(self.round, len(self.blocks))
 
     def _tuple(self):
@@ -749,6 +742,7 @@ class TrustChain:
         return ValidityState.Unknown
 
     def _cache_compact_blocks(self, vk, compact_blocks):
+        # type: (str, List[CompactBlock]) -> None
         if vk not in self._other_chains:
             self._other_chains[vk] = GrowingList()
 

@@ -284,6 +284,10 @@ class TrustChainRunner:
 
         block = self.tc.my_chain.chain[seq]
         assert isinstance(block, TxBlock)
+
+        if self.factory.config.ignore_promoter and block.inner.counterparty in self.factory.promoters:
+            return
+
         block.request_sent_r = self.tc.latest_round
 
         assert block.other_half is not None
@@ -373,12 +377,12 @@ class TrustChainRunner:
         lc.start(interval).addErrback(my_err_back)
 
     def _make_tx_rand(self):
-        if self.factory.config.test == 'tc':
-            node = self.factory.random_node
-        else:
+        if self.factory.config.ignore_promoter:
             node = self.factory.random_non_promoter
             if node is None:
                 return
+        else:
+            node = self.factory.random_node
         self._make_tx(node)
 
     def _make_tx(self, node):
@@ -387,7 +391,7 @@ class TrustChainRunner:
         :param node: 
         :return: 
         """
-        if not self.factory.config.test == 'tc' and self.tc.vk in self.factory.promoters:
+        if self.factory.config.ignore_promoter and self.tc.vk in self.factory.promoters:
             return
 
         # throttle transactions if we cannot validate them timely
@@ -418,7 +422,7 @@ class TrustChainRunner:
         Each call sends validation requests for all unvalidated TX
         :return: 
         """
-        if not self.factory.config.test == 'tc' and self.tc.vk in self.factory.promoters:
+        if self.factory.config.ignore_promoter and self.tc.vk in self.factory.promoters:
             return
 
         if self.tc.latest_cp.round < 2:
@@ -431,7 +435,7 @@ class TrustChainRunner:
         if len(txs) == 0:
             return
 
-        self._send_validation_req(txs[0].seq)
+        self._send_validation_req(random.choice(txs).seq)
 
     def bootstrap_promoters(self):
         """

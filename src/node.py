@@ -368,7 +368,7 @@ class Config:
     All the static settings, used in Factory
     Should be singleton
     """
-    def __init__(self, port, n, t, test, value, failure, tx_rate, consensus_delay, fan_out, validate):
+    def __init__(self, port, n, t, test, value, failure, tx_rate, consensus_delay, fan_out, validate, ignore_promoter):
         """
         This only stores the config necessary at runtime, so not necessarily all the information from argparse
         :param port:
@@ -401,6 +401,8 @@ class Config:
         self.fan_out = fan_out
 
         self.validate = validate
+
+        self.ignore_promoter = ignore_promoter
 
 
 def run(config, bcast, discovery_addr):
@@ -501,6 +503,11 @@ if __name__ == '__main__':
         help='fan-out parameter for gossiping'
     )
     parser.add_argument(
+        '--ignore-promoter',
+        action='store_true',
+        help='do not transact with promoters'
+    )
+    parser.add_argument(
         '--profile',
         metavar='NAME',
         help='run the node with cProfile'
@@ -545,7 +552,7 @@ if __name__ == '__main__':
 
     def _run():
         run(Config(args.port, args.n, args.t, args.test, args.value, args.failure, args.tx_rate, args.consensus_delay,
-                   args.fan_out, args.validate),
+                   args.fan_out, args.validate, args.ignore_promoter),
             args.broadcast, args.discovery)
 
     if args.profile:
