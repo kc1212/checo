@@ -129,8 +129,8 @@ class TrustChainRunner:
             self.factory.gossip_except(future_promoters, ConsMsg(cons))
             self.factory.multicast(future_promoters, ConsMsg(cons))
 
-            self.factory.gossip_except(future_promoters, SigMsg(s, r))
-            self.factory.multicast(future_promoters, SigMsg(s, r))
+            self.factory.gossip_except(future_promoters + self.factory.promoters, SigMsg(s, r))
+            self.factory.multicast(future_promoters + self.factory.promoters, SigMsg(s, r))
 
             # we also try to add the CP here because we may receive the signatures before the actual CP
             self._try_add_cp(r)
