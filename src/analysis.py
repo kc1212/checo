@@ -67,6 +67,8 @@ def load_data(folder_name):
     facilitators = []
     populations = []
     for path in os.listdir(folder_name):
+        if path == 'tmp':
+            continue
         full_path = os.path.join(folder_name, path)
         if os.path.isdir(full_path):
             facilitator, population = path.split('-')

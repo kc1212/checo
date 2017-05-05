@@ -231,7 +231,7 @@ class CpBlock(EqHash):
                 _s.verify(_s.vk, self.inner.cons_hash)
                 oks += 1
             except ValueError:
-                logging.debug("one verification failed for {}".format(_s.vk))
+                logging.warning("one verification failed for {}".format(_s.vk))
 
         if not oks > t:
             raise ValueError("verification failed, oks = {}, t = {}".format(oks, t))
@@ -481,8 +481,18 @@ class TrustChain:
         self.vk, self._sk = libnacl.crypto_sign_keypair()
         self._other_chains = {}  # type: Dict[str, GrowingList]
         self.my_chain = Chain(self.vk, self._sk)
-        self.consensus = {}  # type: Dict[int, Cons]
+        self._consensus_and_sigs = {}  # type: Dict[int, Tuple[Cons, List[Signature]]]
         logging.info("TC: my VK is {}".format(b64encode(self.vk)))
+
+    def consensus_at(self, r):
+        return self._consensus_and_sigs[r][0]
+
+    @property
+    def consensus_keys(self):
+        return self._consensus_and_sigs.keys()
+
+    def signatures_at(self, r):
+        return self._consensus_and_sigs[r][1]
 
     def new_tx(self, counterparty, m, nonce=None):
         # type: (str, str, str) -> None
@@ -515,8 +525,8 @@ class TrustChain:
         :param vks: verification key of the promoters
         :return:
         """
-        assert cons.round not in self.consensus
-        self.consensus[cons.round] = cons
+        assert cons.round not in self._consensus_and_sigs
+        self._consensus_and_sigs[cons.round] = (cons, ss)
         cp = CpBlock(self.latest_compact_hash, self.next_seq, cons, p, self.vk, self._sk, ss, vks)
         self._new_cp(cp)
 
@@ -579,16 +589,16 @@ class TrustChain:
         """
         assert isinstance(cp, CpBlock)
         for r in range(cp.round, self.my_chain.latest_round + 1):
-            if r in self.consensus:
-                if any(map(lambda b: b.hash == cp.hash, self.consensus[r].blocks)):
+            if r in self.consensus_keys:
+                if any(map(lambda b: b.hash == cp.hash, self.consensus_at(r).blocks)):
                     return r
         return -1
 
     def compact_cp_in_consensus(self, cp, r):
         # type: (CompactBlock) -> bool
-        if r not in self.consensus:
+        if r not in self.consensus_keys:
             return False
-        cons = self.consensus[r]
+        cons = self.consensus_at(r)
         return any(map(lambda b: b.compact.hash == cp.hash, cons.blocks))
 
     def pieces(self, seq):

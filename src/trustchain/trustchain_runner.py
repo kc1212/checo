@@ -9,7 +9,7 @@ from collections import defaultdict
 from trustchain import TrustChain, TxBlock, CpBlock, Signature, Cons, ValidityState
 from src.utils.utils import collate_cp_blocks, my_err_back, encode_n
 from src.utils.messages import TxReq, TxResp, SigMsg, CpMsg, ConsMsg, ValidationReq, \
-    ValidationResp
+    ValidationResp, ConsPollMsg, SigListMsg
 
 
 class RoundState:
@@ -75,6 +75,9 @@ class TrustChainRunner:
         self.log_tx_count_lc = task.LoopingCall(self._log_info)
         self.log_tx_count_lc.start(20, False).addErrback(my_err_back)
 
+        self.poll_promoter_lc = task.LoopingCall(self._poll_promoter)
+        self.poll_promoter_lc.start(self.factory.config.consensus_delay, False).addErrback(my_err_back)
+
         self.bootstrap_lc = None
         self.new_consensus_lc = None
         self.new_consensus_lc_count = 0
@@ -86,6 +89,14 @@ class TrustChainRunner:
         self.round_states = defaultdict(RoundState)
 
         random.seed()
+
+    def _poll_promoter(self):
+        if len(self.factory.promoters) == 0:
+            return
+        if self.tc.vk in self.factory.promoters:
+            return
+        node = random.choice(self.factory.promoters)
+        self.send(node, ConsPollMsg(self.tc.latest_round + 1))
 
     def _log_info(self):
         logging.info("TC: current tx count {}, validated {}".format(self.tc.tx_count, len(self.tc.get_validated_txs())))
@@ -104,7 +115,7 @@ class TrustChainRunner:
 
     def _latest_promoters(self):
         r = self.tc.latest_round
-        return self.tc.consensus[r].get_promoters(self.factory.config.n)
+        return self.tc.consensus_at(r).get_promoters(self.factory.config.n)
 
     def handle_cons_from_acs(self, msg):
         """
@@ -126,10 +137,10 @@ class TrustChainRunner:
             future_promoters = cons.get_promoters(self.factory.config.n)
             s = Signature(self.tc.vk, self.tc._sk, cons.hash)
 
-            self.factory.gossip_except(future_promoters, ConsMsg(cons))
+            # self.factory.gossip_except(future_promoters, ConsMsg(cons))
             self.factory.multicast(future_promoters, ConsMsg(cons))
 
-            self.factory.gossip_except(future_promoters + self.factory.promoters, SigMsg(s, r))
+            # self.factory.gossip_except(future_promoters + self.factory.promoters, SigMsg(s, r))
             self.factory.multicast(future_promoters + self.factory.promoters, SigMsg(s, r))
 
             # we also try to add the CP here because we may receive the signatures before the actual CP
@@ -137,6 +148,11 @@ class TrustChainRunner:
 
         else:
             logging.debug("TC: not a dict type in handle_cons_from_acs")
+
+    def handle_sigs(self, msg, remote_vk):
+        assert isinstance(msg, SigListMsg)
+        for s in msg.ss:
+            self.handle_sig(SigMsg(s, msg.r), remote_vk)
 
     def handle_sig(self, msg, remote_vk):
         # type: (SigMsg, str) -> None
@@ -154,7 +170,7 @@ class TrustChainRunner:
             is_new = self.round_states[msg.r].new_sig(msg.s)
             if is_new:
                 self._try_add_cp(msg.r)
-                self.factory.gossip(msg)
+                # self.factory.gossip(msg)
 
     def handle_cp(self, msg, remote_vk):
         # type: (CpMsg, str) -> None
@@ -189,7 +205,7 @@ class TrustChainRunner:
             is_new = self.round_states[msg.r].new_cons(msg.cons)
             if is_new:
                 self._try_add_cp(msg.r)
-                self.factory.gossip(msg)
+                # self.factory.gossip(msg)
 
     def _try_add_cp(self, r):
         """
@@ -236,7 +252,7 @@ class TrustChainRunner:
         assert len(self.factory.promoters) == self.factory.config.n, "{} != {}" \
             .format(len(self.factory.promoters), self.factory.config.n)
         logging.info('TC: CP count in Cons is {}, time taken {}'
-                     .format(self.tc.consensus[r].count, int(time.time()) - self.round_states[r].start_time))
+                     .format(self.tc.consensus_at(r).count, int(time.time()) - self.round_states[r].start_time))
         logging.info('TC: updated new promoters in round {} to [{}]'
                      .format(r, ",".join(['"' + b64encode(p) + '"' for p in self.factory.promoters])))
 
@@ -314,7 +330,7 @@ class TrustChainRunner:
         pieces = self.tc.agreed_pieces(req.seq_r)
 
         if len(pieces) == 0:
-            logging.warning("TC: no pieces, {}".format(sorted(self.tc.consensus.keys())))
+            logging.warning("TC: no pieces, {}".format(sorted(self.tc._consensus_and_sigs.keys())))
             return
 
         assert len(pieces) > 2
@@ -362,6 +378,12 @@ class TrustChainRunner:
 
         elif isinstance(msg, ValidationResp):
             self._handle_validation_resp(msg, src)
+
+        elif isinstance(msg, ConsPollMsg):
+            # TODO handle spam
+            if msg.r in self.tc.consensus_keys:
+                self.factory.send(src, ConsMsg(self.tc.consensus_at(msg.r)))
+                self.factory.send(src, SigListMsg(self.tc.signatures_at(msg.r), msg.r))
 
         else:
             raise AssertionError("Incorrect message type")

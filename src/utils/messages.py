@@ -137,6 +137,13 @@ class SigMsg:
         self.r = r  # type: int
 
 
+class SigListMsg:
+    def __init__(self, ss, r):
+        # type: (List[Signature], int) -> None
+        self.ss = ss
+        self.r = r
+
+
 class ConsMsg:
     def __init__(self, cons):
         # type: (Cons) -> None
@@ -167,3 +174,10 @@ class ValidationResp:
 
     def __str__(self):
         return "ValidationResp - seq: {}, seq_r: {}".format(self.seq, self.seq_r)
+
+
+class ConsPollMsg:
+    def __init__(self, r):
+        # type: (int) -> None
+        self.r = r
+

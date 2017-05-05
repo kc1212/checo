@@ -16,7 +16,7 @@ from src.utils.messages import \
     DummyMsg, PingMsg, PongMsg, \
     BrachaMsg, Mo14Msg, ACSMsg, \
     ChainMsg, SigMsg, CpMsg, ConsMsg, \
-    InstructionMsg
+    InstructionMsg, SigListMsg
 from src.utils import Replay, Handled, set_logging, my_err_back, call_later, MAX_LINE_LEN
 from src.consensus.bracha import Bracha
 from src.consensus.acs import ACS
@@ -72,6 +72,9 @@ class MyProto(JsonReceiver):
 
         elif isinstance(obj, SigMsg):
             self.factory.tc_runner.handle_sig(obj, self.remote_vk)
+
+        elif isinstance(obj, SigListMsg):
+            self.factory.tc_runner.handle_sigs(obj, self.remote_vk)
 
         elif isinstance(obj, CpMsg):
             self.factory.tc_runner.handle_cp(obj, self.remote_vk)
