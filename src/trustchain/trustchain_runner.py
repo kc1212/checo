@@ -3,6 +3,7 @@ from base64 import b64encode
 from typing import Union
 import random
 import logging
+import time
 from collections import defaultdict
 
 from trustchain import TrustChain, TxBlock, CpBlock, Signature, Cons, ValidityState
@@ -16,6 +17,11 @@ class RoundState:
         self.received_cons = None
         self.received_sigs = {}
         self.received_cps = []
+        self.start_time = int(time.time())
+
+    def __str__(self):
+        return "received cons: {}, sig count: {}, cp count: {}"\
+            .format("yes" if self.received_cons is not None else "no", len(self.received_sigs), len(self.received_cps))
 
     def new_cons(self, cons):
         # type: (Cons) -> bool
@@ -66,7 +72,7 @@ class TrustChainRunner:
         self.collect_rubbish_lc = task.LoopingCall(self._collect_rubbish)
         self.collect_rubbish_lc.start(20, False).addErrback(my_err_back)
 
-        self.log_tx_count_lc = task.LoopingCall(self._log_tx_count)
+        self.log_tx_count_lc = task.LoopingCall(self._log_info)
         self.log_tx_count_lc.start(20, False).addErrback(my_err_back)
 
         self.bootstrap_lc = None
@@ -81,7 +87,7 @@ class TrustChainRunner:
 
         random.seed()
 
-    def _log_tx_count(self):
+    def _log_info(self):
         logging.info("TC: current tx count {}, validated {}".format(self.tc.tx_count, len(self.tc.get_validated_txs())))
 
     def _sufficient_sigs(self, r):
@@ -94,6 +100,7 @@ class TrustChainRunner:
             if k < self.tc.latest_round:
                 logging.debug("TC: pruning key {}".format(k))
                 del self.round_states[k]
+        # logging.info("TC: states - {}".format(self.round_states))
 
     def _latest_promoters(self):
         r = self.tc.latest_round
@@ -162,6 +169,7 @@ class TrustChainRunner:
 
         logging.debug("TC: received CpMsg {} from {}".format(msg, b64encode(remote_vk)))
         if msg.r >= self.tc.latest_round:
+            assert msg.cp.s.vk == remote_vk
             cp = msg.cp
             self.round_states[cp.round].new_cp(cp)
 
@@ -227,10 +235,10 @@ class TrustChainRunner:
 
         assert len(self.factory.promoters) == self.factory.config.n, "{} != {}" \
             .format(len(self.factory.promoters), self.factory.config.n)
-        logging.info('TC: CP count in Cons is {}'.format(self.tc.consensus[r].count))
-        logging.info('TC: updated new promoters in round {} to [{}]'.format(
-            r, ",".join(['"' + b64encode(p) + '"' for p in self.factory.promoters]))
-        )
+        logging.info('TC: CP count in Cons is {}, time taken {}'
+                     .format(self.tc.consensus[r].count, int(time.time()) - self.round_states[r].start_time))
+        logging.info('TC: updated new promoters in round {} to [{}]'
+                     .format(r, ",".join(['"' + b64encode(p) + '"' for p in self.factory.promoters])))
 
         # at this point the promoters are updated
         # finally collect new CP if I'm the promoter, otherwise send CP to promoter
@@ -340,7 +348,7 @@ class TrustChainRunner:
             tx = self.tc.my_chain.chain[-1]
             tx.add_other_half(msg.tx)
             self.send(src, TxResp(msg.tx.inner.seq, tx))
-            logging.info("TC: added tx (req) {}, from {}".format(encode_n(msg.tx.hash), encode_n(src)))
+            logging.info("TC: added tx (received) {}, from {}".format(encode_n(msg.tx.hash), encode_n(src)))
 
         elif isinstance(msg, TxResp):
             assert src == msg.tx.sig.vk, "{} != {}".format(b64encode(src), b64encode(msg.tx.sig.vk))
