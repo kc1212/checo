@@ -243,10 +243,11 @@ class TrustChainRunner:
             logging.info("TC: I'm a promoter, starting a new consensus round when we have enough CPs")
             self.round_states[r].new_cp(self.tc.my_chain.latest_cp)
 
-            def try_start_acs(_msg, _r):
+            def try_start_acs(_r):
+                _msg = self.round_states[r].received_cps
                 self.new_consensus_lc_count += 1
                 if self.tc.latest_round >= _r:
-                    logging.debug("TC: somebody completed ACS before me, not starting")
+                    logging.info("TC: somebody completed ACS before me, not starting")
                     # setting the following causes the old messages to be dropped
                     self.factory.acs.stop(self.tc.latest_round)
                     self.new_consensus_lc.stop()
@@ -255,12 +256,13 @@ class TrustChainRunner:
                     # we don't have enough CPs to start the consensus, so wait for more until some timeout
                     pass
                 else:
+                    logging.info("TC: starting ACS with {} CPs".format(len(_msg)))
                     self.factory.acs.reset_then_start(_msg, _r)
                     self.new_consensus_lc.stop()
                     self.new_consensus_lc_count = 0
 
             assert self.new_consensus_lc_count == 0, "Overlapping ACS"
-            self.new_consensus_lc = task.LoopingCall(try_start_acs, self.round_states[r].received_cps, r + 1)
+            self.new_consensus_lc = task.LoopingCall(try_start_acs, r + 1)
             self.new_consensus_lc.start(self.consensus_delay, False).addErrback(my_err_back)
         else:
             logging.info("TC: I'm NOT a promoter")
