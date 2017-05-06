@@ -126,11 +126,8 @@ class TrustChainRunner:
             future_promoters = cons.get_promoters(self.factory.config.n)
             s = Signature(self.tc.vk, self.tc._sk, cons.hash)
 
-            self.factory.gossip_except(future_promoters, ConsMsg(cons))
-            self.factory.multicast(future_promoters, ConsMsg(cons))
-
-            self.factory.gossip_except(future_promoters + self.factory.promoters, SigMsg(s, r))
-            self.factory.multicast(future_promoters + self.factory.promoters, SigMsg(s, r))
+            self.factory.gossip(ConsMsg(cons))
+            self.factory.gossip(SigMsg(s, r))
 
             # we also try to add the CP here because we may receive the signatures before the actual CP
             self._try_add_cp(r)
@@ -268,12 +265,7 @@ class TrustChainRunner:
         else:
             logging.info("TC: I'm NOT a promoter")
 
-        # send new CP to either all promoters
-        # TODO having this if statement for test isn't ideal
-        if self.factory.config.test == 'bootstrap':
-            self.factory.promoter_cast(CpMsg(self.tc.my_chain.latest_cp))
-        else:
-            self.factory.promoter_cast_t(CpMsg(self.tc.my_chain.latest_cp))
+        self.factory.promoter_cast(CpMsg(self.tc.my_chain.latest_cp))
 
     def _send_validation_req(self, seq):
         # type: (int) -> None
