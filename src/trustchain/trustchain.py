@@ -485,13 +485,16 @@ class TrustChain:
         logging.info("TC: my VK is {}".format(b64encode(self.vk)))
 
     def consensus_at(self, r):
+        # type: (int) -> Cons
         return self._consensus_and_sigs[r][0]
 
     @property
     def consensus_keys(self):
+        # type: () -> List[int]
         return self._consensus_and_sigs.keys()
 
     def signatures_at(self, r):
+        # type: (int) -> List[Signature]
         return self._consensus_and_sigs[r][1]
 
     def new_tx(self, counterparty, m, nonce=None):

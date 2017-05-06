@@ -8,8 +8,8 @@ from collections import defaultdict
 
 from trustchain import TrustChain, TxBlock, CpBlock, Signature, Cons, ValidityState
 from src.utils.utils import collate_cp_blocks, my_err_back, encode_n
-from src.utils.messages import TxReq, TxResp, SigMsg, CpMsg, ConsMsg, ValidationReq, \
-    ValidationResp, ConsPollMsg, SigListMsg
+from src.utils.messages import TxReq, TxResp, SigMsg, SigListMsg, CpMsg, ConsMsg, ValidationReq, \
+    ValidationResp, ConsPollMsg
 
 
 class RoundState:
@@ -95,6 +95,7 @@ class TrustChainRunner:
             return
         if self.tc.vk in self.factory.promoters:
             return
+        # TODO if node misses a round and then promoters go offline, it'll get stuck
         node = random.choice(self.factory.promoters)
         self.send(node, ConsPollMsg(self.tc.latest_round + 1))
 
@@ -150,6 +151,7 @@ class TrustChainRunner:
             logging.debug("TC: not a dict type in handle_cons_from_acs")
 
     def handle_sigs(self, msg, remote_vk):
+        # type: (SigListMsg, str) -> None
         assert isinstance(msg, SigListMsg)
         for s in msg.ss:
             self.handle_sig(SigMsg(s, msg.r), remote_vk)
@@ -330,7 +332,7 @@ class TrustChainRunner:
         pieces = self.tc.agreed_pieces(req.seq_r)
 
         if len(pieces) == 0:
-            logging.warning("TC: no pieces, {}".format(sorted(self.tc._consensus_and_sigs.keys())))
+            logging.warning("TC: no pieces, {}".format(sorted(self.tc.consensus_keys)))
             return
 
         assert len(pieces) > 2
