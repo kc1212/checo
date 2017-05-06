@@ -127,7 +127,8 @@ class TrustChainRunner:
             s = Signature(self.tc.vk, self.tc._sk, cons.hash)
 
             self.factory.gossip(ConsMsg(cons))
-            self.factory.gossip(SigMsg(s, r))
+            self.factory.bcast(SigMsg(s, r))
+            # self.factory.gossip(SigMsg(s, r))
 
             # we also try to add the CP here because we may receive the signatures before the actual CP
             self._try_add_cp(r)
@@ -151,7 +152,7 @@ class TrustChainRunner:
             is_new = self.round_states[msg.r].new_sig(msg.s)
             if is_new:
                 self._try_add_cp(msg.r)
-                self.factory.gossip(msg)
+                # self.factory.gossip(msg)
 
     def handle_cp(self, msg, remote_vk):
         # type: (CpMsg, str) -> None
