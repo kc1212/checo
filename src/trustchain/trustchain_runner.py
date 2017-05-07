@@ -9,7 +9,7 @@ from collections import defaultdict
 from trustchain import TrustChain, TxBlock, CpBlock, Signature, Cons, ValidityState
 from src.utils.utils import collate_cp_blocks, my_err_back, encode_n
 from src.utils.messages import TxReq, TxResp, SigMsg, CpMsg, ConsMsg, ValidationReq, \
-    ValidationResp
+    ValidationResp, AskConsMsg
 
 
 class RoundState:
@@ -202,11 +202,14 @@ class TrustChainRunner:
         if self.tc.latest_round >= r:
             logging.debug("TC: already added the CP")
             return
-        if self.round_states[r].received_cons is None:
-            logging.debug("TC: don't have consensus result")
-            return
         if not self._sufficient_sigs(r):
             logging.debug("TC: insufficient signatures")
+            return
+        if self.round_states[r].received_cons is None:
+            logging.debug("TC: don't have consensus result")
+            # if we're here, it means we have enough signatures but still no consensus result
+            # manually ask for it from the promoters
+            self.send(random.choice(self.factory.promoters), AskConsMsg(r))
             return
 
         self._add_cp(r)
@@ -333,38 +336,43 @@ class TrustChainRunner:
         if res == ValidityState.Valid:
             logging.info("TC: verified {}".format(encode_n(self.tc.my_chain.chain[resp.seq].hash)))
 
-    def handle(self, msg, src):
+    def handle(self, msg, remote_vk):
         # type: (Union[TxReq, TxResp]) -> None
         """
         Handle messages that are sent using self.send, primarily transaction messages.
         :param msg: 
-        :param src: 
+        :param remote_vk: 
         :return: 
         """
         logging.debug("TC: got message".format(msg))
         if isinstance(msg, TxReq):
             nonce = msg.tx.inner.nonce
             m = msg.tx.inner.m
-            assert src == msg.tx.sig.vk, "{} != {}".format(b64encode(src), b64encode(msg.tx.sig.vk))
-            self.tc.new_tx(src, m, nonce)
+            assert remote_vk == msg.tx.sig.vk, "{} != {}".format(b64encode(remote_vk), b64encode(msg.tx.sig.vk))
+            self.tc.new_tx(remote_vk, m, nonce)
 
             tx = self.tc.my_chain.chain[-1]
             tx.add_other_half(msg.tx)
-            self.send(src, TxResp(msg.tx.inner.seq, tx))
-            logging.info("TC: added tx (received) {}, from {}".format(encode_n(msg.tx.hash), encode_n(src)))
+            self.send(remote_vk, TxResp(msg.tx.inner.seq, tx))
+            logging.info("TC: added tx (received) {}, from {}".format(encode_n(msg.tx.hash), encode_n(remote_vk)))
 
         elif isinstance(msg, TxResp):
-            assert src == msg.tx.sig.vk, "{} != {}".format(b64encode(src), b64encode(msg.tx.sig.vk))
+            assert remote_vk == msg.tx.sig.vk, "{} != {}".format(b64encode(remote_vk), b64encode(msg.tx.sig.vk))
             # TODO index access not safe
             tx = self.tc.my_chain.chain[msg.seq]
             tx.add_other_half(msg.tx)
             logging.info("TC: other half {}".format(encode_n(msg.tx.hash), msg.seq))
 
         elif isinstance(msg, ValidationReq):
-            self._handle_validation_req(msg, src)
+            self._handle_validation_req(msg, remote_vk)
 
         elif isinstance(msg, ValidationResp):
-            self._handle_validation_resp(msg, src)
+            self._handle_validation_resp(msg, remote_vk)
+
+        elif isinstance(msg, AskConsMsg):
+            # TODO vulnerable to spam
+            if msg.r in self.tc.consensus:
+                self.send(remote_vk, ConsMsg(self.tc.consensus[msg.r]))
 
         else:
             raise AssertionError("Incorrect message type")
