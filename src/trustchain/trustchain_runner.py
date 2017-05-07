@@ -70,7 +70,7 @@ class TrustChainRunner:
         self.consensus_delay = factory.config.consensus_delay
 
         self.collect_rubbish_lc = task.LoopingCall(self._collect_rubbish)
-        self.collect_rubbish_lc.start(20, False).addErrback(my_err_back)
+        self.collect_rubbish_lc.start(self.consensus_delay, False).addErrback(my_err_back)
 
         self.log_tx_count_lc = task.LoopingCall(self._log_info)
         self.log_tx_count_lc.start(20, False).addErrback(my_err_back)
@@ -206,9 +206,9 @@ class TrustChainRunner:
             logging.debug("TC: insufficient signatures")
             return
         if self.round_states[r].received_cons is None:
-            logging.debug("TC: don't have consensus result")
             # if we're here, it means we have enough signatures but still no consensus result
             # manually ask for it from the promoters
+            logging.info("TC: round {}, don't have consensus result, asking...".format(r))
             self.send(random.choice(self.factory.promoters), AskConsMsg(r))
             return
 
