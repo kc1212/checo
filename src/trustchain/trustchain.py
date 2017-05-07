@@ -752,8 +752,11 @@ class TrustChain:
         for compact_block in compact_blocks:
             assert idx == compact_block.seq
             # blocks_cache[idx] can be none of we skip a segment of the cache
-            if len(blocks_cache) > idx or blocks_cache[idx] is not None:
-                assert blocks_cache[idx] == compact_block
+            if len(blocks_cache) > idx:
+                if blocks_cache[idx] is None:
+                    blocks_cache[idx] = compact_block
+                else:
+                    assert blocks_cache[idx] == compact_block
             else:
                 blocks_cache[idx] = compact_block
             idx += 1
