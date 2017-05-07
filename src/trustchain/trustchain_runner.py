@@ -91,9 +91,7 @@ class TrustChainRunner:
         logging.info("TC: current tx count {}, validated {}".format(self.tc.tx_count, len(self.tc.get_validated_txs())))
 
     def _sufficient_sigs(self, r):
-        if len(self.round_states[r].received_sigs) > self.factory.config.t:
-            return True
-        return False
+        return True
 
     def _collect_rubbish(self):
         for k in self.round_states.keys():

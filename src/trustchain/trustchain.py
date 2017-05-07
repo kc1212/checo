@@ -197,12 +197,6 @@ class CpBlock(EqHash):
         assert p in (0, 1)
         self.inner = CpBlockInner(prev, h, cons, ss, p)
 
-        if cons.round != -1 or len(ss) != 0 or len(vks) != 0 or self.inner.seq != 0:
-            t = math.floor((len(vks) - 1) / 3.0)
-            self._verify_signatures(ss, vks, int(t))
-        else:
-            # if this is executed, it means this is a genesis block
-            pass
         self.s = Signature(vk, sk, self.inner.hash)
 
         # make sure the arguments of CompactBlock are initialised
