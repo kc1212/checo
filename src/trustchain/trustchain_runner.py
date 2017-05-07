@@ -220,7 +220,7 @@ class TrustChainRunner:
                        self.round_states[r].received_sigs.values(),
                        self.factory.promoters)
         if not self.tc.compact_cp_in_consensus(_prev_cp, self.tc.latest_round):
-            logging.info("TC: my previous CP not in consensus")
+            logging.info("TC: round{}, my previous CP not in consensus".format(r))
 
         # new promoters are selected using the latest CP, these promoters are responsible for round r+1
         # no need to continue the ACS for earlier rounds
@@ -231,22 +231,23 @@ class TrustChainRunner:
 
         assert len(self.factory.promoters) == self.factory.config.n, "{} != {}" \
             .format(len(self.factory.promoters), self.factory.config.n)
-        logging.info('TC: CP count in Cons is {}, time taken {}'
-                     .format(self.tc.consensus[r].count, int(time.time()) - self.round_states[r].start_time))
-        logging.info('TC: updated new promoters in round {} to [{}]'
+        logging.info('TC: round {}, CP count in Cons is {}, time taken {}'
+                     .format(r, self.tc.consensus[r].count, int(time.time()) - self.round_states[r].start_time))
+        logging.info('TC: round {}, updated new promoters to [{}]'
                      .format(r, ",".join(['"' + b64encode(p) + '"' for p in self.factory.promoters])))
 
         # at this point the promoters are updated
         # finally collect new CP if I'm the promoter, otherwise send CP to promoter
         if self.tc.vk in self.factory.promoters:
-            logging.info("TC: I'm a promoter, starting a new consensus round when we have enough CPs")
+            logging.info("TC: round {}, I'm a promoter, starting a new consensus round when we have enough CPs"
+                         .format(r))
             self.round_states[r].new_cp(self.tc.my_chain.latest_cp)
 
             def try_start_acs(_r):
                 _msg = self.round_states[r].received_cps
                 self.new_consensus_lc_count += 1
                 if self.tc.latest_round >= _r:
-                    logging.info("TC: somebody completed ACS before me, not starting")
+                    logging.info("TC: round {}, somebody completed ACS before me, not starting".format(_r))
                     # setting the following causes the old messages to be dropped
                     self.factory.acs.stop(self.tc.latest_round)
                     self.new_consensus_lc.stop()
@@ -255,7 +256,7 @@ class TrustChainRunner:
                     # we don't have enough CPs to start the consensus, so wait for more until some timeout
                     pass
                 else:
-                    logging.info("TC: starting ACS with {} CPs".format(len(_msg)))
+                    logging.info("TC: round {}, starting ACS with {} CPs".format(_r, len(_msg)))
                     self.factory.acs.reset_then_start(_msg, _r)
                     self.new_consensus_lc.stop()
                     self.new_consensus_lc_count = 0
