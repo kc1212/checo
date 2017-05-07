@@ -191,6 +191,13 @@ class TrustChainRunner:
                 self._try_add_cp(msg.r)
                 self.factory.gossip(msg)
 
+    def handle_ask_cons(self, msg, remote_vk):
+        assert isinstance(msg, AskConsMsg)
+        # TODO vulnerable to spam
+        if msg.r in self.tc.consensus:
+            # NOTE: we use factory.send because ConsMsg is handled separately
+            self.factory.send(remote_vk, ConsMsg(self.tc.consensus[msg.r]))
+
     def _try_add_cp(self, r):
         """
         Try to add my own CP from the received consensus results and signatures
@@ -209,7 +216,7 @@ class TrustChainRunner:
             # if we're here, it means we have enough signatures but still no consensus result
             # manually ask for it from the promoters
             logging.info("TC: round {}, don't have consensus result, asking...".format(r))
-            self.send(random.choice(self.factory.promoters), AskConsMsg(r))
+            self.factory.send(random.choice(self.factory.promoters), AskConsMsg(r))
             return
 
         self._add_cp(r)
@@ -368,11 +375,6 @@ class TrustChainRunner:
 
         elif isinstance(msg, ValidationResp):
             self._handle_validation_resp(msg, remote_vk)
-
-        elif isinstance(msg, AskConsMsg):
-            # TODO vulnerable to spam
-            if msg.r in self.tc.consensus:
-                self.send(remote_vk, ConsMsg(self.tc.consensus[msg.r]))
 
         else:
             raise AssertionError("Incorrect message type")

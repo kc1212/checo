@@ -16,7 +16,7 @@ from src.utils.messages import \
     DummyMsg, PingMsg, PongMsg, \
     BrachaMsg, Mo14Msg, ACSMsg, \
     ChainMsg, SigMsg, CpMsg, ConsMsg, \
-    InstructionMsg
+    InstructionMsg, AskConsMsg
 from src.utils import Replay, Handled, set_logging, my_err_back, call_later, MAX_LINE_LEN
 from src.consensus.bracha import Bracha
 from src.consensus.acs import ACS
@@ -70,6 +70,8 @@ class MyProto(JsonReceiver):
         elif isinstance(obj, ChainMsg):
             self.factory.tc_runner.handle(obj.body, self.remote_vk)
 
+        # NOTE: all the consensus related messages are handled separately
+        # ChainMsg is only for transactions and its validation
         elif isinstance(obj, SigMsg):
             self.factory.tc_runner.handle_sig(obj, self.remote_vk)
 
@@ -78,6 +80,9 @@ class MyProto(JsonReceiver):
 
         elif isinstance(obj, ConsMsg):
             self.factory.tc_runner.handle_cons(obj, self.remote_vk)
+
+        elif isinstance(obj, AskConsMsg):
+            self.factory.tc_runner.handle_ask_cons(obj, self.remote_vk)
 
         # NOTE messages below are for testing, bracha/mo14 is normally handled by acs
 
