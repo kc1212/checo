@@ -8,7 +8,7 @@ def check_multiple_rounds(n, t, max_r):
 
 
 def check_promoter_match(n, t, r):
-    target = 'TC: updated new promoters in round {} to'.format(r)
+    target = 'TC: round {}, updated new promoters to '.format(r)
     updated_promoters = search_for_string_in_dir(DIR, target, json.loads)
     assert len(updated_promoters) >= n - t
 

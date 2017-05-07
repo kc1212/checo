@@ -18,6 +18,7 @@ class RoundState:
         self.received_sigs = {}
         self.received_cps = []
         self.start_time = int(time.time())
+        self.asked = False
 
     def __str__(self):
         return "received cons: {}, sig count: {}, cp count: {}"\
@@ -214,9 +215,11 @@ class TrustChainRunner:
             return
         if self.round_states[r].received_cons is None:
             # if we're here, it means we have enough signatures but still no consensus result
-            # manually ask for it from the promoters
-            logging.info("TC: round {}, don't have consensus result, asking...".format(r))
-            self.factory.send(random.choice(self.factory.promoters), AskConsMsg(r))
+            # manually ask for it from the promoters only once, ideally this should be dynamic
+            if not self.round_states[r].asked:
+                logging.info("TC: round {}, don't have consensus result, asking...".format(r))
+                self.factory.send(random.choice(self.factory.promoters), AskConsMsg(r))
+                self.round_states[r].asked = True
             return
 
         self._add_cp(r)
