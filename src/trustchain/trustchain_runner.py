@@ -77,7 +77,6 @@ class TrustChainRunner:
         self.log_tx_count_lc.start(20, False).addErrback(my_err_back)
 
         self.bootstrap_lc = None
-        self.new_consensus_lc_count = 0
 
         self.random_node_for_tx = False
         self.validation_enabled = False
@@ -129,8 +128,9 @@ class TrustChainRunner:
             self.factory.gossip_except(future_promoters, ConsMsg(cons))
             self.factory.multicast(future_promoters, ConsMsg(cons))
 
-            self.factory.gossip_except(future_promoters + self.factory.promoters, SigMsg(s, r))
-            self.factory.multicast(future_promoters + self.factory.promoters, SigMsg(s, r))
+            sig_set = list(set(future_promoters) | set(self.factory.promoters))
+            self.factory.gossip_except(sig_set, SigMsg(s, r))
+            self.factory.multicast(sig_set, SigMsg(s, r))
 
             # we also try to add the CP here because we may receive the signatures before the actual CP
             self._try_add_cp(r)
@@ -236,7 +236,7 @@ class TrustChainRunner:
                        self.round_states[r].received_sigs.values(),
                        self.factory.promoters)
         if not self.tc.compact_cp_in_consensus(_prev_cp, self.tc.latest_round):
-            logging.info("TC: round{}, my previous CP not in consensus".format(r))
+            logging.info("TC: round {}, my previous CP not in consensus".format(r))
 
         # new promoters are selected using the latest CP, these promoters are responsible for round r+1
         # no need to continue the ACS for earlier rounds
@@ -262,7 +262,6 @@ class TrustChainRunner:
             def _try_start_acs(_r):
                 # NOTE: here we assume the consensus should have a length >= n
                 _msg = self.round_states[r].received_cps
-                self.new_consensus_lc_count += 1
                 if self.tc.latest_round >= _r:
                     logging.info("TC: round {}, somebody completed ACS before me, not starting".format(_r))
                     # setting the following causes the old messages to be dropped
@@ -271,7 +270,6 @@ class TrustChainRunner:
                     logging.info("TC: round {}, starting ACS with {} CPs".format(_r, len(_msg)))
                     self.factory.acs.reset_then_start(_msg, _r)
 
-            assert self.new_consensus_lc_count == 0, "Overlapping ACS"
             call_later(self.consensus_delay, _try_start_acs, r + 1)
         else:
             logging.info("TC: I'm NOT a promoter")
