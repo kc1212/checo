@@ -289,13 +289,6 @@ class TrustChainRunner:
         :param seq: The sequence number on my side for the TX that I want to validate
         :return: 
         """
-        blocks_cache = self.tc.load_cache_for_verification(seq)
-        if len(blocks_cache) != 0:
-            res = self.tc.verify_tx(seq, blocks_cache)
-            if res == ValidityState.Valid:
-                logging.info("TC: verified (from cache) {}".format(encode_n(self.tc.my_chain.chain[seq].hash)))
-            return
-
         block = self.tc.my_chain.chain[seq]
         assert isinstance(block, TxBlock)
 
@@ -409,7 +402,7 @@ class TrustChainRunner:
             return
 
         # throttle transactions if we cannot validate them timely
-        if self.validation_enabled and len(self.tc.get_unknown_txs()) > 20 * self.factory.config.n:
+        if self.validation_enabled and len(self.tc.get_verifiable_txs()) > 20 * self.factory.config.n:
             logging.info("TC: throttling")
             return
 
@@ -442,9 +435,7 @@ class TrustChainRunner:
         if self.tc.latest_cp.round < 2:
             return
 
-        max_h = self.tc.my_chain.get_cp_of_round(self.tc.latest_cp.round - 1).seq
-        txs = filter(lambda _tx: _tx.seq < max_h and _tx.request_sent_r < self.tc.latest_round,
-                     self.tc.get_unknown_txs())
+        txs = self.tc.get_verifiable_txs()
 
         if len(txs) == 0:
             return

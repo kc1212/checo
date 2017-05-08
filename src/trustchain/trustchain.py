@@ -7,7 +7,7 @@ from base64 import b64encode
 from typing import List, Union, Dict, Tuple, Optional
 from enum import Enum
 
-from src.utils import hash_pointers_ok, GrowingList
+from src.utils import hash_pointers_ok, GrowingList, encode_n
 
 ValidityState = Enum('ValidityState', 'Valid Invalid Unknown')
 
@@ -692,7 +692,7 @@ class TrustChain:
 
         return blocks_cache[idx_a:idx_b+1]
 
-    def verify_tx(self, seq, compact_blocks):
+    def verify_tx(self, seq, compact_blocks, use_cache=True):
         # type: (int, List[CompactBlock]) -> ValidityState
         """
         We want to verify one of our own TX with expected round numbers that contains the consensus result of the piece
@@ -732,17 +732,23 @@ class TrustChain:
         if not hash_pointers_ok(compact_blocks):
             return ValidityState.Unknown
 
+        # TODO the logic here is ugly and error prone
         for b in compact_blocks:
             if b.hash == tx.other_half.compact.hash:
                 assert b.seq == tx.other_half.seq
-                self._cache_compact_blocks(tx.inner.counterparty, compact_blocks)
                 self.my_chain.set_validity(seq, ValidityState.Valid)
+                if use_cache:
+                    updated = self._cache_compact_blocks(tx.inner.counterparty, compact_blocks)
+                    if updated:
+                        self._verify_from_cache(tx.inner.counterparty)
                 return ValidityState.Valid
 
         return ValidityState.Unknown
 
     def _cache_compact_blocks(self, vk, compact_blocks):
-        # type: (str, List[CompactBlock]) -> None
+        # type: (str, List[CompactBlock]) -> bool
+        updated = False
+
         if vk not in self._other_chains:
             self._other_chains[vk] = GrowingList()
 
@@ -755,17 +761,44 @@ class TrustChain:
             if len(blocks_cache) > idx:
                 if blocks_cache[idx] is None:
                     blocks_cache[idx] = compact_block
+                    updated = True
                 else:
                     assert blocks_cache[idx] == compact_block
             else:
                 blocks_cache[idx] = compact_block
+                updated = True
             idx += 1
 
         self._other_chains[vk] = blocks_cache
 
-    def get_unknown_txs(self):
+        return updated
+
+    def _verify_from_cache(self, counterparty):
+        """
+        This function should be called every time the cache is updated,
+        and then verify all tx that belongs to counterparty.
+        :param counterparty: 
+        :return: 
+        """
+        txs = filter(lambda _tx: _tx.inner.counterparty == counterparty, self.get_verifiable_txs())
+        for tx in txs:
+            compact_blocks = self.load_cache_for_verification(tx.seq)
+            res = self.verify_tx(tx.seq, compact_blocks, use_cache=False)
+            if res == ValidityState.Valid:
+                logging.info("TC: verified (from cache) {}".format(encode_n(tx.hash)))
+
+    def get_verifiable_txs(self):
         # type: () -> List[TxBlock]
-        return self.my_chain.get_unknown_txs()
+        """
+        There are some transactions that are impossible to verify because we don't have the consensus result,
+        or the validation request is already sent but we haven't heard the reply,
+        this function attempts to filter these cases.
+        :return: 
+        """
+        max_h = self.my_chain.get_cp_of_round(self.latest_cp.round - 1).seq
+        txs = filter(lambda _tx: _tx.seq < max_h and _tx.request_sent_r < self.latest_round,
+                     self.my_chain.get_unknown_txs())
+        return txs
 
     def get_validated_txs(self):
         # type: () -> List[TxBlock]
