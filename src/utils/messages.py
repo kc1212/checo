@@ -148,6 +148,12 @@ class ConsMsg:
         return self.cons.round
 
 
+class AskConsMsg:
+    def __init__(self, r):
+        # type: (int) -> None
+        self.r = r
+
+
 class ValidationReq:
     def __init__(self, seq, seq_r):
         # type: (int) -> None

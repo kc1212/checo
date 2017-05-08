@@ -7,9 +7,9 @@ import time
 from collections import defaultdict
 
 from trustchain import TrustChain, TxBlock, CpBlock, Signature, Cons, ValidityState
-from src.utils.utils import collate_cp_blocks, my_err_back, encode_n
+from src.utils.utils import collate_cp_blocks, my_err_back, encode_n, call_later
 from src.utils.messages import TxReq, TxResp, SigMsg, CpMsg, ConsMsg, ValidationReq, \
-    ValidationResp
+    ValidationResp, AskConsMsg
 
 
 class RoundState:
@@ -18,6 +18,7 @@ class RoundState:
         self.received_sigs = {}
         self.received_cps = []
         self.start_time = int(time.time())
+        self.asked = False
 
     def __str__(self):
         return "received cons: {}, sig count: {}, cp count: {}"\
@@ -70,14 +71,12 @@ class TrustChainRunner:
         self.consensus_delay = factory.config.consensus_delay
 
         self.collect_rubbish_lc = task.LoopingCall(self._collect_rubbish)
-        self.collect_rubbish_lc.start(20, False).addErrback(my_err_back)
+        self.collect_rubbish_lc.start(self.consensus_delay, False).addErrback(my_err_back)
 
         self.log_tx_count_lc = task.LoopingCall(self._log_info)
         self.log_tx_count_lc.start(20, False).addErrback(my_err_back)
 
         self.bootstrap_lc = None
-        self.new_consensus_lc = None
-        self.new_consensus_lc_count = 0
 
         self.random_node_for_tx = False
         self.validation_enabled = False
@@ -126,9 +125,12 @@ class TrustChainRunner:
             future_promoters = cons.get_promoters(self.factory.config.n)
             s = Signature(self.tc.vk, self.tc._sk, cons.hash)
 
-            self.factory.gossip(ConsMsg(cons))
-            self.factory.bcast(SigMsg(s, r))
-            # self.factory.gossip(SigMsg(s, r))
+            self.factory.gossip_except(future_promoters, ConsMsg(cons))
+            self.factory.multicast(future_promoters, ConsMsg(cons))
+
+            sig_set = list(set(future_promoters) | set(self.factory.promoters))
+            self.factory.gossip_except(sig_set, SigMsg(s, r))
+            self.factory.multicast(sig_set, SigMsg(s, r))
 
             # we also try to add the CP here because we may receive the signatures before the actual CP
             self._try_add_cp(r)
@@ -152,7 +154,7 @@ class TrustChainRunner:
             is_new = self.round_states[msg.r].new_sig(msg.s)
             if is_new:
                 self._try_add_cp(msg.r)
-                # self.factory.gossip(msg)
+                self.factory.gossip(msg)
 
     def handle_cp(self, msg, remote_vk):
         # type: (CpMsg, str) -> None
@@ -189,6 +191,13 @@ class TrustChainRunner:
                 self._try_add_cp(msg.r)
                 self.factory.gossip(msg)
 
+    def handle_ask_cons(self, msg, remote_vk):
+        assert isinstance(msg, AskConsMsg)
+        # TODO vulnerable to spam
+        if msg.r in self.tc.consensus:
+            # NOTE: we use factory.send because ConsMsg is handled separately
+            self.factory.send(remote_vk, ConsMsg(self.tc.consensus[msg.r]))
+
     def _try_add_cp(self, r):
         """
         Try to add my own CP from the received consensus results and signatures
@@ -200,11 +209,16 @@ class TrustChainRunner:
         if self.tc.latest_round >= r:
             logging.debug("TC: already added the CP")
             return
-        if self.round_states[r].received_cons is None:
-            logging.debug("TC: don't have consensus result")
-            return
         if not self._sufficient_sigs(r):
             logging.debug("TC: insufficient signatures")
+            return
+        if self.round_states[r].received_cons is None:
+            # if we're here, it means we have enough signatures but still no consensus result
+            # manually ask for it from the promoters only once, ideally this should be dynamic
+            if not self.round_states[r].asked:
+                logging.info("TC: round {}, don't have consensus result, asking...".format(r))
+                self.factory.send(random.choice(self.factory.promoters), AskConsMsg(r))
+                self.round_states[r].asked = True
             return
 
         self._add_cp(r)
@@ -222,7 +236,7 @@ class TrustChainRunner:
                        self.round_states[r].received_sigs.values(),
                        self.factory.promoters)
         if not self.tc.compact_cp_in_consensus(_prev_cp, self.tc.latest_round):
-            logging.info("TC: my previous CP not in consensus")
+            logging.info("TC: round {}, my previous CP not in consensus".format(r))
 
         # new promoters are selected using the latest CP, these promoters are responsible for round r+1
         # no need to continue the ACS for earlier rounds
@@ -233,42 +247,39 @@ class TrustChainRunner:
 
         assert len(self.factory.promoters) == self.factory.config.n, "{} != {}" \
             .format(len(self.factory.promoters), self.factory.config.n)
-        logging.info('TC: CP count in Cons is {}, time taken {}'
-                     .format(self.tc.consensus[r].count, int(time.time()) - self.round_states[r].start_time))
-        logging.info('TC: updated new promoters in round {} to [{}]'
+        logging.info('TC: round {}, CP count in Cons is {}, time taken {}'
+                     .format(r, self.tc.consensus[r].count, int(time.time()) - self.round_states[r].start_time))
+        logging.info('TC: round {}, updated new promoters to [{}]'
                      .format(r, ",".join(['"' + b64encode(p) + '"' for p in self.factory.promoters])))
 
         # at this point the promoters are updated
         # finally collect new CP if I'm the promoter, otherwise send CP to promoter
         if self.tc.vk in self.factory.promoters:
-            logging.info("TC: I'm a promoter, starting a new consensus round when we have enough CPs")
+            logging.info("TC: round {}, I'm a promoter, starting a new consensus round when we have enough CPs"
+                         .format(r))
             self.round_states[r].new_cp(self.tc.my_chain.latest_cp)
 
-            def try_start_acs(_r):
+            def _try_start_acs(_r):
+                # NOTE: here we assume the consensus should have a length >= n
                 _msg = self.round_states[r].received_cps
-                self.new_consensus_lc_count += 1
                 if self.tc.latest_round >= _r:
-                    logging.info("TC: somebody completed ACS before me, not starting")
+                    logging.info("TC: round {}, somebody completed ACS before me, not starting".format(_r))
                     # setting the following causes the old messages to be dropped
                     self.factory.acs.stop(self.tc.latest_round)
-                    self.new_consensus_lc.stop()
-                    self.new_consensus_lc_count = 0
-                elif len(_msg) < self.factory.config.n and self.new_consensus_lc_count < 10:
-                    # we don't have enough CPs to start the consensus, so wait for more until some timeout
-                    pass
                 else:
-                    logging.info("TC: starting ACS with {} CPs".format(len(_msg)))
+                    logging.info("TC: round {}, starting ACS with {} CPs".format(_r, len(_msg)))
                     self.factory.acs.reset_then_start(_msg, _r)
-                    self.new_consensus_lc.stop()
-                    self.new_consensus_lc_count = 0
 
-            assert self.new_consensus_lc_count == 0, "Overlapping ACS"
-            self.new_consensus_lc = task.LoopingCall(try_start_acs, r + 1)
-            self.new_consensus_lc.start(self.consensus_delay, False).addErrback(my_err_back)
+            call_later(self.consensus_delay, _try_start_acs, r + 1)
         else:
             logging.info("TC: I'm NOT a promoter")
 
-        self.factory.promoter_cast(CpMsg(self.tc.my_chain.latest_cp))
+        # send new CP to either all promoters
+        # TODO having this if statement for test isn't ideal
+        if self.factory.config.test == 'bootstrap':
+            self.factory.promoter_cast(CpMsg(self.tc.my_chain.latest_cp))
+        else:
+            self.factory.promoter_cast_t(CpMsg(self.tc.my_chain.latest_cp))
 
     def _send_validation_req(self, seq):
         # type: (int) -> None
@@ -325,38 +336,38 @@ class TrustChainRunner:
         if res == ValidityState.Valid:
             logging.info("TC: verified {}".format(encode_n(self.tc.my_chain.chain[resp.seq].hash)))
 
-    def handle(self, msg, src):
+    def handle(self, msg, remote_vk):
         # type: (Union[TxReq, TxResp]) -> None
         """
         Handle messages that are sent using self.send, primarily transaction messages.
         :param msg: 
-        :param src: 
+        :param remote_vk: 
         :return: 
         """
         logging.debug("TC: got message".format(msg))
         if isinstance(msg, TxReq):
             nonce = msg.tx.inner.nonce
             m = msg.tx.inner.m
-            assert src == msg.tx.sig.vk, "{} != {}".format(b64encode(src), b64encode(msg.tx.sig.vk))
-            self.tc.new_tx(src, m, nonce)
+            assert remote_vk == msg.tx.sig.vk, "{} != {}".format(b64encode(remote_vk), b64encode(msg.tx.sig.vk))
+            self.tc.new_tx(remote_vk, m, nonce)
 
             tx = self.tc.my_chain.chain[-1]
             tx.add_other_half(msg.tx)
-            self.send(src, TxResp(msg.tx.inner.seq, tx))
-            logging.info("TC: added tx (received) {}, from {}".format(encode_n(msg.tx.hash), encode_n(src)))
+            self.send(remote_vk, TxResp(msg.tx.inner.seq, tx))
+            logging.info("TC: added tx (received) {}, from {}".format(encode_n(msg.tx.hash), encode_n(remote_vk)))
 
         elif isinstance(msg, TxResp):
-            assert src == msg.tx.sig.vk, "{} != {}".format(b64encode(src), b64encode(msg.tx.sig.vk))
+            assert remote_vk == msg.tx.sig.vk, "{} != {}".format(b64encode(remote_vk), b64encode(msg.tx.sig.vk))
             # TODO index access not safe
             tx = self.tc.my_chain.chain[msg.seq]
             tx.add_other_half(msg.tx)
             logging.info("TC: other half {}".format(encode_n(msg.tx.hash), msg.seq))
 
         elif isinstance(msg, ValidationReq):
-            self._handle_validation_req(msg, src)
+            self._handle_validation_req(msg, remote_vk)
 
         elif isinstance(msg, ValidationResp):
-            self._handle_validation_resp(msg, src)
+            self._handle_validation_resp(msg, remote_vk)
 
         else:
             raise AssertionError("Incorrect message type")
