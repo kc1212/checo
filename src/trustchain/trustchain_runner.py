@@ -7,7 +7,7 @@ import time
 from collections import defaultdict
 
 from trustchain import TrustChain, TxBlock, CpBlock, Signature, Cons, ValidityState
-from src.utils.utils import collate_cp_blocks, my_err_back, encode_n
+from src.utils.utils import collate_cp_blocks, my_err_back, encode_n, call_later
 from src.utils.messages import TxReq, TxResp, SigMsg, CpMsg, ConsMsg, ValidationReq, \
     ValidationResp, AskConsMsg
 
@@ -77,7 +77,6 @@ class TrustChainRunner:
         self.log_tx_count_lc.start(20, False).addErrback(my_err_back)
 
         self.bootstrap_lc = None
-        self.new_consensus_lc = None
         self.new_consensus_lc_count = 0
 
         self.random_node_for_tx = False
@@ -260,27 +259,20 @@ class TrustChainRunner:
                          .format(r))
             self.round_states[r].new_cp(self.tc.my_chain.latest_cp)
 
-            def try_start_acs(_r):
+            def _try_start_acs(_r):
+                # NOTE: here we assume the consensus should have a length >= n
                 _msg = self.round_states[r].received_cps
                 self.new_consensus_lc_count += 1
                 if self.tc.latest_round >= _r:
                     logging.info("TC: round {}, somebody completed ACS before me, not starting".format(_r))
                     # setting the following causes the old messages to be dropped
                     self.factory.acs.stop(self.tc.latest_round)
-                    self.new_consensus_lc.stop()
-                    self.new_consensus_lc_count = 0
-                elif len(_msg) < self.factory.config.n and self.new_consensus_lc_count < 10:
-                    # we don't have enough CPs to start the consensus, so wait for more until some timeout
-                    pass
                 else:
                     logging.info("TC: round {}, starting ACS with {} CPs".format(_r, len(_msg)))
                     self.factory.acs.reset_then_start(_msg, _r)
-                    self.new_consensus_lc.stop()
-                    self.new_consensus_lc_count = 0
 
             assert self.new_consensus_lc_count == 0, "Overlapping ACS"
-            self.new_consensus_lc = task.LoopingCall(try_start_acs, r + 1)
-            self.new_consensus_lc.start(self.consensus_delay, False).addErrback(my_err_back)
+            call_later(self.consensus_delay, _try_start_acs, r + 1)
         else:
             logging.info("TC: I'm NOT a promoter")
 
