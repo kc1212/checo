@@ -325,9 +325,7 @@ class TrustChainRunner:
         assert isinstance(resp, ValidationResp)
         logging.debug("TC: received validation resp from {}, {}".format(b64encode(remote_vk), resp))
 
-        res = self.tc.verify_tx(resp.seq, resp.pieces)
-        if res == ValidityState.Valid:
-            logging.info("TC: verified {}".format(encode_n(self.tc.my_chain.chain[resp.seq].hash)))
+        self.tc.verify_tx(resp.seq, resp.pieces)
 
     def handle(self, msg, remote_vk):
         # type: (Union[TxReq, TxResp]) -> None

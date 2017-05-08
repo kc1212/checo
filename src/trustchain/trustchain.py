@@ -737,6 +737,7 @@ class TrustChain:
             if b.hash == tx.other_half.compact.hash:
                 assert b.seq == tx.other_half.seq
                 self.my_chain.set_validity(seq, ValidityState.Valid)
+                logging.info("TC: verified {}".format(encode_n(self.my_chain.chain[seq].hash)))
                 if use_cache:
                     updated = self._cache_compact_blocks(tx.inner.counterparty, compact_blocks)
                     if updated:
@@ -795,6 +796,8 @@ class TrustChain:
         this function attempts to filter these cases.
         :return: 
         """
+        if self.latest_cp.round < 2:
+            return []
         max_h = self.my_chain.get_cp_of_round(self.latest_cp.round - 1).seq
         txs = filter(lambda _tx: _tx.seq < max_h and _tx.request_sent_r < self.latest_round,
                      self.my_chain.get_unknown_txs())
