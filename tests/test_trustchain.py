@@ -308,9 +308,15 @@ def test_validation(seq, n_cp, n_tx, expected):
     assert tc_s.verify_tx(seq, resp) == expected
 
     if expected == ValidityState.Valid:
-        assert len(tc_s.get_verifiable_txs()) == len(is_unknowns) - 1
-        assert tc_r.vk in tc_s._other_chains
-        assert set(tc_s._other_chains[tc_r.vk]).issuperset(resp)
+        # when we do one validation, everything that's in the cache also gets validated, thus - n_tx
+        assert len(tc_s.get_verifiable_txs()) == len(is_unknowns) - n_tx
 
+        # the cache should have an entry for the receiving node
+        assert tc_r.vk in tc_s._other_chains
+
+        # the response must be in the cache
+        assert set(tc_s._other_chains[tc_r.vk]) >= set(resp)
+
+        # if we load the cache again, it should be the initial response
         assert tc_s.load_cache_for_verification(seq) == resp
 
