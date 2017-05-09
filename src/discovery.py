@@ -1,12 +1,12 @@
+import argparse
+import logging
+
 from twisted.internet import reactor, task
 from twisted.internet.protocol import Factory
 from typing import Union, Dict
-import logging
-import argparse
-import sys
 
+from src.messages.messages import DiscoverMsg, DiscoverReplyMsg, CoinMsg, CoinReplyMsg, InstructionMsg
 from src.utils.jsonreceiver import JsonReceiver
-from src.utils.messages import DiscoverMsg, DiscoverReplyMsg, CoinMsg, CoinReplyMsg, InstructionMsg
 from src.utils.utils import set_logging, my_err_back, MAX_LINE_LEN, call_later
 
 

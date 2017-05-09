@@ -1,11 +1,12 @@
-import random
 import logging
-from collections import defaultdict
+import random
 from base64 import b64encode
+from collections import defaultdict
+
 from enum import Enum
 from typing import Union
 
-from src.utils.messages import Mo14Msg
+from src.messages.messages import Mo14Msg
 from src.utils.utils import Replay, Handled
 
 Mo14Type = Enum('Mo14Type', 'EST AUX')

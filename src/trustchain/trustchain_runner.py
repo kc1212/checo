@@ -1,15 +1,16 @@
-from twisted.internet import task
-from base64 import b64encode
-from typing import Union
-import random
 import logging
+import random
 import time
+from base64 import b64encode
 from collections import defaultdict
 
-from src.trustchain.trustchain import TrustChain, TxBlock, CpBlock, Signature, Cons, VALIDITY_ENUM
-from src.utils.utils import collate_cp_blocks, my_err_back, encode_n, call_later
-from src.utils.messages import TxReq, TxResp, SigMsg, CpMsg, ConsMsg, ValidationReq, \
+from twisted.internet import task
+from typing import Union
+
+from src.messages.messages import TxReq, TxResp, SigMsg, CpMsg, ConsMsg, ValidationReq, \
     ValidationResp, AskConsMsg
+from src.trustchain.trustchain import TrustChain, TxBlock, CpBlock, Signature, Cons
+from src.utils.utils import collate_cp_blocks, my_err_back, encode_n, call_later
 
 
 class RoundState(object):

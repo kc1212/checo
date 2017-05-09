@@ -1,27 +1,27 @@
 import Queue
 import argparse
-import sys
 import logging
 import random
+import sys
 from base64 import b64encode, b64decode
-from typing import Dict, Tuple
 
 from twisted.internet import reactor, task
 from twisted.internet.endpoints import TCP4ClientEndpoint, connectProtocol
 from twisted.internet.error import CannotListenError
 from twisted.internet.protocol import Factory
+from typing import Dict, Tuple
 
-from src.utils.jsonreceiver import JsonReceiver
-from src.utils.messages import \
+from src.messages.messages import \
     DummyMsg, PingMsg, PongMsg, \
     BrachaMsg, Mo14Msg, ACSMsg, \
     ChainMsg, SigMsg, CpMsg, ConsMsg, \
     InstructionMsg, AskConsMsg
-from src.utils import Replay, Handled, set_logging, my_err_back, call_later, MAX_LINE_LEN
-from src.consensus.bracha import Bracha
 from src.consensus.acs import ACS
+from src.consensus.bracha import Bracha
 from src.consensus.mo14 import Mo14
 from src.trustchain.trustchain_runner import TrustChainRunner
+from src.utils import Replay, Handled, set_logging, my_err_back, call_later, MAX_LINE_LEN
+from src.utils.jsonreceiver import JsonReceiver
 from .discovery import Discovery, got_discovery
 
 

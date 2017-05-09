@@ -1,12 +1,13 @@
-import random
 import logging
+import random
+from base64 import b64encode
+
 import jsonpickle
 import libnacl
-from base64 import b64encode
-from pyeclib.ec_iface import ECDriver
 from enum import Enum
+from pyeclib.ec_iface import ECDriver
 
-from src.utils.messages import BrachaMsg
+from src.messages.messages import BrachaMsg
 from src.utils.utils import Handled
 
 BrachaStep = Enum('BrachaStep', 'one two three')

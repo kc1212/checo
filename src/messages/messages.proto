@@ -1,0 +1,139 @@
+syntax = "proto3";
+
+message Discover {
+    bytes vk = 1;
+    int32 port = 2;
+}
+
+message DiscoverReply {
+    // they key should be base64 encoded node vk
+    map<string, string> nodes = 1;
+}
+
+message Instruction {
+    string instruction = 1;
+    int32 delay = 2;
+    int32 param = 3;
+}
+
+message Ping {
+    bytes vk = 1;
+    int32 port = 2;
+}
+
+message Pong {
+    bytes vk = 1;
+    int32 port = 2;
+}
+
+message Bracha {
+    enum Type {
+        INIT = 0;
+        ECHO = 1;
+        READY = 2;
+    }
+    Type ty = 1;
+    bytes digest = 2;
+    bytes fragment = 3;
+}
+
+message Mo14 {
+    enum Type {
+        EST = 0;
+        AUX = 1;
+    }
+
+    Type ty = 1;
+    int32 r = 2;
+    int32 v = 3;
+}
+
+message ACS {
+    bytes instance = 1;
+    int32 round = 2;
+
+    // application should only set one of the two
+    Bracha body_bracha = 3;
+    Mo14 body_mo14 = 4;
+}
+
+message TxBlock {
+    message Inner {
+        bytes prev = 1;
+        int32 seq = 2;
+        bytes counterparty = 3;
+        bytes nonce = 4;
+        string m = 5;
+    }
+    Inner inner = 1;
+    Signature s = 2;
+
+    // the following do not need to be in the network
+    // other_half
+    // validity
+    // request_sent
+}
+
+message TxReq {
+    TxBlock tx = 1;
+}
+
+message TxResp {
+    TxBlock tx = 1;
+    int32 seq = 2;
+}
+
+message CpBlock {
+    message Inner {
+        bytes prev = 1;
+        int32 seq = 2;
+        int32 round = 3;
+        bytes cons_hash = 4;
+        repeated Signature ss = 5;
+        int32 p = 6;
+    }
+    Inner inner = 1;
+    Signature s = 2;
+}
+
+message Signature {
+    bytes vk = 1;
+    bytes s = 2;
+}
+
+message SigWithRound {
+    Signature s = 1;
+    int32 r = 2;
+}
+
+message Cons {
+    // same fields as Cons
+    int32 round = 1;
+    repeated CpBlock blocks = 2;
+}
+
+message AskCons {
+    int32 r = 1;
+}
+
+message ValidationReq {
+    int32 seq = 1;
+    int32 seq_2 = 2;
+}
+
+message CompactBlock {
+    message Inner {
+        bytes digest = 1;
+        bytes prev = 2;
+    }
+    Inner inner = 1;
+    int32 seq = 2;
+    int32 agreed_round = 3;
+}
+
+message ValidationResp {
+    int32 seq = 1;
+    int32 seq_r = 2;
+    repeated CompactBlock pieces = 3;
+}
+
