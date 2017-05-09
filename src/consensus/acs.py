@@ -8,7 +8,7 @@ from src.utils.messages import ACSMsg, BrachaMsg, Mo14Msg
 from src.utils.utils import Replay, Handled, dictionary_hash
 
 
-class ACS:
+class ACS(object):
     def __init__(self, factory):
         self.factory = factory
         self.round = -1  # type: int
@@ -144,7 +144,7 @@ class ACS:
                 logging.debug("ACS: got n - t 1s")
                 logging.debug("difference = {}".format(difference))
                 for d in list(difference):
-                    logging.debug("ACS: initiating BA for {}, v".format(b64encode(d), 0))
+                    logging.debug("ACS: initiating BA for {}, v {}".format(b64encode(d), 0))
                     self.mo14_provided[d] = 0
                     self.mo14s[d].start(0)
 

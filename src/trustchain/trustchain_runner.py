@@ -6,13 +6,13 @@ import logging
 import time
 from collections import defaultdict
 
-from trustchain import TrustChain, TxBlock, CpBlock, Signature, Cons, ValidityState
+from src.trustchain.trustchain import TrustChain, TxBlock, CpBlock, Signature, Cons, VALIDITY_ENUM
 from src.utils.utils import collate_cp_blocks, my_err_back, encode_n, call_later
 from src.utils.messages import TxReq, TxResp, SigMsg, CpMsg, ConsMsg, ValidationReq, \
     ValidationResp, AskConsMsg
 
 
-class RoundState:
+class RoundState(object):
     def __init__(self):
         self.received_cons = None
         self.received_sigs = {}
@@ -53,12 +53,12 @@ class RoundState:
     def new_cp(self, cp):
         # type: (CpBlock) -> None
         assert isinstance(cp, CpBlock)
-        if len(self.received_cps) > 0:
+        if self.received_cps:
             assert self.received_cps[0].round == cp.round
         self.received_cps.append(cp)
 
 
-class TrustChainRunner:
+class TrustChainRunner(object):
     """
     We keep a queue of messages and handle them in order
     the handle function by itself essentially pushes the messages into the queue
@@ -312,7 +312,7 @@ class TrustChainRunner:
 
         pieces = self.tc.agreed_pieces(req.seq_r)
 
-        if len(pieces) == 0:
+        if not pieces:
             logging.warning("TC: no pieces, {}".format(sorted(self.tc.consensus.keys())))
             return
 
@@ -335,13 +335,14 @@ class TrustChainRunner:
         :param remote_vk: 
         :return: 
         """
-        logging.debug("TC: got message".format(msg))
+        logging.debug("TC: got message {}".format(msg))
         if isinstance(msg, TxReq):
             nonce = msg.tx.inner.nonce
             m = msg.tx.inner.m
             assert remote_vk == msg.tx.sig.vk, "{} != {}".format(b64encode(remote_vk), b64encode(msg.tx.sig.vk))
             self.tc.new_tx(remote_vk, m, nonce)
 
+            # tx cannot be a CpBlock because we just called new_tx
             tx = self.tc.my_chain.chain[-1]
             tx.add_other_half(msg.tx)
             self.send(remote_vk, TxResp(msg.tx.inner.seq, tx))
@@ -352,7 +353,7 @@ class TrustChainRunner:
             # TODO index access not safe
             tx = self.tc.my_chain.chain[msg.seq]
             tx.add_other_half(msg.tx)
-            logging.info("TC: other half {}".format(encode_n(msg.tx.hash), msg.seq))
+            logging.info("TC: other half {}".format(encode_n(msg.tx.hash)))
 
         elif isinstance(msg, ValidationReq):
             self._handle_validation_req(msg, remote_vk)
@@ -435,7 +436,7 @@ class TrustChainRunner:
 
         txs = self.tc.get_verifiable_txs()
 
-        if len(txs) == 0:
+        if not txs:
             return
 
         self._send_validation_req(random.choice(txs).seq)

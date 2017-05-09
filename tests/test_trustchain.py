@@ -266,10 +266,10 @@ def test_pieces(seq, n_cp, n_tx):
 
 
 @pytest.mark.parametrize("seq,n_cp,n_tx,expected", [
-    (4, 3, 5, ValidityState.Valid),
-    (7, 3, 5, ValidityState.Valid),
-    (7, 3, 9, ValidityState.Valid),
-    (15, 3, 5, ValidityState.Unknown)
+    (4, 3, 5, VALIDITY_ENUM.Valid),
+    (7, 3, 5, VALIDITY_ENUM.Valid),
+    (7, 3, 9, VALIDITY_ENUM.Valid),
+    (15, 3, 5, VALIDITY_ENUM.Unknown)
 ])
 def test_validation(seq, n_cp, n_tx, expected):
     """
@@ -283,7 +283,7 @@ def test_validation(seq, n_cp, n_tx, expected):
     tc_s, tc_r = generate_tc_pair(n_cp, n_tx)
 
     # initially everything should have unkonwn state
-    is_unknowns = map(lambda tx: tx.validity == ValidityState.Unknown, tc_s.get_verifiable_txs())
+    is_unknowns = map(lambda tx: tx.validity == VALIDITY_ENUM.Unknown, tc_s.get_verifiable_txs())
     # We need - n_tx because the final "round" of transactions cannot be verified.
     # That is, the CP that follows them is not in consensus.
     assert len(is_unknowns) == n_cp * n_tx - n_tx
@@ -307,7 +307,7 @@ def test_validation(seq, n_cp, n_tx, expected):
     assert len(tc_s.load_cache_for_verification(seq)) == 0
     assert tc_s.verify_tx(seq, resp) == expected
 
-    if expected == ValidityState.Valid:
+    if expected == VALIDITY_ENUM.Valid:
         # when we do one validation, everything that's in the cache also gets validated, thus - n_tx
         assert len(tc_s.get_verifiable_txs()) == len(is_unknowns) - n_tx
 

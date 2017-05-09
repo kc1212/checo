@@ -9,10 +9,10 @@ from enum import Enum
 
 from src.utils import hash_pointers_ok, GrowingList, encode_n
 
-ValidityState = Enum('ValidityState', 'Valid Invalid Unknown')
+VALIDITY_ENUM = Enum('VALIDITY_ENUM', 'Valid Invalid Unknown')
 
 
-class EqHash:
+class EqHash(object):
     """
     Objects that implement EqHash *must* be immutable
     """
@@ -112,7 +112,7 @@ class TxBlock(EqHash):
         self.other_half = None
 
         # properties below are used for tracking validation status, not a part of hash
-        self.validity = ValidityState.Unknown
+        self.validity = VALIDITY_ENUM.Unknown
         self.request_sent_r = -1  # a positive value indicate the round at which the request is sent
 
         # make sure the arguments of CompactBlock constructor are initialised, especially _tuple
@@ -295,12 +295,12 @@ class Cons(EqHash):
 
     def _tuple(self):
         # TODO sorting this every time may be inefficient...
-        self.blocks.sort(key=lambda x: hash(x))
+        self.blocks.sort(key=hash)
         return (self.round,) + tuple(self.blocks)
 
     def get_promoters(self, n):
         # type: () -> List[str]
-        registered = filter(lambda cp: cp.inner.p == 1, self.blocks)
+        registered = [cp for cp in self.blocks if cp.inner.p == 1]
         registered.sort(key=lambda x: x.luck)
         return [b.s.vk for b in registered][:n]
 
@@ -316,7 +316,7 @@ def generate_genesis_block(vk, sk):
     return CpBlock(prev, 0, Cons(0, []), 1, vk, sk, [], [])
 
 
-class Chain:
+class Chain(object):
     def __init__(self, vk, sk):
         # type: (str, str) -> None
         self.vk = vk
@@ -433,7 +433,7 @@ class Chain:
         return cp_a, cp_b
 
     def set_validity(self, seq, validity):
-        # type: (int, ValidityState) -> None
+        # type: (int, VALIDITY_ENUM) -> None
         """
         Set the validity of a tx block, if it's already Valid or Invalid, it cannot be changed.
         :param seq: 
@@ -442,9 +442,9 @@ class Chain:
         """
         tx = self.chain[seq]
         assert isinstance(tx, TxBlock)
-        assert validity != ValidityState.Unknown
+        assert validity != VALIDITY_ENUM.Unknown
 
-        if tx.validity == ValidityState.Unknown:
+        if tx.validity == VALIDITY_ENUM.Unknown:
             tx.validity = validity
 
     def get_unknown_txs(self):
@@ -454,7 +454,7 @@ class Chain:
         :return: 
         """
         def _is_valid(b):
-            return isinstance(b, TxBlock) and b.validity == ValidityState.Unknown and b.other_half is not None
+            return isinstance(b, TxBlock) and b.validity == VALIDITY_ENUM.Unknown and b.other_half is not None
         return filter(_is_valid, self.chain)
 
     def get_validated_txs(self):
@@ -463,10 +463,10 @@ class Chain:
         Opposite of `get_unknown_txs`
         :return: 
         """
-        return filter(lambda b: isinstance(b, TxBlock) and b.validity != ValidityState.Unknown, self.chain)
+        return filter(lambda b: isinstance(b, TxBlock) and b.validity != VALIDITY_ENUM.Unknown, self.chain)
 
 
-class TrustChain:
+class TrustChain(object):
     """
     Node maintains one TrustChain object and interacts with it either in in the reactor process or some other process.
     If it's the latter, there needs to be some communication mechanism.
@@ -693,7 +693,7 @@ class TrustChain:
         return blocks_cache[idx_a:idx_b+1]
 
     def verify_tx(self, seq, compact_blocks, use_cache=True):
-        # type: (int, List[CompactBlock]) -> ValidityState
+        # type: (int, List[CompactBlock]) -> VALIDITY_ENUM
         """
         We want to verify one of our own TX with expected round numbers that contains the consensus result of the piece
         and the sequence number (height) `seq` that contains the pair
@@ -712,7 +712,7 @@ class TrustChain:
         assert tx.other_half is not None
 
         if len(compact_blocks) == 0:
-            return ValidityState.Unknown
+            return VALIDITY_ENUM.Unknown
 
         # check that I also have the same CP blocks
         # hash pointers are ok
@@ -727,24 +727,24 @@ class TrustChain:
         assert isinstance(peer_cp_b, CompactBlock)
 
         if not (self.compact_cp_in_consensus(peer_cp_a, r_a) and self.compact_cp_in_consensus(peer_cp_b, r_b)):
-            return ValidityState.Unknown
+            return VALIDITY_ENUM.Unknown
 
         if not hash_pointers_ok(compact_blocks):
-            return ValidityState.Unknown
+            return VALIDITY_ENUM.Unknown
 
         # TODO the logic here is ugly and error prone
         for b in compact_blocks:
             if b.hash == tx.other_half.compact.hash:
                 assert b.seq == tx.other_half.seq
-                self.my_chain.set_validity(seq, ValidityState.Valid)
+                self.my_chain.set_validity(seq, VALIDITY_ENUM.Valid)
                 logging.info("TC: verified {}".format(encode_n(self.my_chain.chain[seq].hash)))
                 if use_cache:
                     updated = self._cache_compact_blocks(tx.inner.counterparty, compact_blocks)
                     if updated:
                         self._verify_from_cache(tx.inner.counterparty)
-                return ValidityState.Valid
+                return VALIDITY_ENUM.Valid
 
-        return ValidityState.Unknown
+        return VALIDITY_ENUM.Unknown
 
     def _cache_compact_blocks(self, vk, compact_blocks):
         # type: (str, List[CompactBlock]) -> bool
@@ -785,7 +785,7 @@ class TrustChain:
         for tx in txs:
             compact_blocks = self.load_cache_for_verification(tx.seq)
             res = self.verify_tx(tx.seq, compact_blocks, use_cache=False)
-            if res == ValidityState.Valid:
+            if res == VALIDITY_ENUM.Valid:
                 logging.info("TC: verified (from cache) {}".format(encode_n(tx.hash)))
 
     def get_verifiable_txs(self):

@@ -33,7 +33,7 @@ def intersperce(iterable, delimiter):
         yield x
 
 
-class Replay:
+class Replay(object):
     """
     Dummy class returned by consensus algorithms to identify that the message should be replayed at a later time
     because it cannot yet be handled.
@@ -42,7 +42,7 @@ class Replay:
         pass
 
 
-class Handled:
+class Handled(object):
     """
     The Result type is the result of handling a message in the consensus algorithm
     """

@@ -164,7 +164,7 @@ class MyFactory(Factory):
         self.bracha = Bracha(self)  # just for testing
         self.mo14 = Mo14(self)  # just for testing
         self.acs = ACS(self)
-        self.tc_runner = TrustChainRunner(self, lambda m: ChainMsg(m))
+        self.tc_runner = TrustChainRunner(self, ChainMsg)
         self.vk = self.tc_runner.tc.vk
         self.q = Queue.Queue()  # (str, msg)
 
@@ -368,7 +368,7 @@ def got_protocol(p):
     call_later(1, p.send_ping)
 
 
-class Config:
+class Config(object):
     """
     All the static settings, used in Factory
     Should be singleton

@@ -13,7 +13,7 @@ BrachaStep = Enum('BrachaStep', 'one two three')
 MsgType = Enum('MsgType', 'init echo ready')
 
 
-class Bracha:
+class Bracha(object):
     """
     Bracha broadcast '87
     Implemented using state machine (BrachaStep)
@@ -82,7 +82,7 @@ class Bracha:
             self.fragments[sender_vk] = msg.fragment
             self.echo_count += 1
             assert self.echo_count == len(self.fragments), \
-                "echo_count {} != fragment count".format(self.echo_count, len(self.fragments))
+                "echo_count {} != fragment count {}".format(self.echo_count, len(self.fragments))
 
         elif ty == MsgType.ready.value:
             self.ready_count += 1
@@ -93,7 +93,7 @@ class Bracha:
             raise AssertionError("Bracha: unexpected msg type")
 
         # we should only see one init message
-        assert (self.init_count == 0 or self.init_count == 1)
+        assert self.init_count == 0 or self.init_count == 1
 
         # everything below is the algorithm, acting on the current state
         if ty == MsgType.init.value:

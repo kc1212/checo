@@ -4,7 +4,7 @@ from typing import Union, Dict, List
 from src.trustchain.trustchain import Signature, CpBlock, TxBlock, Cons, CompactBlock
 
 
-class DiscoverMsg:
+class DiscoverMsg(object):
     def __init__(self, vk, port):
         self.vk = vk
         self.port = port
@@ -13,7 +13,7 @@ class DiscoverMsg:
         return "DiscoverMsg - vk: {}, port: {}".format(b64encode(self.vk), self.port)
 
 
-class DiscoverReplyMsg:
+class DiscoverReplyMsg(object):
     def __init__(self, nodes):
         # type: (Dict[str, str]) -> ()
         self.nodes = nodes
@@ -22,7 +22,7 @@ class DiscoverReplyMsg:
         return "DiscoverReplyMsg - {}".format(self.nodes)
 
 
-class InstructionMsg:
+class InstructionMsg(object):
     def __init__(self, delay, instruction, param=None):
         self.delay = delay
         self.instruction = instruction
@@ -32,34 +32,34 @@ class InstructionMsg:
         return "InstructionMsg - delay: {}, instruction: {}, param: {}".format(self.delay, self.instruction, self.param)
 
 
-class CoinMsg:
+class CoinMsg(object):
     def __init__(self):
         raise NotImplementedError
 
 
-class CoinReplyMsg:
+class CoinReplyMsg(object):
     def __init__(self):
         raise NotImplementedError
 
 
-class DummyMsg:
+class DummyMsg(object):
     def __init__(self, m):
         self.m = m
 
 
-class PingMsg:
+class PingMsg(object):
     def __init__(self, vk, port):
         self.vk = vk
         self.port = port
 
 
-class PongMsg:
+class PongMsg(object):
     def __init__(self, vk, port):
         self.vk = vk
         self.port = port
 
 
-class BrachaMsg:
+class BrachaMsg(object):
     def __init__(self, ty, digest, fragment):
         self.ty = ty
         self.digest = digest
@@ -70,7 +70,7 @@ class BrachaMsg:
             .format(self.ty, b64encode(self.digest), b64encode(self.fragment))
 
 
-class Mo14Msg:
+class Mo14Msg(object):
     def __init__(self, ty, r, v):
         self.ty = ty
         self.r = r
@@ -80,7 +80,7 @@ class Mo14Msg:
         return "Mo14Msg - ty: {}, r: {}, v: {}".format(self.ty, self.r, self.v)
 
 
-class ACSMsg:
+class ACSMsg(object):
     def __init__(self, instance, round, body):
         # type: (str, int, Union[BrachaMsg, Mo14Msg]) -> None
         self.instance = instance
@@ -91,7 +91,7 @@ class ACSMsg:
         return "ACSMsg - instance: {}, round: {}, body: {}".format(b64encode(self.instance), self.round, self.body)
 
 
-class ChainMsg:
+class ChainMsg(object):
     """
     Simple wrapper around the transaction related messages
     """
@@ -100,7 +100,7 @@ class ChainMsg:
         self.body = body
 
 
-class TxReq:
+class TxReq(object):
     def __init__(self, tx):
         # type: (TxBlock) -> None
         self.tx = tx
@@ -109,7 +109,7 @@ class TxReq:
         return "TxReq - tx: {}".format(self.tx)
 
 
-class TxResp:
+class TxResp(object):
     def __init__(self, seq, tx):
         # type: (int, TxBlock) -> None
         self.seq = seq
@@ -119,7 +119,7 @@ class TxResp:
         return "TxResp - seq: {}, tx: {}".format(self.seq, self.tx)
 
 
-class CpMsg:
+class CpMsg(object):
     def __init__(self, cp):
         # type: (CpBlock) -> None
         self.cp = cp  # type: CpBlock
@@ -130,14 +130,14 @@ class CpMsg:
         return self.cp.round
 
 
-class SigMsg:
+class SigMsg(object):
     def __init__(self, s, r):
         # type: (Signature, int) -> None
         self.s = s  # type: Signature
         self.r = r  # type: int
 
 
-class ConsMsg:
+class ConsMsg(object):
     def __init__(self, cons):
         # type: (Cons) -> None
         self.cons = cons  # type: Cons
@@ -148,13 +148,13 @@ class ConsMsg:
         return self.cons.round
 
 
-class AskConsMsg:
+class AskConsMsg(object):
     def __init__(self, r):
         # type: (int) -> None
         self.r = r
 
 
-class ValidationReq:
+class ValidationReq(object):
     def __init__(self, seq, seq_r):
         # type: (int) -> None
         self.seq = seq
@@ -164,7 +164,7 @@ class ValidationReq:
         return "ValidationReq - seq: {}, seq_r: {}".format(self.seq, self.seq_r)
 
 
-class ValidationResp:
+class ValidationResp(object):
     def __init__(self, seq, seq_r, pieces):
         # type: (int, int, List[CompactBlock]) -> None
         self.seq = seq

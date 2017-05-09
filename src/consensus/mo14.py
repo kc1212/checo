@@ -30,7 +30,7 @@ _coins = """
 coins = [int(x) for x in "".join(_coins.split())]
 
 
-class Mo14:
+class Mo14(object):
     """
     Mostefaoui et el. '14
     Implemented using a state machine
@@ -117,7 +117,7 @@ class Mo14:
                 self.broadcasted[self.r] = True
 
             if len(self.est_values[self.r][v]) >= 2 * t + 1:
-                logging.debug("Mo14: adding to bin_values".format(v))
+                logging.debug("Mo14: adding to bin_values {}".format(v))
                 self.bin_values[self.r].add(v)
                 return True
 
