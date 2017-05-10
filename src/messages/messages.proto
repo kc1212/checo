@@ -104,7 +104,7 @@ message CpBlock {
 
 message Signature {
     bytes vk = 1;
-    bytes s = 2;
+    bytes signed_document = 2;
 }
 
 message SigWithRound {

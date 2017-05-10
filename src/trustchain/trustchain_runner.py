@@ -124,7 +124,7 @@ class TrustChainRunner(object):
             self.round_states[r].new_cons(cons)
 
             future_promoters = cons.get_promoters(self.factory.config.n)
-            s = Signature(self.tc.vk, self.tc._sk, cons.hash)
+            s = Signature.new(self.tc.vk, self.tc._sk, cons.hash)
 
             self.factory.gossip_except(future_promoters, ConsMsg(cons))
             self.factory.multicast(future_promoters, ConsMsg(cons))
@@ -340,7 +340,7 @@ class TrustChainRunner(object):
         if isinstance(msg, TxReq):
             nonce = msg.tx.inner.nonce
             m = msg.tx.inner.m
-            assert remote_vk == msg.tx.sig.vk, "{} != {}".format(b64encode(remote_vk), b64encode(msg.tx.sig.vk))
+            assert remote_vk == msg.tx.s.vk, "{} != {}".format(b64encode(remote_vk), b64encode(msg.tx.s.vk))
             self.tc.new_tx(remote_vk, m, nonce)
 
             # tx cannot be a CpBlock because we just called new_tx
@@ -350,7 +350,7 @@ class TrustChainRunner(object):
             logging.info("TC: added tx (received) {}, from {}".format(encode_n(msg.tx.hash), encode_n(remote_vk)))
 
         elif isinstance(msg, TxResp):
-            assert remote_vk == msg.tx.sig.vk, "{} != {}".format(b64encode(remote_vk), b64encode(msg.tx.sig.vk))
+            assert remote_vk == msg.tx.s.vk, "{} != {}".format(b64encode(remote_vk), b64encode(msg.tx.s.vk))
             # TODO index access not safe
             tx = self.tc.my_chain.chain[msg.seq]
             tx.add_other_half(msg.tx)
