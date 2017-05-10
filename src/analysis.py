@@ -151,7 +151,7 @@ def list_files_that_match(folder_name, match='.err'):
 def _read_consensus_stats(folder_name):
     fnames = list_files_that_match(folder_name)
     differences = []
-    match = 'TC: updated new promoters in round'
+    match = 'updated new promoters'
 
     for fname in fnames:
         lines_of_interest = find_lines_of_interest(match, fname)
@@ -179,7 +179,8 @@ def _read_validation_rate(folder_name):
     match = 'TC: verified'
 
     for fname in fnames:
-        lines_of_interest = find_lines_of_interest(match, fname)
+        r = get_last_round(fname)
+        lines_of_interest = find_lines_of_interest(match, fname, until='round {}, updated new promoters'.format(r))
 
         if len(lines_of_interest) == 0:
             print "WARNING: no lines of interest for {}".format(fname)
@@ -187,7 +188,16 @@ def _read_validation_rate(folder_name):
         start_t = datetime_from_line(lines_of_interest[0])
         end_t = datetime_from_line(lines_of_interest[-1])
 
-        rate = float(len(lines_of_interest)) / difference_in_seconds(start_t, end_t)
+        if not lines_of_interest:
+            print "Nothing got validated for {}".format(fname)
+            continue
+
+        diff = difference_in_seconds(start_t, end_t)
+        if diff == 0:
+            print "Difference is zero for {}".format(fname)
+            continue
+
+        rate = float(len(lines_of_interest)) / diff
         rates.append(rate)
 
     return np.sum(rates)
@@ -224,6 +234,12 @@ def find_lines_of_interest(match, fname, until=None, ignore=None):
                 lines_of_interest.append(line)
 
     return lines_of_interest
+
+
+def get_last_round(fname):
+    match = 'updated new promoters'
+    last = find_lines_of_interest(match, fname)[-1]
+    return int(last.split('round ')[1][0])
 
 
 def difference_in_seconds(a, b):
