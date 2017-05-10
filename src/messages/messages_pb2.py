@@ -19,7 +19,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   name='messages.proto',
   package='',
   syntax='proto3',
-  serialized_pb=_b('\n\x0emessages.proto\"$\n\x08\x44iscover\x12\n\n\x02vk\x18\x01 \x01(\x0c\x12\x0c\n\x04port\x18\x02 \x01(\x05\"g\n\rDiscoverReply\x12(\n\x05nodes\x18\x01 \x03(\x0b\x32\x19.DiscoverReply.NodesEntry\x1a,\n\nNodesEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"@\n\x0bInstruction\x12\x13\n\x0binstruction\x18\x01 \x01(\t\x12\r\n\x05\x64\x65lay\x18\x02 \x01(\x05\x12\r\n\x05param\x18\x03 \x01(\x05\" \n\x04Ping\x12\n\n\x02vk\x18\x01 \x01(\x0c\x12\x0c\n\x04port\x18\x02 \x01(\x05\" \n\x04Pong\x12\n\n\x02vk\x18\x01 \x01(\x0c\x12\x0c\n\x04port\x18\x02 \x01(\x05\"k\n\x06\x42racha\x12\x18\n\x02ty\x18\x01 \x01(\x0e\x32\x0c.Bracha.Type\x12\x0e\n\x06\x64igest\x18\x02 \x01(\x0c\x12\x10\n\x08\x66ragment\x18\x03 \x01(\x0c\"%\n\x04Type\x12\x08\n\x04INIT\x10\x00\x12\x08\n\x04\x45\x43HO\x10\x01\x12\t\n\x05READY\x10\x02\"N\n\x04Mo14\x12\x16\n\x02ty\x18\x01 \x01(\x0e\x32\n.Mo14.Type\x12\t\n\x01r\x18\x02 \x01(\x05\x12\t\n\x01v\x18\x03 \x01(\x05\"\x18\n\x04Type\x12\x07\n\x03\x45ST\x10\x00\x12\x07\n\x03\x41UX\x10\x01\"^\n\x03\x41\x43S\x12\x10\n\x08instance\x18\x01 \x01(\x0c\x12\r\n\x05round\x18\x02 \x01(\x05\x12\x1c\n\x0b\x62ody_bracha\x18\x03 \x01(\x0b\x32\x07.Bracha\x12\x18\n\tbody_mo14\x18\x04 \x01(\x0b\x32\x05.Mo14\"\x93\x01\n\x07TxBlock\x12\x1d\n\x05inner\x18\x01 \x01(\x0b\x32\x0e.TxBlock.Inner\x12\x15\n\x01s\x18\x02 \x01(\x0b\x32\n.Signature\x1aR\n\x05Inner\x12\x0c\n\x04prev\x18\x01 \x01(\x0c\x12\x0b\n\x03seq\x18\x02 \x01(\x05\x12\x14\n\x0c\x63ounterparty\x18\x03 \x01(\x0c\x12\r\n\x05nonce\x18\x04 \x01(\x0c\x12\t\n\x01m\x18\x05 \x01(\t\"\x1d\n\x05TxReq\x12\x14\n\x02tx\x18\x01 \x01(\x0b\x32\x08.TxBlock\"+\n\x06TxResp\x12\x14\n\x02tx\x18\x01 \x01(\x0b\x32\x08.TxBlock\x12\x0b\n\x03seq\x18\x02 \x01(\x05\"\xa8\x01\n\x07\x43pBlock\x12\x1d\n\x05inner\x18\x01 \x01(\x0b\x32\x0e.CpBlock.Inner\x12\x15\n\x01s\x18\x02 \x01(\x0b\x32\n.Signature\x1ag\n\x05Inner\x12\x0c\n\x04prev\x18\x01 \x01(\x0c\x12\x0b\n\x03seq\x18\x02 \x01(\x05\x12\r\n\x05round\x18\x03 \x01(\x05\x12\x11\n\tcons_hash\x18\x04 \x01(\x0c\x12\x16\n\x02ss\x18\x05 \x03(\x0b\x32\n.Signature\x12\t\n\x01p\x18\x06 \x01(\x05\"\"\n\tSignature\x12\n\n\x02vk\x18\x01 \x01(\x0c\x12\t\n\x01s\x18\x02 \x01(\x0c\"0\n\x0cSigWithRound\x12\x15\n\x01s\x18\x01 \x01(\x0b\x32\n.Signature\x12\t\n\x01r\x18\x02 \x01(\x05\"/\n\x04\x43ons\x12\r\n\x05round\x18\x01 \x01(\x05\x12\x18\n\x06\x62locks\x18\x02 \x03(\x0b\x32\x08.CpBlock\"\x14\n\x07\x41skCons\x12\t\n\x01r\x18\x01 \x01(\x05\"+\n\rValidationReq\x12\x0b\n\x03seq\x18\x01 \x01(\x05\x12\r\n\x05seq_2\x18\x02 \x01(\x05\"|\n\x0c\x43ompactBlock\x12\"\n\x05inner\x18\x01 \x01(\x0b\x32\x13.CompactBlock.Inner\x12\x0b\n\x03seq\x18\x02 \x01(\x05\x12\x14\n\x0c\x61greed_round\x18\x03 \x01(\x05\x1a%\n\x05Inner\x12\x0e\n\x06\x64igest\x18\x01 \x01(\x0c\x12\x0c\n\x04prev\x18\x02 \x01(\x0c\"K\n\x0eValidationResp\x12\x0b\n\x03seq\x18\x01 \x01(\x05\x12\r\n\x05seq_r\x18\x02 \x01(\x05\x12\x1d\n\x06pieces\x18\x03 \x03(\x0b\x32\r.CompactBlockb\x06proto3')
+  serialized_pb=_b('\n\x0emessages.proto\"\x12\n\x05\x44ummy\x12\t\n\x01m\x18\x01 \x01(\t\"$\n\x08\x44iscover\x12\n\n\x02vk\x18\x01 \x01(\x0c\x12\x0c\n\x04port\x18\x02 \x01(\x05\"g\n\rDiscoverReply\x12(\n\x05nodes\x18\x01 \x03(\x0b\x32\x19.DiscoverReply.NodesEntry\x1a,\n\nNodesEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"@\n\x0bInstruction\x12\x13\n\x0binstruction\x18\x01 \x01(\t\x12\r\n\x05\x64\x65lay\x18\x02 \x01(\x05\x12\r\n\x05param\x18\x03 \x01(\x05\" \n\x04Ping\x12\n\n\x02vk\x18\x01 \x01(\x0c\x12\x0c\n\x04port\x18\x02 \x01(\x05\" \n\x04Pong\x12\n\n\x02vk\x18\x01 \x01(\x0c\x12\x0c\n\x04port\x18\x02 \x01(\x05\"k\n\x06\x42racha\x12\x18\n\x02ty\x18\x01 \x01(\x0e\x32\x0c.Bracha.Type\x12\x0e\n\x06\x64igest\x18\x02 \x01(\x0c\x12\x10\n\x08\x66ragment\x18\x03 \x01(\x0c\"%\n\x04Type\x12\x08\n\x04INIT\x10\x00\x12\x08\n\x04\x45\x43HO\x10\x01\x12\t\n\x05READY\x10\x02\"N\n\x04Mo14\x12\x16\n\x02ty\x18\x01 \x01(\x0e\x32\n.Mo14.Type\x12\t\n\x01r\x18\x02 \x01(\x05\x12\t\n\x01v\x18\x03 \x01(\x05\"\x18\n\x04Type\x12\x07\n\x03\x45ST\x10\x00\x12\x07\n\x03\x41UX\x10\x01\"`\n\x03\x41\x43S\x12\x10\n\x08instance\x18\x01 \x01(\x0c\x12\r\n\x05round\x18\x02 \x01(\x05\x12\x19\n\x06\x62racha\x18\x03 \x01(\x0b\x32\x07.BrachaH\x00\x12\x15\n\x04mo14\x18\x04 \x01(\x0b\x32\x05.Mo14H\x00\x42\x06\n\x04\x62ody\"\x93\x01\n\x07TxBlock\x12\x1d\n\x05inner\x18\x01 \x01(\x0b\x32\x0e.TxBlock.Inner\x12\x15\n\x01s\x18\x02 \x01(\x0b\x32\n.Signature\x1aR\n\x05Inner\x12\x0c\n\x04prev\x18\x01 \x01(\x0c\x12\x0b\n\x03seq\x18\x02 \x01(\x05\x12\x14\n\x0c\x63ounterparty\x18\x03 \x01(\x0c\x12\r\n\x05nonce\x18\x04 \x01(\x0c\x12\t\n\x01m\x18\x05 \x01(\t\"\x1d\n\x05TxReq\x12\x14\n\x02tx\x18\x01 \x01(\x0b\x32\x08.TxBlock\"+\n\x06TxResp\x12\x14\n\x02tx\x18\x01 \x01(\x0b\x32\x08.TxBlock\x12\x0b\n\x03seq\x18\x02 \x01(\x05\"\xa8\x01\n\x07\x43pBlock\x12\x1d\n\x05inner\x18\x01 \x01(\x0b\x32\x0e.CpBlock.Inner\x12\x15\n\x01s\x18\x02 \x01(\x0b\x32\n.Signature\x1ag\n\x05Inner\x12\x0c\n\x04prev\x18\x01 \x01(\x0c\x12\x0b\n\x03seq\x18\x02 \x01(\x05\x12\r\n\x05round\x18\x03 \x01(\x05\x12\x11\n\tcons_hash\x18\x04 \x01(\x0c\x12\x16\n\x02ss\x18\x05 \x03(\x0b\x32\n.Signature\x12\t\n\x01p\x18\x06 \x01(\x05\"\"\n\tSignature\x12\n\n\x02vk\x18\x01 \x01(\x0c\x12\t\n\x01s\x18\x02 \x01(\x0c\"0\n\x0cSigWithRound\x12\x15\n\x01s\x18\x01 \x01(\x0b\x32\n.Signature\x12\t\n\x01r\x18\x02 \x01(\x05\"/\n\x04\x43ons\x12\r\n\x05round\x18\x01 \x01(\x05\x12\x18\n\x06\x62locks\x18\x02 \x03(\x0b\x32\x08.CpBlock\"\x14\n\x07\x41skCons\x12\t\n\x01r\x18\x01 \x01(\x05\"+\n\rValidationReq\x12\x0b\n\x03seq\x18\x01 \x01(\x05\x12\r\n\x05seq_2\x18\x02 \x01(\x05\"|\n\x0c\x43ompactBlock\x12\"\n\x05inner\x18\x01 \x01(\x0b\x32\x13.CompactBlock.Inner\x12\x0b\n\x03seq\x18\x02 \x01(\x05\x12\x14\n\x0c\x61greed_round\x18\x03 \x01(\x05\x1a%\n\x05Inner\x12\x0e\n\x06\x64igest\x18\x01 \x01(\x0c\x12\x0c\n\x04prev\x18\x02 \x01(\x0c\"K\n\x0eValidationResp\x12\x0b\n\x03seq\x18\x01 \x01(\x05\x12\r\n\x05seq_r\x18\x02 \x01(\x05\x12\x1d\n\x06pieces\x18\x03 \x03(\x0b\x32\r.CompactBlockb\x06proto3')
 )
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
 
@@ -46,8 +46,8 @@ _BRACHA_TYPE = _descriptor.EnumDescriptor(
   ],
   containing_type=None,
   options=None,
-  serialized_start=365,
-  serialized_end=402,
+  serialized_start=385,
+  serialized_end=422,
 )
 _sym_db.RegisterEnumDescriptor(_BRACHA_TYPE)
 
@@ -68,10 +68,41 @@ _MO14_TYPE = _descriptor.EnumDescriptor(
   ],
   containing_type=None,
   options=None,
-  serialized_start=458,
-  serialized_end=482,
+  serialized_start=478,
+  serialized_end=502,
 )
 _sym_db.RegisterEnumDescriptor(_MO14_TYPE)
+
+
+_DUMMY = _descriptor.Descriptor(
+  name='Dummy',
+  full_name='Dummy',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='m', full_name='Dummy.m', index=0,
+      number=1, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=_b("").decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=18,
+  serialized_end=36,
+)
 
 
 _DISCOVER = _descriptor.Descriptor(
@@ -107,8 +138,8 @@ _DISCOVER = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=18,
-  serialized_end=54,
+  serialized_start=38,
+  serialized_end=74,
 )
 
 
@@ -145,8 +176,8 @@ _DISCOVERREPLY_NODESENTRY = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=115,
-  serialized_end=159,
+  serialized_start=135,
+  serialized_end=179,
 )
 
 _DISCOVERREPLY = _descriptor.Descriptor(
@@ -175,8 +206,8 @@ _DISCOVERREPLY = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=56,
-  serialized_end=159,
+  serialized_start=76,
+  serialized_end=179,
 )
 
 
@@ -220,8 +251,8 @@ _INSTRUCTION = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=161,
-  serialized_end=225,
+  serialized_start=181,
+  serialized_end=245,
 )
 
 
@@ -258,8 +289,8 @@ _PING = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=227,
-  serialized_end=259,
+  serialized_start=247,
+  serialized_end=279,
 )
 
 
@@ -296,8 +327,8 @@ _PONG = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=261,
-  serialized_end=293,
+  serialized_start=281,
+  serialized_end=313,
 )
 
 
@@ -342,8 +373,8 @@ _BRACHA = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=295,
-  serialized_end=402,
+  serialized_start=315,
+  serialized_end=422,
 )
 
 
@@ -388,8 +419,8 @@ _MO14 = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=404,
-  serialized_end=482,
+  serialized_start=424,
+  serialized_end=502,
 )
 
 
@@ -415,14 +446,14 @@ _ACS = _descriptor.Descriptor(
       is_extension=False, extension_scope=None,
       options=None),
     _descriptor.FieldDescriptor(
-      name='body_bracha', full_name='ACS.body_bracha', index=2,
+      name='bracha', full_name='ACS.bracha', index=2,
       number=3, type=11, cpp_type=10, label=1,
       has_default_value=False, default_value=None,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
     _descriptor.FieldDescriptor(
-      name='body_mo14', full_name='ACS.body_mo14', index=3,
+      name='mo14', full_name='ACS.mo14', index=3,
       number=4, type=11, cpp_type=10, label=1,
       has_default_value=False, default_value=None,
       message_type=None, enum_type=None, containing_type=None,
@@ -439,9 +470,12 @@ _ACS = _descriptor.Descriptor(
   syntax='proto3',
   extension_ranges=[],
   oneofs=[
+    _descriptor.OneofDescriptor(
+      name='body', full_name='ACS.body',
+      index=0, containing_type=None, fields=[]),
   ],
-  serialized_start=484,
-  serialized_end=578,
+  serialized_start=504,
+  serialized_end=600,
 )
 
 
@@ -499,8 +533,8 @@ _TXBLOCK_INNER = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=646,
-  serialized_end=728,
+  serialized_start=668,
+  serialized_end=750,
 )
 
 _TXBLOCK = _descriptor.Descriptor(
@@ -536,8 +570,8 @@ _TXBLOCK = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=581,
-  serialized_end=728,
+  serialized_start=603,
+  serialized_end=750,
 )
 
 
@@ -567,8 +601,8 @@ _TXREQ = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=730,
-  serialized_end=759,
+  serialized_start=752,
+  serialized_end=781,
 )
 
 
@@ -605,8 +639,8 @@ _TXRESP = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=761,
-  serialized_end=804,
+  serialized_start=783,
+  serialized_end=826,
 )
 
 
@@ -671,8 +705,8 @@ _CPBLOCK_INNER = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=872,
-  serialized_end=975,
+  serialized_start=894,
+  serialized_end=997,
 )
 
 _CPBLOCK = _descriptor.Descriptor(
@@ -708,8 +742,8 @@ _CPBLOCK = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=807,
-  serialized_end=975,
+  serialized_start=829,
+  serialized_end=997,
 )
 
 
@@ -746,8 +780,8 @@ _SIGNATURE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=977,
-  serialized_end=1011,
+  serialized_start=999,
+  serialized_end=1033,
 )
 
 
@@ -784,8 +818,8 @@ _SIGWITHROUND = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1013,
-  serialized_end=1061,
+  serialized_start=1035,
+  serialized_end=1083,
 )
 
 
@@ -822,8 +856,8 @@ _CONS = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1063,
-  serialized_end=1110,
+  serialized_start=1085,
+  serialized_end=1132,
 )
 
 
@@ -853,8 +887,8 @@ _ASKCONS = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1112,
-  serialized_end=1132,
+  serialized_start=1134,
+  serialized_end=1154,
 )
 
 
@@ -891,8 +925,8 @@ _VALIDATIONREQ = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1134,
-  serialized_end=1177,
+  serialized_start=1156,
+  serialized_end=1199,
 )
 
 
@@ -929,8 +963,8 @@ _COMPACTBLOCK_INNER = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1266,
-  serialized_end=1303,
+  serialized_start=1288,
+  serialized_end=1325,
 )
 
 _COMPACTBLOCK = _descriptor.Descriptor(
@@ -973,8 +1007,8 @@ _COMPACTBLOCK = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1179,
-  serialized_end=1303,
+  serialized_start=1201,
+  serialized_end=1325,
 )
 
 
@@ -1018,8 +1052,8 @@ _VALIDATIONRESP = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1305,
-  serialized_end=1380,
+  serialized_start=1327,
+  serialized_end=1402,
 )
 
 _DISCOVERREPLY_NODESENTRY.containing_type = _DISCOVERREPLY
@@ -1028,8 +1062,14 @@ _BRACHA.fields_by_name['ty'].enum_type = _BRACHA_TYPE
 _BRACHA_TYPE.containing_type = _BRACHA
 _MO14.fields_by_name['ty'].enum_type = _MO14_TYPE
 _MO14_TYPE.containing_type = _MO14
-_ACS.fields_by_name['body_bracha'].message_type = _BRACHA
-_ACS.fields_by_name['body_mo14'].message_type = _MO14
+_ACS.fields_by_name['bracha'].message_type = _BRACHA
+_ACS.fields_by_name['mo14'].message_type = _MO14
+_ACS.oneofs_by_name['body'].fields.append(
+  _ACS.fields_by_name['bracha'])
+_ACS.fields_by_name['bracha'].containing_oneof = _ACS.oneofs_by_name['body']
+_ACS.oneofs_by_name['body'].fields.append(
+  _ACS.fields_by_name['mo14'])
+_ACS.fields_by_name['mo14'].containing_oneof = _ACS.oneofs_by_name['body']
 _TXBLOCK_INNER.containing_type = _TXBLOCK
 _TXBLOCK.fields_by_name['inner'].message_type = _TXBLOCK_INNER
 _TXBLOCK.fields_by_name['s'].message_type = _SIGNATURE
@@ -1044,6 +1084,7 @@ _CONS.fields_by_name['blocks'].message_type = _CPBLOCK
 _COMPACTBLOCK_INNER.containing_type = _COMPACTBLOCK
 _COMPACTBLOCK.fields_by_name['inner'].message_type = _COMPACTBLOCK_INNER
 _VALIDATIONRESP.fields_by_name['pieces'].message_type = _COMPACTBLOCK
+DESCRIPTOR.message_types_by_name['Dummy'] = _DUMMY
 DESCRIPTOR.message_types_by_name['Discover'] = _DISCOVER
 DESCRIPTOR.message_types_by_name['DiscoverReply'] = _DISCOVERREPLY
 DESCRIPTOR.message_types_by_name['Instruction'] = _INSTRUCTION
@@ -1063,6 +1104,13 @@ DESCRIPTOR.message_types_by_name['AskCons'] = _ASKCONS
 DESCRIPTOR.message_types_by_name['ValidationReq'] = _VALIDATIONREQ
 DESCRIPTOR.message_types_by_name['CompactBlock'] = _COMPACTBLOCK
 DESCRIPTOR.message_types_by_name['ValidationResp'] = _VALIDATIONRESP
+
+Dummy = _reflection.GeneratedProtocolMessageType('Dummy', (_message.Message,), dict(
+  DESCRIPTOR = _DUMMY,
+  __module__ = 'messages_pb2'
+  # @@protoc_insertion_point(class_scope:Dummy)
+  ))
+_sym_db.RegisterMessage(Dummy)
 
 Discover = _reflection.GeneratedProtocolMessageType('Discover', (_message.Message,), dict(
   DESCRIPTOR = _DISCOVER,

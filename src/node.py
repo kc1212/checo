@@ -62,7 +62,7 @@ class MyProto(JsonReceiver):
         elif isinstance(obj, pb.Pong):
             self.handle_pong(obj)
 
-        elif isinstance(obj, ACSMsg):
+        elif isinstance(obj, pb.ACS):
             if self.factory.config.failure == 'omission':
                 return
             res = self.factory.acs.handle(obj, self.remote_vk)
@@ -92,7 +92,7 @@ class MyProto(JsonReceiver):
                 return
             self.factory.bracha.handle(obj, self.remote_vk)
 
-        elif isinstance(obj, Mo14Msg):
+        elif isinstance(obj, pb.Mo14):
             if self.factory.config.failure == 'omission':
                 return
             self.factory.mo14.handle(obj, self.remote_vk)

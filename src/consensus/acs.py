@@ -3,10 +3,10 @@ from base64 import b64encode
 
 from typing import Dict, Union
 
-from src.messages.messages import ACSMsg, BrachaMsg, Mo14Msg
 from src.utils.utils import Replay, Handled, dictionary_hash
 from .bracha import Bracha
 from .mo14 import Mo14
+import src.messages.messages_pb2 as pb
 
 
 class ACS(object):
@@ -59,9 +59,14 @@ class ACS(object):
         for promoter in self.factory.promoters:
             logging.debug("ACS: adding promoter {}".format(b64encode(promoter)))
 
-            def msg_wrapper_f_factory(instance, round):
+            def msg_wrapper_f_factory(_instance, _round):
                 def f(_msg):
-                    return ACSMsg(instance, round, _msg)
+                    if isinstance(_msg, pb.Bracha):
+                        return pb.ACS(instance=_instance, round=_round, bracha=_msg)
+                    elif isinstance(_msg, pb.Mo14):
+                        return pb.ACS(instance=_instance, round=_round, mo14=_msg)
+                    else:
+                        raise AssertionError("Invalid wrapper input")
                 return f
 
             self.brachas[promoter] = Bracha(self.factory, msg_wrapper_f_factory(promoter, self.round))
@@ -81,7 +86,7 @@ class ACS(object):
         self.start(msg, r)
 
     def handle(self, msg, sender_vk):
-        # type: (ACSMsg, str) -> Union[Handled, Replay]
+        # type: (pb.ACS, str) -> Union[Handled, Replay]
         """
         Msg {
             instance: String // vk
@@ -111,15 +116,17 @@ class ACS(object):
         instance = msg.instance
         round = msg.round
         assert round == self.round
-        body = msg.body
+
         t = self.factory.config.t
         n = self.factory.config.n
 
-        if isinstance(body, BrachaMsg):
+        body_type = msg.WhichOneof('body')
+
+        if body_type == 'bracha':
             if instance not in self.brachas:
                 logging.debug("instance {} not in self.brachas".format(b64encode(instance)))
                 return Replay()
-            res = self.brachas[instance].handle(body, sender_vk)
+            res = self.brachas[instance].handle(msg.bracha, sender_vk)
             if isinstance(res, Handled) and res.m is not None:
                 logging.debug("ACS: Bracha delivered for {}, {}".format(b64encode(instance), res.m))
                 self.bracha_results[instance] = res.m
@@ -128,10 +135,10 @@ class ACS(object):
                     self.mo14_provided[instance] = 1
                     self.mo14s[instance].start(1)
 
-        elif isinstance(body, Mo14Msg):
+        elif body_type == 'mo14':
             if instance in self.mo14_provided:
                 logging.debug("ACS: forwarding Mo14")
-                res = self.mo14s[instance].handle(body, sender_vk)
+                res = self.mo14s[instance].handle(msg.mo14, sender_vk)
                 if isinstance(res, Handled) and res.m is not None:
                     logging.debug("ACS: delivered Mo14 for {}, {}".format(b64encode(instance), res.m))
                     self.mo14_results[instance] = res.m

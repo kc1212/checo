@@ -1,5 +1,9 @@
 syntax = "proto3";
 
+message Dummy {
+    string m = 1;
+}
+
 message Discover {
     bytes vk = 1;
     int32 port = 2;
@@ -53,9 +57,10 @@ message ACS {
     bytes instance = 1;
     int32 round = 2;
 
-    // application should only set one of the two
-    Bracha body_bracha = 3;
-    Mo14 body_mo14 = 4;
+    oneof body {
+        Bracha bracha = 3;
+        Mo14 mo14 = 4;
+    }
 }
 
 message TxBlock {

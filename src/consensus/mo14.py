@@ -6,11 +6,12 @@ from collections import defaultdict
 from enum import Enum
 from typing import Union
 
-from src.messages.messages import Mo14Msg
 from src.utils.utils import Replay, Handled
+import src.messages.messages_pb2 as pb
 
-Mo14Type = Enum('Mo14Type', 'EST AUX')
 Mo14State = Enum('Mo14State', 'stopped start est aux coin')
+_EST = pb.Mo14.Type.Value('EST')
+_AUX = pb.Mo14.Type.Value('AUX')
 
 _coins = """
 01111010 00101101 10001000 10101100 10001101 10011111 10001110 11011111
@@ -60,18 +61,18 @@ class Mo14(object):
         v = msg.v
         r = msg.r
 
-        if ty == Mo14Type.EST.value:
+        if ty == _EST:
             if r not in self.est_values:
                 self.est_values[r] = [set(), set()]
             self.est_values[r][v].add(sender_vk)
 
-        elif ty == Mo14Type.AUX.value:
+        elif ty == _AUX:
             if r not in self.aux_values:
                 self.aux_values[r] = [set(), set()]
             self.aux_values[r][v].add(sender_vk)
 
     def handle(self, msg, sender_vk):
-        # type: (Mo14Msg, str) -> Union[Handled, Replay]
+        # type: (pb.Mo14, str) -> Union[Handled, Replay]
         """
         We expect messages of type:
         Msg {
@@ -125,7 +126,7 @@ class Mo14(object):
             logging.debug("Mo14: no bin values")
             return False
 
-        if ty == Mo14Type.EST.value:
+        if ty == _EST:
             # this condition runs every time EST is received, but the state is updated only at the start state
             got_bin_values = update_bin_values()
             if got_bin_values and self.state == Mo14State.start:
@@ -196,14 +197,14 @@ class Mo14(object):
             v = random.choice([0, 1])
         assert v in (0, 1)
         logging.debug("Mo14: broadcast aux: v = {}, r = {}".format(v, self.r))
-        self.bcast(Mo14Msg(Mo14Type.AUX.value, self.r, v))
+        self.bcast(pb.Mo14(ty=_AUX, r=self.r, v=v))
 
     def bcast_est(self, v):
         if self.factory.config.failure == 'byzantine':
             v = random.choice([0, 1])
         assert v in (0, 1)
         logging.debug("Mo14: broadcast est: v = {}, r = {}".format(v, self.r))
-        self.bcast(Mo14Msg(Mo14Type.EST.value, self.r, v))
+        self.bcast(pb.Mo14(ty=_EST, r=self.r, v=v))
 
     def bcast(self, msg):
         """
