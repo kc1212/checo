@@ -5,9 +5,10 @@ from twisted.internet import reactor, task
 from twisted.internet.protocol import Factory
 from typing import Union, Dict
 
-from src.messages.messages import DiscoverMsg, DiscoverReplyMsg, CoinMsg, CoinReplyMsg, InstructionMsg
+from src.messages.messages import CoinMsg, CoinReplyMsg, InstructionMsg
 from src.utils.jsonreceiver import JsonReceiver
 from src.utils.utils import set_logging, my_err_back, MAX_LINE_LEN, call_later
+import src.messages.messages_pb2 as pb
 
 
 class Discovery(JsonReceiver):
@@ -28,7 +29,7 @@ class Discovery(JsonReceiver):
             logging.debug("Discovery: deleted {}".format(self.vk))
 
     def obj_received(self, obj):
-        # type: (Union[DiscoverMsg, DiscoverReplyMsg]) -> None
+        # type: (Union[pb.Discover, pb.DiscoverReply]) -> None
         """
         we don't bother with decoding vk here, since we don't use vk in any crypto functions
         :param obj:
@@ -37,7 +38,7 @@ class Discovery(JsonReceiver):
         logging.debug("Discovery: received msg {} from {}".format(obj, self.transport.getPeer().host))
 
         if self.state == 'SERVER':
-            if isinstance(obj, DiscoverMsg):
+            if isinstance(obj, pb.Discover):
                 self.vk = obj.vk  # NOTE storing base64 form as is
                 self.addr = self.transport.getPeer().host + ":" + str(obj.port)
 
@@ -47,7 +48,7 @@ class Discovery(JsonReceiver):
                     self.nodes[self.vk] = (self.addr, self)
 
                 assert isinstance(self.factory, DiscoveryFactory)
-                self.send_obj(DiscoverReplyMsg(self.factory.make_nodes_msg()))
+                self.send_obj(pb.DiscoverReply(nodes=self.factory.make_nodes_dict()))
 
             elif isinstance(obj, CoinMsg):
                 raise NotImplementedError
@@ -56,7 +57,7 @@ class Discovery(JsonReceiver):
                 raise AssertionError("Discovery: invalid payload type on SERVER")
 
         elif self.state == 'CLIENT':
-            if isinstance(obj, DiscoverReplyMsg):
+            if isinstance(obj, pb.DiscoverReply):
                 logging.debug("Discovery: making new clients...")
                 self.factory.new_connection_if_not_exist(obj.nodes)
 
@@ -71,7 +72,7 @@ class Discovery(JsonReceiver):
 
     def say_hello(self, vk, port):
         self.state = 'CLIENT'
-        self.send_obj(DiscoverMsg(vk, port))
+        self.send_obj(pb.Discover(vk=vk, port=port))
         logging.debug("Discovery: discovery sent {} {}".format(vk, port))
 
 
@@ -108,7 +109,7 @@ class DiscoveryFactory(Factory):
         else:
             logging.info("Insufficient params to send instructions")
 
-    def make_nodes_msg(self):
+    def make_nodes_dict(self):
         msg = {k: v[0] for k, v in self.nodes.iteritems()}
         return msg
 

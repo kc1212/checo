@@ -23,6 +23,7 @@ from src.trustchain.trustchain_runner import TrustChainRunner
 from src.utils import Replay, Handled, set_logging, my_err_back, call_later, MAX_LINE_LEN
 from src.utils.jsonreceiver import JsonReceiver
 from .discovery import Discovery, got_discovery
+import src.messages.messages_pb2 as pb
 
 
 class MyProto(JsonReceiver):
@@ -55,10 +56,10 @@ class MyProto(JsonReceiver):
 
         # logging.debug("NODE: received obj {} from {}".format(type(obj), "<remote_vk>"))
 
-        if isinstance(obj, PingMsg):
+        if isinstance(obj, pb.Ping):
             self.handle_ping(obj)
 
-        elif isinstance(obj, PongMsg):
+        elif isinstance(obj, pb.Pong):
             self.handle_pong(obj)
 
         elif isinstance(obj, ACSMsg):
@@ -86,7 +87,7 @@ class MyProto(JsonReceiver):
 
         # NOTE messages below are for testing, bracha/mo14 is normally handled by acs
 
-        elif isinstance(obj, BrachaMsg):
+        elif isinstance(obj, pb.Bracha):
             if self.factory.config.failure == 'omission':
                 return
             self.factory.bracha.handle(obj, self.remote_vk)
@@ -125,23 +126,23 @@ class MyProto(JsonReceiver):
             raise AssertionError("instance is not Replay or Handled")
 
     def send_ping(self):
-        self.send_obj(PingMsg(self.vk, self.config.port))
+        self.send_obj(pb.Ping(vk=self.vk, port=self.config.port))
         logging.debug("NODE: sent ping")
         self.state = 'CLIENT'
 
     def handle_ping(self, msg):
-        # type: (PingMsg) -> None
+        # type: (pb.Ping) -> None
         logging.debug("NODE: got ping, {}".format(msg))
         assert (self.state == 'SERVER')
         if msg.vk in self.peers.keys():
             logging.debug("NODE: ping found myself in peers.keys")
         self.peers[msg.vk] = (self.transport.getPeer().host, msg.port, self)
         self.remote_vk = msg.vk
-        self.send_obj(PongMsg(self.vk, self.config.port))
+        self.send_obj(pb.Pong(vk=self.vk, port=self.config.port))
         logging.debug("sent pong")
 
     def handle_pong(self, msg):
-        # type: (PongMsg) -> None
+        # type: (pb.Pong) -> None
         logging.debug("NODE: got pong, {}".format(msg))
         assert (self.state == 'CLIENT')
         if msg.vk in self.peers.keys():

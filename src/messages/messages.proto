@@ -27,6 +27,7 @@ message Pong {
 }
 
 message Bracha {
+    // access using Bracha.Type.Value['INIT'], etc.
     enum Type {
         INIT = 0;
         ECHO = 1;
