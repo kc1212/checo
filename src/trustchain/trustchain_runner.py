@@ -365,26 +365,12 @@ class TrustChainRunner(object):
 
     def make_tx(self, interval, random_node=False):
         if random_node:
-            lc = task.LoopingCall(self._make_tx_rand)
+            lc = task.LoopingCall(lambda: self._make_tx(self.factory.random_node))
         else:
-            node = self.factory.neighbour_if_even()
-            if node is None:
-                # we do nothing, since we're not an even index
-                return
-            assert node != self.factory.vk
-
+            node = self.factory.neighbour
             lc = task.LoopingCall(self._make_tx, node)
 
         lc.start(interval).addErrback(my_err_back)
-
-    def _make_tx_rand(self):
-        if self.factory.config.ignore_promoter:
-            node = self.factory.random_non_promoter
-            if node is None:
-                return
-        else:
-            node = self.factory.random_node
-        self._make_tx(node)
 
     def _make_tx(self, node):
         """
@@ -392,8 +378,9 @@ class TrustChainRunner(object):
         :param node: 
         :return: 
         """
-        if self.factory.config.ignore_promoter and self.tc.vk in self.factory.promoters:
-            return
+        if self.factory.config.ignore_promoter:
+            if self.tc.vk in self.factory.promoters or node in self.factory.promoters:
+                return
 
         # throttle transactions if we cannot validate them timely
         if self.validation_enabled and len(self.tc.get_verifiable_txs()) > 20 * self.factory.config.n:
