@@ -128,7 +128,7 @@ message AskCons {
 
 message ValidationReq {
     int32 seq = 1;
-    int32 seq_2 = 2;
+    int32 seq_r = 2;
 }
 
 message CompactBlock {

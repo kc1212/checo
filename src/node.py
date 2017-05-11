@@ -450,7 +450,7 @@ def run(config, bcast, discovery_addr):
         call_later(6, f.mo14.start, config.value)
     elif config.test == 'acs':
         # use port number (unique on local network) as test message
-        call_later(6, f.acs.start, config.port, 1)
+        call_later(6, f.acs.start, str(config.port), 1)
     elif config.test == 'tc':
         call_later(5, f.tc_runner.make_tx, 1.0 / config.tx_rate, True)
         # optionally use validate

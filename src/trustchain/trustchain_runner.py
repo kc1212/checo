@@ -308,7 +308,7 @@ class TrustChainRunner(object):
         seq_r = block.other_half.inner.seq
         node = block.inner.counterparty
 
-        req = pb.ValidationReq(seq, seq_r)
+        req = pb.ValidationReq(seq=seq, seq_r=seq_r)
         logging.debug("TC: sent validation to {}, {}".format(b64encode(node), req))
         self.send(node, req)
 
@@ -325,7 +325,7 @@ class TrustChainRunner(object):
 
         assert len(pieces) > 2
 
-        self.send(remote_vk, pb.ValidationResp(req.seq, req.seq_r, [p.pb for p in pieces]))
+        self.send(remote_vk, pb.ValidationResp(seq=req.seq, seq_r=req.seq_r, pieces=[p.pb for p in pieces]))
 
     def handle_validation_resp(self, resp, remote_vk):
         # type: (pb.ValidationResp, str) -> None
@@ -347,8 +347,9 @@ class TrustChainRunner(object):
         # new_tx cannot be a CpBlock because we just called new_tx
         new_tx = self.tc.my_chain.chain[-1]
         new_tx.add_other_half(TxBlock(msg.tx))
-        self.send(remote_vk, pb.TxResp(msg.tx.inner.seq, new_tx.pb))
-        logging.info("TC: added tx (received) {}, from {}".format(encode_n(msg.tx.hash), encode_n(remote_vk)))
+        self.send(remote_vk, pb.TxResp(seq=msg.tx.inner.seq, tx=new_tx.pb))
+        logging.info("TC: added tx (received) {}, from {}"
+                     .format(encode_n(new_tx.other_half.hash), encode_n(remote_vk)))
 
     def handle_tx_resp(self, msg, remote_vk):
         # type: (pb.TxResp, str) -> None
@@ -409,7 +410,7 @@ class TrustChainRunner(object):
         # create the tx and send the request
         self.tc.new_tx(node, m)
         tx = self.tc.my_chain.chain[-1]
-        self.send(node, pb.TxReq(tx.pb))
+        self.send(node, pb.TxReq(tx=tx.pb))
         logging.info("TC: added tx {}, from {}".format(encode_n(tx.hash), encode_n(self.tc.vk)))
 
     def make_validation(self, interval):
