@@ -1,7 +1,6 @@
 from twisted.internet import reactor, task
 from base64 import b64encode
 
-import jsonpickle
 import logging
 import sys
 import libnacl
@@ -57,7 +56,7 @@ def set_logging(lvl, stream=sys.stdout):
 def dictionary_hash(d):
     digest = ''
     for key in sorted(d):
-        digest = libnacl.crypto_hash_sha256(digest + jsonpickle.encode(key) + jsonpickle.encode(d[key]))
+        digest = libnacl.crypto_hash_sha256(digest + key + d[key])
     return digest
 
 

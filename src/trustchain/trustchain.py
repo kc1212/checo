@@ -59,6 +59,7 @@ class Signature(ProtobufWrapper):
         # type: (str, str, str) -> Signature
         return cls(pb.Signature(vk=vk, signed_document=libnacl.crypto_sign(msg, sk)))
 
+
     def verify(self, vk, msg):
         # type: (str, str) -> None
         """
@@ -203,13 +204,32 @@ class CompactBlock(ProtobufWrapper):
         self.digest = self.pb.inner.digest
         self.prev = self.pb.inner.prev
 
-        self.seq = self.pb.seq
-        self.agreed_round = self.pb.agreed_round
+        # NOTE: these will be mutated, so we use getter/setter
+        self._seq = self.pb.seq
+        self._agreed_round = self.pb.agreed_round
 
     @classmethod
     def new(cls, digest, prev, seq):
         # type: (str, str, int) -> pb.CompactBlock
         return cls(pb.CompactBlock(inner=pb.CompactBlock.Inner(digest=digest, prev=prev), seq=seq, agreed_round=-1))
+
+    @property
+    def seq(self):
+        return self._seq
+
+    @seq.setter
+    def seq(self, v):
+        self.pb.seq = v
+        self._seq = self.pb.seq
+
+    @property
+    def agreed_round(self):
+        return self._agreed_round
+
+    @agreed_round.setter
+    def agreed_round(self, v):
+        self.pb.agreed_round = v
+        self._agreed_round = self.pb.agreed_round
 
     @property
     def hash(self):
@@ -237,7 +257,8 @@ class Cons(ProtobufWrapper):
     def new(cls, round, blocks):
         # type: (int, List[pb.CpBlock]) -> pb.Cons
         """
-
+        NOTE: this new function is a bit different from others, it accepts a Protobuf type,
+        because it gets used directly in init.
         :param round: consensus round
         :param blocks: list of agreed checkpoint blocks
         """

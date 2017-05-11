@@ -77,8 +77,7 @@ class ACS(object):
         assert my_vk in self.mo14s
 
         # send the first RBC, assume all nodes have connected
-        log_msg = "{} items of type {}".format(len(msg), type(msg[0])) if isinstance(msg, list) else msg
-        logging.info("ACS: initiating vk {}, {}".format(b64encode(my_vk), log_msg))
+        logging.info("ACS: initiating vk {}, msg {}".format(b64encode(my_vk), b64encode(msg)))
         self.brachas[my_vk].bcast_init(msg)
 
     def reset_then_start(self, msg, r):
@@ -179,4 +178,5 @@ class ACS(object):
     def collate_results(self):
         key_of_ones = [k for k, v in self.mo14_results.iteritems() if v == 1]
         res = {k: self.bracha_results[k] for k in key_of_ones}
+        # logging.info("{}".format({b64encode(k): b64encode(v) for k, v in res.iteritems()}))
         return res, self.round

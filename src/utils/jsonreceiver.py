@@ -8,7 +8,7 @@ import src.messages.messages_pb2 as pb
 _PB_PAIRS = [(k, v) for k, v in vars(pb).iteritems() if isinstance(v, type) and issubclass(v, Message)]
 _PB_TAG_TO_TUPLE = {_tag: _v for _tag, _v in enumerate(_PB_PAIRS)}
 _PB_NAME_TO_TAG = {_v[0]:  _tag for _tag, _v in _PB_TAG_TO_TUPLE.iteritems()}
-assert len(_PB_PAIRS) == 20
+assert len(_PB_PAIRS) == 21
 
 
 class JsonReceiver(Int32StringReceiver):

@@ -11,11 +11,6 @@ from twisted.internet.error import CannotListenError
 from twisted.internet.protocol import Factory
 from typing import Dict, Tuple
 
-from src.messages.messages import \
-    DummyMsg, PingMsg, PongMsg, \
-    BrachaMsg, Mo14Msg, ACSMsg, \
-    ChainMsg, SigMsg, CpMsg, ConsMsg, \
-    InstructionMsg, AskConsMsg
 from src.consensus.acs import ACS
 from src.consensus.bracha import Bracha
 from src.consensus.mo14 import Mo14
@@ -56,6 +51,8 @@ class MyProto(JsonReceiver):
 
         # logging.debug("NODE: received obj {} from {}".format(type(obj), "<remote_vk>"))
 
+        # TODO do something like handler registry
+
         if isinstance(obj, pb.Ping):
             self.handle_ping(obj)
 
@@ -68,21 +65,28 @@ class MyProto(JsonReceiver):
             res = self.factory.acs.handle(obj, self.remote_vk)
             self.process_acs_res(res, obj)
 
-        elif isinstance(obj, ChainMsg):
-            self.factory.tc_runner.handle(obj.body, self.remote_vk)
+        elif isinstance(obj, pb.TxReq):
+            self.factory.tc_runner.handle_tx_req(obj, self.remote_vk)
 
-        # NOTE: all the consensus related messages are handled separately
-        # ChainMsg is only for transactions and its validation
-        elif isinstance(obj, SigMsg):
+        elif isinstance(obj, pb.TxResp):
+            self.factory.tc_runner.handle_tx_resp(obj, self.remote_vk)
+
+        elif isinstance(obj, pb.ValidationReq):
+            self.factory.tc_runner.handle_validation_req(obj, self.remote_vk)
+
+        elif isinstance(obj, pb.ValidationResp):
+            self.factory.tc_runner.handle_validation_resp(obj, self.remote_vk)
+
+        elif isinstance(obj, pb.SigWithRound):
             self.factory.tc_runner.handle_sig(obj, self.remote_vk)
 
-        elif isinstance(obj, CpMsg):
+        elif isinstance(obj, pb.CpBlock):
             self.factory.tc_runner.handle_cp(obj, self.remote_vk)
 
-        elif isinstance(obj, ConsMsg):
+        elif isinstance(obj, pb.Cons):
             self.factory.tc_runner.handle_cons(obj, self.remote_vk)
 
-        elif isinstance(obj, AskConsMsg):
+        elif isinstance(obj, pb.AskCons):
             self.factory.tc_runner.handle_ask_cons(obj, self.remote_vk)
 
         # NOTE messages below are for testing, bracha/mo14 is normally handled by acs
@@ -97,7 +101,7 @@ class MyProto(JsonReceiver):
                 return
             self.factory.mo14.handle(obj, self.remote_vk)
 
-        elif isinstance(obj, DummyMsg):
+        elif isinstance(obj, pb.Dummy):
             logging.info("NODE: got dummy message from {}".format(b64encode(self.remote_vk)))
 
         else:
@@ -165,7 +169,7 @@ class MyFactory(Factory):
         self.bracha = Bracha(self)  # just for testing
         self.mo14 = Mo14(self)  # just for testing
         self.acs = ACS(self)
-        self.tc_runner = TrustChainRunner(self, ChainMsg)
+        self.tc_runner = TrustChainRunner(self)
         self.vk = self.tc_runner.tc.vk
         self.q = Queue.Queue()  # (str, msg)
 
@@ -330,7 +334,7 @@ class MyFactory(Factory):
         :param msg: 
         :return: 
         """
-        assert isinstance(msg, InstructionMsg)
+        assert isinstance(msg, pb.Instruction)
         logging.info("NODE: handling instruction {}".format(msg))
 
         call_later(msg.delay, self.tc_runner.bootstrap_promoters)
@@ -439,7 +443,7 @@ def run(config, bcast, discovery_addr):
     # optionally run tests, args.test == None implies reactive node
     # we use call later to wait until the nodes are registered
     if config.test == 'dummy':
-        call_later(5, f.bcast, DummyMsg('z'))
+        call_later(5, f.bcast, pb.Dummy(m='z'))
     elif config.test == 'bracha':
         call_later(6, f.bracha.bcast_init)
     elif config.test == 'mo14':

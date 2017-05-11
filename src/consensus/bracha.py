@@ -2,7 +2,6 @@ import logging
 import random
 from base64 import b64encode
 
-import jsonpickle
 import libnacl
 from enum import Enum
 from pyeclib.ec_iface import ECDriver
@@ -117,8 +116,7 @@ class Bracha(object):
 
         if self.ready_count >= 2 * self.t + 1 and self.echo_count >= self.n - 2*self.t:
             res = self.upon_2t_plus_1_ready()
-            log_msg = "{} items of type {}".format(len(res), type(res[0])) if isinstance(res, list) else res
-            logging.info("Bracha: DELIVER {}".format(log_msg))
+            logging.info("Bracha: DELIVER {}".format(b64encode(res)))
             self.done = True
             return Handled(res)
 
@@ -154,18 +152,22 @@ class Bracha(object):
     def upon_2t_plus_1_ready(self):
         if self.v is None:
             self.v = self.decode_fragments()
-        return jsonpickle.decode(self.v)
+        return self.v
 
     def bcast_init(self, msg="some test msg!!"):
         self.bcast_init_fragments(msg)
 
     def bcast_init_fragments(self, msg):
-        enc_msg = jsonpickle.encode(msg)
-        fragments = self.ec_driver.encode(enc_msg)
-        digest = libnacl.crypto_hash_sha256(enc_msg)
+        """
+        
+        :param msg: some bytes
+        :return: 
+        """
+        fragments = self.ec_driver.encode(msg)
+        digest = libnacl.crypto_hash_sha256(msg)
 
-        log_msg = "{} items of type {}".format(len(msg), type(msg[0])) if isinstance(msg, list) else msg
-        logging.info("Bracha: initiate erasure code with {}, digest {}".format(log_msg, b64encode(digest)))
+        logging.info("Bracha: initiate erasure code with {} fragments, digest {}"
+                     .format(len(fragments), b64encode(digest)))
 
         assert len(fragments) == len(self.factory.promoters)
         for fragment, promoter in zip(fragments, self.factory.promoters):

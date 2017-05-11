@@ -19,7 +19,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   name='messages.proto',
   package='',
   syntax='proto3',
-  serialized_pb=_b('\n\x0emessages.proto\"\x12\n\x05\x44ummy\x12\t\n\x01m\x18\x01 \x01(\t\"$\n\x08\x44iscover\x12\n\n\x02vk\x18\x01 \x01(\x0c\x12\x0c\n\x04port\x18\x02 \x01(\x05\"g\n\rDiscoverReply\x12(\n\x05nodes\x18\x01 \x03(\x0b\x32\x19.DiscoverReply.NodesEntry\x1a,\n\nNodesEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"@\n\x0bInstruction\x12\x13\n\x0binstruction\x18\x01 \x01(\t\x12\r\n\x05\x64\x65lay\x18\x02 \x01(\x05\x12\r\n\x05param\x18\x03 \x01(\x05\" \n\x04Ping\x12\n\n\x02vk\x18\x01 \x01(\x0c\x12\x0c\n\x04port\x18\x02 \x01(\x05\" \n\x04Pong\x12\n\n\x02vk\x18\x01 \x01(\x0c\x12\x0c\n\x04port\x18\x02 \x01(\x05\"k\n\x06\x42racha\x12\x18\n\x02ty\x18\x01 \x01(\x0e\x32\x0c.Bracha.Type\x12\x0e\n\x06\x64igest\x18\x02 \x01(\x0c\x12\x10\n\x08\x66ragment\x18\x03 \x01(\x0c\"%\n\x04Type\x12\x08\n\x04INIT\x10\x00\x12\x08\n\x04\x45\x43HO\x10\x01\x12\t\n\x05READY\x10\x02\"N\n\x04Mo14\x12\x16\n\x02ty\x18\x01 \x01(\x0e\x32\n.Mo14.Type\x12\t\n\x01r\x18\x02 \x01(\x05\x12\t\n\x01v\x18\x03 \x01(\x05\"\x18\n\x04Type\x12\x07\n\x03\x45ST\x10\x00\x12\x07\n\x03\x41UX\x10\x01\"`\n\x03\x41\x43S\x12\x10\n\x08instance\x18\x01 \x01(\x0c\x12\r\n\x05round\x18\x02 \x01(\x05\x12\x19\n\x06\x62racha\x18\x03 \x01(\x0b\x32\x07.BrachaH\x00\x12\x15\n\x04mo14\x18\x04 \x01(\x0b\x32\x05.Mo14H\x00\x42\x06\n\x04\x62ody\"\x93\x01\n\x07TxBlock\x12\x1d\n\x05inner\x18\x01 \x01(\x0b\x32\x0e.TxBlock.Inner\x12\x15\n\x01s\x18\x02 \x01(\x0b\x32\n.Signature\x1aR\n\x05Inner\x12\x0c\n\x04prev\x18\x01 \x01(\x0c\x12\x0b\n\x03seq\x18\x02 \x01(\x05\x12\x14\n\x0c\x63ounterparty\x18\x03 \x01(\x0c\x12\r\n\x05nonce\x18\x04 \x01(\x0c\x12\t\n\x01m\x18\x05 \x01(\t\"\x1d\n\x05TxReq\x12\x14\n\x02tx\x18\x01 \x01(\x0b\x32\x08.TxBlock\"+\n\x06TxResp\x12\x14\n\x02tx\x18\x01 \x01(\x0b\x32\x08.TxBlock\x12\x0b\n\x03seq\x18\x02 \x01(\x05\"\xa8\x01\n\x07\x43pBlock\x12\x1d\n\x05inner\x18\x01 \x01(\x0b\x32\x0e.CpBlock.Inner\x12\x15\n\x01s\x18\x02 \x01(\x0b\x32\n.Signature\x1ag\n\x05Inner\x12\x0c\n\x04prev\x18\x01 \x01(\x0c\x12\x0b\n\x03seq\x18\x02 \x01(\x05\x12\r\n\x05round\x18\x03 \x01(\x05\x12\x11\n\tcons_hash\x18\x04 \x01(\x0c\x12\x16\n\x02ss\x18\x05 \x03(\x0b\x32\n.Signature\x12\t\n\x01p\x18\x06 \x01(\x05\"0\n\tSignature\x12\n\n\x02vk\x18\x01 \x01(\x0c\x12\x17\n\x0fsigned_document\x18\x02 \x01(\x0c\"0\n\x0cSigWithRound\x12\x15\n\x01s\x18\x01 \x01(\x0b\x32\n.Signature\x12\t\n\x01r\x18\x02 \x01(\x05\"/\n\x04\x43ons\x12\r\n\x05round\x18\x01 \x01(\x05\x12\x18\n\x06\x62locks\x18\x02 \x03(\x0b\x32\x08.CpBlock\"\x14\n\x07\x41skCons\x12\t\n\x01r\x18\x01 \x01(\x05\"+\n\rValidationReq\x12\x0b\n\x03seq\x18\x01 \x01(\x05\x12\r\n\x05seq_2\x18\x02 \x01(\x05\"|\n\x0c\x43ompactBlock\x12\"\n\x05inner\x18\x01 \x01(\x0b\x32\x13.CompactBlock.Inner\x12\x0b\n\x03seq\x18\x02 \x01(\x05\x12\x14\n\x0c\x61greed_round\x18\x03 \x01(\x05\x1a%\n\x05Inner\x12\x0e\n\x06\x64igest\x18\x01 \x01(\x0c\x12\x0c\n\x04prev\x18\x02 \x01(\x0c\"K\n\x0eValidationResp\x12\x0b\n\x03seq\x18\x01 \x01(\x05\x12\r\n\x05seq_r\x18\x02 \x01(\x05\x12\x1d\n\x06pieces\x18\x03 \x03(\x0b\x32\r.CompactBlockb\x06proto3')
+  serialized_pb=_b('\n\x0emessages.proto\"\x12\n\x05\x44ummy\x12\t\n\x01m\x18\x01 \x01(\t\"$\n\x08\x44iscover\x12\n\n\x02vk\x18\x01 \x01(\x0c\x12\x0c\n\x04port\x18\x02 \x01(\x05\"g\n\rDiscoverReply\x12(\n\x05nodes\x18\x01 \x03(\x0b\x32\x19.DiscoverReply.NodesEntry\x1a,\n\nNodesEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"@\n\x0bInstruction\x12\x13\n\x0binstruction\x18\x01 \x01(\t\x12\r\n\x05\x64\x65lay\x18\x02 \x01(\x05\x12\r\n\x05param\x18\x03 \x01(\t\" \n\x04Ping\x12\n\n\x02vk\x18\x01 \x01(\x0c\x12\x0c\n\x04port\x18\x02 \x01(\x05\" \n\x04Pong\x12\n\n\x02vk\x18\x01 \x01(\x0c\x12\x0c\n\x04port\x18\x02 \x01(\x05\"k\n\x06\x42racha\x12\x18\n\x02ty\x18\x01 \x01(\x0e\x32\x0c.Bracha.Type\x12\x0e\n\x06\x64igest\x18\x02 \x01(\x0c\x12\x10\n\x08\x66ragment\x18\x03 \x01(\x0c\"%\n\x04Type\x12\x08\n\x04INIT\x10\x00\x12\x08\n\x04\x45\x43HO\x10\x01\x12\t\n\x05READY\x10\x02\"N\n\x04Mo14\x12\x16\n\x02ty\x18\x01 \x01(\x0e\x32\n.Mo14.Type\x12\t\n\x01r\x18\x02 \x01(\x05\x12\t\n\x01v\x18\x03 \x01(\x05\"\x18\n\x04Type\x12\x07\n\x03\x45ST\x10\x00\x12\x07\n\x03\x41UX\x10\x01\"`\n\x03\x41\x43S\x12\x10\n\x08instance\x18\x01 \x01(\x0c\x12\r\n\x05round\x18\x02 \x01(\x05\x12\x19\n\x06\x62racha\x18\x03 \x01(\x0b\x32\x07.BrachaH\x00\x12\x15\n\x04mo14\x18\x04 \x01(\x0b\x32\x05.Mo14H\x00\x42\x06\n\x04\x62ody\"\x93\x01\n\x07TxBlock\x12\x1d\n\x05inner\x18\x01 \x01(\x0b\x32\x0e.TxBlock.Inner\x12\x15\n\x01s\x18\x02 \x01(\x0b\x32\n.Signature\x1aR\n\x05Inner\x12\x0c\n\x04prev\x18\x01 \x01(\x0c\x12\x0b\n\x03seq\x18\x02 \x01(\x05\x12\x14\n\x0c\x63ounterparty\x18\x03 \x01(\x0c\x12\r\n\x05nonce\x18\x04 \x01(\x0c\x12\t\n\x01m\x18\x05 \x01(\t\"\x1d\n\x05TxReq\x12\x14\n\x02tx\x18\x01 \x01(\x0b\x32\x08.TxBlock\"+\n\x06TxResp\x12\x14\n\x02tx\x18\x01 \x01(\x0b\x32\x08.TxBlock\x12\x0b\n\x03seq\x18\x02 \x01(\x05\"\xa8\x01\n\x07\x43pBlock\x12\x1d\n\x05inner\x18\x01 \x01(\x0b\x32\x0e.CpBlock.Inner\x12\x15\n\x01s\x18\x02 \x01(\x0b\x32\n.Signature\x1ag\n\x05Inner\x12\x0c\n\x04prev\x18\x01 \x01(\x0c\x12\x0b\n\x03seq\x18\x02 \x01(\x05\x12\r\n\x05round\x18\x03 \x01(\x05\x12\x11\n\tcons_hash\x18\x04 \x01(\x0c\x12\x16\n\x02ss\x18\x05 \x03(\x0b\x32\n.Signature\x12\t\n\x01p\x18\x06 \x01(\x05\"!\n\x08\x43pBlocks\x12\x15\n\x03\x63ps\x18\x01 \x03(\x0b\x32\x08.CpBlock\"0\n\tSignature\x12\n\n\x02vk\x18\x01 \x01(\x0c\x12\x17\n\x0fsigned_document\x18\x02 \x01(\x0c\"0\n\x0cSigWithRound\x12\x15\n\x01s\x18\x01 \x01(\x0b\x32\n.Signature\x12\t\n\x01r\x18\x02 \x01(\x05\"/\n\x04\x43ons\x12\r\n\x05round\x18\x01 \x01(\x05\x12\x18\n\x06\x62locks\x18\x02 \x03(\x0b\x32\x08.CpBlock\"\x14\n\x07\x41skCons\x12\t\n\x01r\x18\x01 \x01(\x05\"+\n\rValidationReq\x12\x0b\n\x03seq\x18\x01 \x01(\x05\x12\r\n\x05seq_2\x18\x02 \x01(\x05\"|\n\x0c\x43ompactBlock\x12\"\n\x05inner\x18\x01 \x01(\x0b\x32\x13.CompactBlock.Inner\x12\x0b\n\x03seq\x18\x02 \x01(\x05\x12\x14\n\x0c\x61greed_round\x18\x03 \x01(\x05\x1a%\n\x05Inner\x12\x0e\n\x06\x64igest\x18\x01 \x01(\x0c\x12\x0c\n\x04prev\x18\x02 \x01(\x0c\"K\n\x0eValidationResp\x12\x0b\n\x03seq\x18\x01 \x01(\x05\x12\r\n\x05seq_r\x18\x02 \x01(\x05\x12\x1d\n\x06pieces\x18\x03 \x03(\x0b\x32\r.CompactBlockb\x06proto3')
 )
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
 
@@ -234,8 +234,8 @@ _INSTRUCTION = _descriptor.Descriptor(
       options=None),
     _descriptor.FieldDescriptor(
       name='param', full_name='Instruction.param', index=2,
-      number=3, type=5, cpp_type=1, label=1,
-      has_default_value=False, default_value=0,
+      number=3, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=_b("").decode('utf-8'),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
@@ -747,6 +747,37 @@ _CPBLOCK = _descriptor.Descriptor(
 )
 
 
+_CPBLOCKS = _descriptor.Descriptor(
+  name='CpBlocks',
+  full_name='CpBlocks',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='cps', full_name='CpBlocks.cps', index=0,
+      number=1, type=11, cpp_type=10, label=3,
+      has_default_value=False, default_value=[],
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=999,
+  serialized_end=1032,
+)
+
+
 _SIGNATURE = _descriptor.Descriptor(
   name='Signature',
   full_name='Signature',
@@ -780,8 +811,8 @@ _SIGNATURE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=999,
-  serialized_end=1047,
+  serialized_start=1034,
+  serialized_end=1082,
 )
 
 
@@ -818,8 +849,8 @@ _SIGWITHROUND = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1049,
-  serialized_end=1097,
+  serialized_start=1084,
+  serialized_end=1132,
 )
 
 
@@ -856,8 +887,8 @@ _CONS = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1099,
-  serialized_end=1146,
+  serialized_start=1134,
+  serialized_end=1181,
 )
 
 
@@ -887,8 +918,8 @@ _ASKCONS = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1148,
-  serialized_end=1168,
+  serialized_start=1183,
+  serialized_end=1203,
 )
 
 
@@ -925,8 +956,8 @@ _VALIDATIONREQ = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1170,
-  serialized_end=1213,
+  serialized_start=1205,
+  serialized_end=1248,
 )
 
 
@@ -963,8 +994,8 @@ _COMPACTBLOCK_INNER = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1302,
-  serialized_end=1339,
+  serialized_start=1337,
+  serialized_end=1374,
 )
 
 _COMPACTBLOCK = _descriptor.Descriptor(
@@ -1007,8 +1038,8 @@ _COMPACTBLOCK = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1215,
-  serialized_end=1339,
+  serialized_start=1250,
+  serialized_end=1374,
 )
 
 
@@ -1052,8 +1083,8 @@ _VALIDATIONRESP = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1341,
-  serialized_end=1416,
+  serialized_start=1376,
+  serialized_end=1451,
 )
 
 _DISCOVERREPLY_NODESENTRY.containing_type = _DISCOVERREPLY
@@ -1079,6 +1110,7 @@ _CPBLOCK_INNER.fields_by_name['ss'].message_type = _SIGNATURE
 _CPBLOCK_INNER.containing_type = _CPBLOCK
 _CPBLOCK.fields_by_name['inner'].message_type = _CPBLOCK_INNER
 _CPBLOCK.fields_by_name['s'].message_type = _SIGNATURE
+_CPBLOCKS.fields_by_name['cps'].message_type = _CPBLOCK
 _SIGWITHROUND.fields_by_name['s'].message_type = _SIGNATURE
 _CONS.fields_by_name['blocks'].message_type = _CPBLOCK
 _COMPACTBLOCK_INNER.containing_type = _COMPACTBLOCK
@@ -1097,6 +1129,7 @@ DESCRIPTOR.message_types_by_name['TxBlock'] = _TXBLOCK
 DESCRIPTOR.message_types_by_name['TxReq'] = _TXREQ
 DESCRIPTOR.message_types_by_name['TxResp'] = _TXRESP
 DESCRIPTOR.message_types_by_name['CpBlock'] = _CPBLOCK
+DESCRIPTOR.message_types_by_name['CpBlocks'] = _CPBLOCKS
 DESCRIPTOR.message_types_by_name['Signature'] = _SIGNATURE
 DESCRIPTOR.message_types_by_name['SigWithRound'] = _SIGWITHROUND
 DESCRIPTOR.message_types_by_name['Cons'] = _CONS
@@ -1219,6 +1252,13 @@ CpBlock = _reflection.GeneratedProtocolMessageType('CpBlock', (_message.Message,
   ))
 _sym_db.RegisterMessage(CpBlock)
 _sym_db.RegisterMessage(CpBlock.Inner)
+
+CpBlocks = _reflection.GeneratedProtocolMessageType('CpBlocks', (_message.Message,), dict(
+  DESCRIPTOR = _CPBLOCKS,
+  __module__ = 'messages_pb2'
+  # @@protoc_insertion_point(class_scope:CpBlocks)
+  ))
+_sym_db.RegisterMessage(CpBlocks)
 
 Signature = _reflection.GeneratedProtocolMessageType('Signature', (_message.Message,), dict(
   DESCRIPTOR = _SIGNATURE,

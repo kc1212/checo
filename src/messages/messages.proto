@@ -17,7 +17,7 @@ message DiscoverReply {
 message Instruction {
     string instruction = 1;
     int32 delay = 2;
-    int32 param = 3;
+    string param = 3;
 }
 
 message Ping {
@@ -100,6 +100,10 @@ message CpBlock {
     }
     Inner inner = 1;
     Signature s = 2;
+}
+
+message CpBlocks {
+    repeated CpBlock cps = 1;
 }
 
 message Signature {

@@ -5,7 +5,6 @@ from twisted.internet import reactor, task
 from twisted.internet.protocol import Factory
 from typing import Union, Dict
 
-from src.messages.messages import CoinMsg, CoinReplyMsg, InstructionMsg
 from src.utils.jsonreceiver import JsonReceiver
 from src.utils.utils import set_logging, my_err_back, MAX_LINE_LEN, call_later
 import src.messages.messages_pb2 as pb
@@ -50,9 +49,6 @@ class Discovery(JsonReceiver):
                 assert isinstance(self.factory, DiscoveryFactory)
                 self.send_obj(pb.DiscoverReply(nodes=self.factory.make_nodes_dict()))
 
-            elif isinstance(obj, CoinMsg):
-                raise NotImplementedError
-
             else:
                 raise AssertionError("Discovery: invalid payload type on SERVER")
 
@@ -61,11 +57,8 @@ class Discovery(JsonReceiver):
                 logging.debug("Discovery: making new clients...")
                 self.factory.new_connection_if_not_exist(obj.nodes)
 
-            elif isinstance(obj, InstructionMsg):
+            elif isinstance(obj, pb.Instruction):
                 self.factory.handle_instruction(obj)
-
-            elif isinstance(obj, CoinReplyMsg):
-                raise NotImplementedError
 
             else:
                 raise AssertionError("Discovery: invalid payload type on CLIENT")
@@ -115,7 +108,7 @@ class DiscoveryFactory(Factory):
 
     def send_instruction_when_ready(self):
         if len(self.nodes) >= self.m:
-            msg = InstructionMsg(self.inst_delay, self.inst_inst, self.inst_param)
+            msg = pb.Instruction(instruction=self.inst_inst, delay=self.inst_delay, param=self.inst_param)
             logging.debug("Broadcasting instruction {}".format(msg))
             self.bcast(msg)
             self.sent = True
