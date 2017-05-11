@@ -77,8 +77,9 @@ class ACS(object):
         assert my_vk in self._brachas
         assert my_vk in self._mo14s
 
-        # send the first RBC, assume all nodes have connected
-        logging.info("ACS: initiating vk {}, msg {}".format(b64encode(my_vk), b64encode(msg)))
+        # send the first RBC, assume all nodes have connected, log useful info only when testing
+        logging.info("ACS: initiating vk {}, msg {}"
+                     .format(b64encode(my_vk), random.random() if self._factory.config.from_instruction else b64encode(msg)))
         self._brachas[my_vk].bcast_init(msg)
 
     def reset_then_start(self, msg, r):
