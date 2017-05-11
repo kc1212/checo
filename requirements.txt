@@ -3,7 +3,6 @@ Twisted==17.1.0
 pytest==3.0.7
 libnacl==1.5.0
 typing==3.6.1
-jsonpickle==0.9.4
 pyeclib==1.4.0
 protobuf==3.3.0
 
