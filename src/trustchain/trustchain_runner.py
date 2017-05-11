@@ -224,7 +224,7 @@ class TrustChainRunner(object):
             # manually ask for it from the promoters only once, ideally this should be dynamic
             if not self.round_states[r].asked:
                 logging.info("TC: round {}, don't have consensus result, asking...".format(r))
-                self.send(random.choice(self.factory.promoters), pb.AskCons(r))
+                self.send(random.choice(self.factory.promoters), pb.AskCons(r=r))
                 self.round_states[r].asked = True
             return
 
