@@ -3,10 +3,10 @@ from base64 import b64encode
 
 from typing import Dict, Union
 
-from src.utils.utils import Replay, Handled, dictionary_hash
+import src.messages.messages_pb2 as pb
+from src.utils import Replay, Handled, dictionary_hash
 from .bracha import Bracha
 from .mo14 import Mo14
-import src.messages.messages_pb2 as pb
 
 
 class ACS(object):
@@ -171,7 +171,8 @@ class ACS(object):
             self._done = True
             res = self._collate_results()
             # NOTE we just print the hash of the results and compare, the actual output is too much...
-            logging.info("ACS: DONE \"{}\"".format(b64encode(dictionary_hash(res[0]))))
+            logging.info("ACS: DONE \"{}\""
+                         .format("x" if self._factory.config.from_instruction else b64encode(dictionary_hash(res[0]))))
             return Handled(res)
         return Handled()
 

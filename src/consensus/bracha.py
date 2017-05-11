@@ -7,7 +7,7 @@ from enum import Enum
 from pyeclib.ec_iface import ECDriver
 
 import src.messages.messages_pb2 as pb
-from src.utils.utils import Handled
+from src.utils import Handled
 
 _BRACHA_STEP = Enum('_BRACHA_STEP', 'one two three')
 _INIT = pb.Bracha.Type.Value('INIT')
@@ -116,7 +116,8 @@ class Bracha(object):
 
         if self._ready_count >= 2 * self._t + 1 and self._echo_count >= self._n - 2*self._t:
             res = self._upon_2t_plus_1_ready()
-            logging.info("Bracha: DELIVER {}".format(b64encode(res)))
+            logging.info("Bracha: DELIVER {}"
+                         .format("x" if self._factory.config.from_instruction else b64encode(res)))
             self._done = True
             return Handled(res)
 

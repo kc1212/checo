@@ -6,8 +6,8 @@ from collections import defaultdict
 from enum import Enum
 from typing import Union
 
-from src.utils.utils import Replay, Handled
 import src.messages.messages_pb2 as pb
+from src.utils import Replay, Handled
 
 _MO14_STATE = Enum('_MO14_STATE', 'stopped start est aux coin')
 _EST = pb.Mo14.Type.Value('EST')

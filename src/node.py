@@ -11,17 +11,17 @@ from twisted.internet.error import CannotListenError
 from twisted.internet.protocol import Factory
 from typing import Dict, Tuple
 
+import src.messages.messages_pb2 as pb
+from src.protobufreceiver import ProtobufReceiver
 from src.consensus.acs import ACS
 from src.consensus.bracha import Bracha
 from src.consensus.mo14 import Mo14
 from src.trustchain.trustchain_runner import TrustChainRunner
 from src.utils import Replay, Handled, set_logging, my_err_back, call_later, MAX_LINE_LEN
-from src.utils.jsonreceiver import JsonReceiver
-from .discovery import Discovery, got_discovery
-import src.messages.messages_pb2 as pb
+from src.discovery import Discovery, got_discovery
 
 
-class MyProto(JsonReceiver):
+class MyProto(ProtobufReceiver):
     """
     Main protocol that handles the Byzantine consensus, one instance is created for each connection
     """
@@ -336,6 +336,7 @@ class MyFactory(Factory):
         """
         assert isinstance(msg, pb.Instruction)
         logging.info("NODE: handling instruction {}".format(msg))
+        self.config.from_instruction = True
 
         call_later(msg.delay, self.tc_runner.bootstrap_promoters)
 
@@ -414,9 +415,11 @@ class Config(object):
 
         self.ignore_promoter = ignore_promoter
 
+        self.from_instruction = False
+
 
 def run(config, bcast, discovery_addr):
-    JsonReceiver.MAX_LENGTH = MAX_LINE_LEN
+    ProtobufReceiver.MAX_LENGTH = MAX_LINE_LEN
 
     f = MyFactory(config)
 

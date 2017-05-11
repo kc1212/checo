@@ -6,9 +6,9 @@ from collections import defaultdict
 
 from twisted.internet import task
 
-from src.trustchain.trustchain import TrustChain, TxBlock, CpBlock, Signature, Cons, CompactBlock
-from src.utils.utils import collate_cp_blocks, my_err_back, encode_n, call_later
 import src.messages.messages_pb2 as pb
+from src.trustchain.trustchain import TrustChain, TxBlock, CpBlock, Signature, Cons, CompactBlock
+from src.utils import collate_cp_blocks, my_err_back, encode_n, call_later
 
 
 class RoundState(object):

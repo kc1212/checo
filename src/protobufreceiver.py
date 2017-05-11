@@ -11,7 +11,7 @@ _PB_NAME_TO_TAG = {_v[0]:  _tag for _tag, _v in _PB_TAG_TO_TUPLE.iteritems()}
 assert len(_PB_PAIRS) == 21
 
 
-class JsonReceiver(Int32StringReceiver):
+class ProtobufReceiver(Int32StringReceiver):
     def connectionLost(self, reason):
         self.connection_lost(reason)
 

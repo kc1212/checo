@@ -5,12 +5,12 @@ from twisted.internet import reactor, task
 from twisted.internet.protocol import Factory
 from typing import Union, Dict
 
-from src.utils.jsonreceiver import JsonReceiver
-from src.utils.utils import set_logging, my_err_back, MAX_LINE_LEN, call_later
 import src.messages.messages_pb2 as pb
+from src.protobufreceiver import ProtobufReceiver
+from src.utils import set_logging, my_err_back, MAX_LINE_LEN, call_later
 
 
-class Discovery(JsonReceiver):
+class Discovery(ProtobufReceiver):
     """
     this is both a discovery server and a coin server, the latter is not implemented yet
     """
@@ -130,7 +130,7 @@ def got_discovery(p, id, port):
 
 
 def run(port, n, t, m, inst):
-    JsonReceiver.MAX_LENGTH = MAX_LINE_LEN
+    ProtobufReceiver.MAX_LENGTH = MAX_LINE_LEN
     reactor.listenTCP(port, DiscoveryFactory(n, t, m, inst))
     logging.info("Discovery server running on {}".format(port))
     reactor.run()
