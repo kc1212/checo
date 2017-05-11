@@ -335,7 +335,7 @@ class MyFactory(Factory):
         :return: 
         """
         assert isinstance(msg, pb.Instruction)
-        logging.info("NODE: handling instruction {}".format(msg))
+        logging.info("NODE: handling instruction - {}".format(msg).replace('\n', ','))
         self.config.from_instruction = True
 
         call_later(msg.delay, self.tc_runner.bootstrap_promoters)

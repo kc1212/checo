@@ -116,8 +116,11 @@ class Bracha(object):
 
         if self._ready_count >= 2 * self._t + 1 and self._echo_count >= self._n - 2*self._t:
             res = self._upon_2t_plus_1_ready()
+
+            # NOTE: we use a random value to trip up tests, since it shouldn't be viewed by tests
             logging.info("Bracha: DELIVER {}"
-                         .format("x" if self._factory.config.from_instruction else b64encode(res)))
+                         .format(random.random() if self._factory.config.from_instruction else b64encode(res)))
+
             self._done = True
             return Handled(res)
 

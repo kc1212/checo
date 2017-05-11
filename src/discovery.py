@@ -34,7 +34,8 @@ class Discovery(ProtobufReceiver):
         :param obj:
         :return:
         """
-        logging.debug("Discovery: received msg {} from {}".format(obj, self.transport.getPeer().host))
+        logging.debug("Discovery: received msg {} from {}"
+                      .format(obj, self.transport.getPeer().host).replace('\n', ','))
 
         if self.state == 'SERVER':
             if isinstance(obj, pb.Discover):
@@ -109,7 +110,7 @@ class DiscoveryFactory(Factory):
     def send_instruction_when_ready(self):
         if len(self.nodes) >= self.m:
             msg = pb.Instruction(instruction=self.inst_inst, delay=self.inst_delay, param=self.inst_param)
-            logging.debug("Broadcasting instruction {}".format(msg))
+            logging.debug("Broadcasting instruction - {}".format(msg).replace('\n', ','))
             self.bcast(msg)
             self.sent = True
             self.lc.stop()

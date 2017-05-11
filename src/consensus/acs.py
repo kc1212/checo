@@ -1,4 +1,5 @@
 import logging
+import random
 from base64 import b64encode
 
 from typing import Dict, Union
@@ -171,8 +172,9 @@ class ACS(object):
             self._done = True
             res = self._collate_results()
             # NOTE we just print the hash of the results and compare, the actual output is too much...
+            # NOTE we also use a random value to trip up tests, since it shouldn't be used
             logging.info("ACS: DONE \"{}\""
-                         .format("x" if self._factory.config.from_instruction else b64encode(dictionary_hash(res[0]))))
+                         .format(random.random() if self._factory.config.from_instruction else b64encode(dictionary_hash(res[0]))))
             return Handled(res)
         return Handled()
 
