@@ -1,4 +1,4 @@
-from twisted.internet import reactor, task
+from twisted.internet import reactor, task, error
 from base64 import b64encode
 
 import logging
@@ -88,8 +88,10 @@ def my_err_back(failure):
     logging.error(failure.getErrorMessage())
     logging.error(failure.getTraceback())
     failure.printTraceback()
-    if reactor.running:
+    try:
         reactor.stop()
+    except error.ReactorNotRunning:
+        pass
 
 
 class GrowingList(list):
