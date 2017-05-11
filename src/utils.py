@@ -88,7 +88,8 @@ def my_err_back(failure):
     logging.error(failure.getErrorMessage())
     logging.error(failure.getTraceback())
     failure.printTraceback()
-    reactor.stop()
+    if reactor.running:
+        reactor.stop()
 
 
 class GrowingList(list):

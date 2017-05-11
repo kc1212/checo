@@ -36,10 +36,8 @@ class MyProto(ProtobufReceiver):
     def connection_lost(self, reason):
         peer = "<None>" if self.remote_vk is None else b64encode(self.remote_vk)
         logging.debug("NODE: deleting peer {}".format(peer))
-        try:
-            del self.peers[self.remote_vk]
-        except KeyError:
-            logging.warning("NODE: peer {} already deleted".format(b64encode(self.remote_vk)))
+        if reactor.running:
+            reactor.stop()
 
     def obj_received(self, obj):
         """
