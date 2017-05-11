@@ -323,6 +323,7 @@ class Chain(object):
         self.chain = [generate_genesis_block(vk, sk)]  # type: List[Union[CpBlock, TxBlock]]
         self._tx_count = 0
         self._cp_count = 0
+        self.latest_cp = self.chain[0]
 
     def new_tx(self, tx):
         # type: (TxBlock) -> None
@@ -344,6 +345,8 @@ class Chain(object):
         self.chain.append(cp)
         self._cp_count += 1
 
+        self.latest_cp = cp
+
     def get_cp_of_round(self, r):
         # type: (int) -> Optional[CpBlock]
         # TODO an optimisation would be to begin from the back side if 'r' is large
@@ -362,15 +365,6 @@ class Chain(object):
     def latest_hash(self):
         # type: () -> str
         return self.chain[-1].hash
-
-    @property
-    def latest_cp(self):
-        # type: () -> CpBlock
-        for i in xrange(len(self.chain) - 1, -1, -1):
-            b = self.chain[i]
-            if isinstance(b, CpBlock):
-                return b
-        raise ValueError("No CpBlock in Chain")
 
     @property
     def genesis(self):
@@ -464,6 +458,14 @@ class Chain(object):
         :return: 
         """
         return filter(lambda b: isinstance(b, TxBlock) and b.validity != VALIDITY_ENUM.Unknown, self.chain)
+
+    def compute_latest_cp(self):
+        # type: () -> CpBlock
+        for i in xrange(len(self.chain) - 1, -1, -1):
+            b = self.chain[i]
+            if isinstance(b, CpBlock):
+                return b
+        raise ValueError("No CpBlock in Chain")
 
 
 class TrustChain(object):

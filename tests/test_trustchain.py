@@ -242,6 +242,9 @@ def generate_tc_pair(n_cp, n_tx):
         tc_s.new_cp(1, cons, ss, vks)
         tc_r.new_cp(1, cons, ss, vks)
 
+        assert tc_s.latest_cp == tc_s.my_chain.compute_latest_cp()
+        assert tc_r.latest_cp == tc_r.my_chain.compute_latest_cp()
+
     assert tc_r.my_chain.tx_count == n_cp * n_tx
     assert tc_r.my_chain.cp_count == n_cp
 
