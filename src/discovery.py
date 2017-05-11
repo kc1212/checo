@@ -1,16 +1,16 @@
+import argparse
+import logging
+
 from twisted.internet import reactor, task
 from twisted.internet.protocol import Factory
 from typing import Union, Dict
-import logging
-import argparse
-import sys
 
-from src.utils.jsonreceiver import JsonReceiver
-from src.utils.messages import DiscoverMsg, DiscoverReplyMsg, CoinMsg, CoinReplyMsg, InstructionMsg
-from src.utils.utils import set_logging, my_err_back, MAX_LINE_LEN, call_later
+import src.messages.messages_pb2 as pb
+from src.protobufreceiver import ProtobufReceiver
+from src.utils import set_logging, my_err_back, MAX_LINE_LEN, call_later
 
 
-class Discovery(JsonReceiver):
+class Discovery(ProtobufReceiver):
     """
     this is both a discovery server and a coin server, the latter is not implemented yet
     """
@@ -28,16 +28,17 @@ class Discovery(JsonReceiver):
             logging.debug("Discovery: deleted {}".format(self.vk))
 
     def obj_received(self, obj):
-        # type: (Union[DiscoverMsg, DiscoverReplyMsg]) -> None
+        # type: (Union[pb.Discover, pb.DiscoverReply]) -> None
         """
         we don't bother with decoding vk here, since we don't use vk in any crypto functions
         :param obj:
         :return:
         """
-        logging.debug("Discovery: received msg {} from {}".format(obj, self.transport.getPeer().host))
+        logging.debug("Discovery: received msg {} from {}"
+                      .format(obj, self.transport.getPeer().host).replace('\n', ','))
 
         if self.state == 'SERVER':
-            if isinstance(obj, DiscoverMsg):
+            if isinstance(obj, pb.Discover):
                 self.vk = obj.vk  # NOTE storing base64 form as is
                 self.addr = self.transport.getPeer().host + ":" + str(obj.port)
 
@@ -47,31 +48,25 @@ class Discovery(JsonReceiver):
                     self.nodes[self.vk] = (self.addr, self)
 
                 assert isinstance(self.factory, DiscoveryFactory)
-                self.send_obj(DiscoverReplyMsg(self.factory.make_nodes_msg()))
-
-            elif isinstance(obj, CoinMsg):
-                raise NotImplementedError
+                self.send_obj(pb.DiscoverReply(nodes=self.factory.make_nodes_dict()))
 
             else:
                 raise AssertionError("Discovery: invalid payload type on SERVER")
 
         elif self.state == 'CLIENT':
-            if isinstance(obj, DiscoverReplyMsg):
+            if isinstance(obj, pb.DiscoverReply):
                 logging.debug("Discovery: making new clients...")
                 self.factory.new_connection_if_not_exist(obj.nodes)
 
-            elif isinstance(obj, InstructionMsg):
+            elif isinstance(obj, pb.Instruction):
                 self.factory.handle_instruction(obj)
-
-            elif isinstance(obj, CoinReplyMsg):
-                raise NotImplementedError
 
             else:
                 raise AssertionError("Discovery: invalid payload type on CLIENT")
 
     def say_hello(self, vk, port):
         self.state = 'CLIENT'
-        self.send_obj(DiscoverMsg(vk, port))
+        self.send_obj(pb.Discover(vk=vk, port=port))
         logging.debug("Discovery: discovery sent {} {}".format(vk, port))
 
 
@@ -108,14 +103,14 @@ class DiscoveryFactory(Factory):
         else:
             logging.info("Insufficient params to send instructions")
 
-    def make_nodes_msg(self):
+    def make_nodes_dict(self):
         msg = {k: v[0] for k, v in self.nodes.iteritems()}
         return msg
 
     def send_instruction_when_ready(self):
         if len(self.nodes) >= self.m:
-            msg = InstructionMsg(self.inst_delay, self.inst_inst, self.inst_param)
-            logging.debug("Broadcasting instruction {}".format(msg))
+            msg = pb.Instruction(instruction=self.inst_inst, delay=self.inst_delay, param=self.inst_param)
+            logging.debug("Broadcasting instruction - {}".format(msg).replace('\n', ','))
             self.bcast(msg)
             self.sent = True
             self.lc.stop()
@@ -136,7 +131,7 @@ def got_discovery(p, id, port):
 
 
 def run(port, n, t, m, inst):
-    JsonReceiver.MAX_LENGTH = MAX_LINE_LEN
+    ProtobufReceiver.MAX_LENGTH = MAX_LINE_LEN
     reactor.listenTCP(port, DiscoveryFactory(n, t, m, inst))
     logging.info("Discovery server running on {}".format(port))
     reactor.run()

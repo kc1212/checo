@@ -1,15 +1,14 @@
-from twisted.internet import task
-from base64 import b64encode
-from typing import Union
-import random
 import logging
+import random
 import time
+from base64 import b64encode
 from collections import defaultdict
 
-from src.trustchain.trustchain import TrustChain, TxBlock, CpBlock, Signature, Cons, VALIDITY_ENUM
-from src.utils.utils import collate_cp_blocks, my_err_back, encode_n, call_later
-from src.utils.messages import TxReq, TxResp, SigMsg, CpMsg, ConsMsg, ValidationReq, \
-    ValidationResp, AskConsMsg
+from twisted.internet import task
+
+import src.messages.messages_pb2 as pb
+from src.trustchain.trustchain import TrustChain, TxBlock, CpBlock, Signature, Cons, CompactBlock
+from src.utils import collate_cp_blocks, my_err_back, encode_n, call_later
 
 
 class RoundState(object):
@@ -64,10 +63,9 @@ class TrustChainRunner(object):
     the handle function by itself essentially pushes the messages into the queue
     """
 
-    def __init__(self, factory, msg_wrapper_f=lambda x: x):
+    def __init__(self, factory):
         self.tc = TrustChain()
         self.factory = factory
-        self.msg_wrapper_f = msg_wrapper_f
         self.consensus_delay = factory.config.consensus_delay
 
         self.collect_rubbish_lc = task.LoopingCall(self._collect_rubbish)
@@ -116,21 +114,26 @@ class TrustChainRunner(object):
 
         if isinstance(bs, dict):
             assert len(bs) > 0
-            assert isinstance(bs.values()[0][0], CpBlock)
 
-            logging.debug("TC: adding cons")
-            cons = Cons(r, collate_cp_blocks(bs))
+            def _parse_cps(_b):
+                _cps = pb.CpBlocks()
+                _cps.ParseFromString(_b)
+                return [CpBlock(_cp) for _cp in _cps.cps]
+
+            cps = {k: _parse_cps(v) for k, v in bs.iteritems()}
+            cons = Cons.new(r, [cp.pb for cp in collate_cp_blocks(cps)])
             self.round_states[r].new_cons(cons)
 
             future_promoters = cons.get_promoters(self.factory.config.n)
-            s = Signature(self.tc.vk, self.tc._sk, cons.hash)
+            s = Signature.new(self.tc.vk, self.tc._sk, cons.hash)
+            sig_msg = pb.SigWithRound(s=s.pb, r=r)
 
-            self.factory.gossip_except(future_promoters, ConsMsg(cons))
-            self.factory.multicast(future_promoters, ConsMsg(cons))
+            self.factory.gossip_except(future_promoters, cons.pb)
+            self.factory.multicast(future_promoters, cons.pb)
 
             sig_set = list(set(future_promoters) | set(self.factory.promoters))
-            self.factory.gossip_except(sig_set, SigMsg(s, r))
-            self.factory.multicast(sig_set, SigMsg(s, r))
+            self.factory.gossip_except(sig_set, sig_msg)
+            self.factory.multicast(sig_set, sig_msg)
 
             # we also try to add the CP here because we may receive the signatures before the actual CP
             self._try_add_cp(r)
@@ -139,7 +142,7 @@ class TrustChainRunner(object):
             logging.debug("TC: not a dict type in handle_cons_from_acs")
 
     def handle_sig(self, msg, remote_vk):
-        # type: (SigMsg, str) -> None
+        # type: (pb.SigWithRound, str) -> None
         """
         Update round_states on new signature,
         then conditionally gossip
@@ -147,17 +150,19 @@ class TrustChainRunner(object):
         :param remote_vk: 
         :return: 
         """
-        assert isinstance(msg, SigMsg)
+        assert isinstance(msg, pb.SigWithRound)
+        logging.debug("TC: received SigWithRound {} from {}".format(msg, b64encode(remote_vk)))
 
-        logging.debug("TC: received SigMsg {} from {}".format(msg, b64encode(remote_vk)))
+        sig = Signature(msg.s)
+
         if msg.r >= self.tc.latest_round:
-            is_new = self.round_states[msg.r].new_sig(msg.s)
+            is_new = self.round_states[msg.r].new_sig(sig)
             if is_new:
                 self._try_add_cp(msg.r)
                 self.factory.gossip(msg)
 
     def handle_cp(self, msg, remote_vk):
-        # type: (CpMsg, str) -> None
+        # type: (pb.CpBlock, str) -> None
         """
         When I'm the promoter, I expect other nodes to send CPs to me.
         This function handles this situation.
@@ -165,38 +170,40 @@ class TrustChainRunner(object):
         :param remote_vk: 
         :return: 
         """
-        assert isinstance(msg, CpMsg)
+        assert isinstance(msg, pb.CpBlock)
+        logging.debug("TC: received CpBlock {} from {}".format(msg, b64encode(remote_vk)))
 
-        logging.debug("TC: received CpMsg {} from {}".format(msg, b64encode(remote_vk)))
-        if msg.r >= self.tc.latest_round:
-            assert msg.cp.s.vk == remote_vk
-            cp = msg.cp
+        cp = CpBlock(msg)
+
+        if cp.round >= self.tc.latest_round:
+            assert cp.s.vk == remote_vk
             self.round_states[cp.round].new_cp(cp)
 
     def handle_cons(self, msg, remote_vk):
-        # type: (ConsMsg, str) -> None
+        # type: (pb.Cons, str) -> None
         """
-        Update round_state on new ConsMsg, 
+        Update round_state on new consensus message, 
         then conditionally gossip.
         :param msg: 
         :param remote_vk: 
         :return: 
         """
-        assert isinstance(msg, ConsMsg)
+        assert isinstance(msg, pb.Cons)
+        logging.debug("TC: received pb.Cons {} from {}".format(msg, b64encode(remote_vk)))
 
-        logging.debug("TC: received ConsMsg {} from {}".format(msg, b64encode(remote_vk)))
-        if msg.r >= self.tc.latest_round:
-            is_new = self.round_states[msg.r].new_cons(msg.cons)
+        cons = Cons(msg)
+
+        if cons.round >= self.tc.latest_round:
+            is_new = self.round_states[cons.round].new_cons(cons)
             if is_new:
-                self._try_add_cp(msg.r)
+                self._try_add_cp(cons.round)
                 self.factory.gossip(msg)
 
     def handle_ask_cons(self, msg, remote_vk):
-        assert isinstance(msg, AskConsMsg)
+        assert isinstance(msg, pb.AskCons)
         # TODO vulnerable to spam
         if msg.r in self.tc.consensus:
-            # NOTE: we use factory.send because ConsMsg is handled separately
-            self.factory.send(remote_vk, ConsMsg(self.tc.consensus[msg.r]))
+            self.send(remote_vk, self.tc.consensus[msg.r].pb)
 
     def _try_add_cp(self, r):
         """
@@ -217,7 +224,7 @@ class TrustChainRunner(object):
             # manually ask for it from the promoters only once, ideally this should be dynamic
             if not self.round_states[r].asked:
                 logging.info("TC: round {}, don't have consensus result, asking...".format(r))
-                self.factory.send(random.choice(self.factory.promoters), AskConsMsg(r))
+                self.send(random.choice(self.factory.promoters), pb.AskCons(r=r))
                 self.round_states[r].asked = True
             return
 
@@ -261,14 +268,14 @@ class TrustChainRunner(object):
 
             def _try_start_acs(_r):
                 # NOTE: here we assume the consensus should have a length >= n
-                _msg = self.round_states[r].received_cps
+                _msg = [cp.pb for cp in self.round_states[r].received_cps]
                 if self.tc.latest_round >= _r:
                     logging.info("TC: round {}, somebody completed ACS before me, not starting".format(_r))
                     # setting the following causes the old messages to be dropped
                     self.factory.acs.stop(self.tc.latest_round)
                 else:
                     logging.info("TC: round {}, starting ACS with {} CPs".format(_r, len(_msg)))
-                    self.factory.acs.reset_then_start(_msg, _r)
+                    self.factory.acs.reset_then_start(pb.CpBlocks(cps=_msg).SerializeToString(), _r)
 
             call_later(self.consensus_delay, _try_start_acs, r + 1)
         else:
@@ -277,9 +284,9 @@ class TrustChainRunner(object):
         # send new CP to either all promoters
         # TODO having this if statement for test isn't ideal
         if self.factory.config.test == 'bootstrap':
-            self.factory.promoter_cast(CpMsg(self.tc.my_chain.latest_cp))
+            self.factory.promoter_cast(self.tc.my_chain.latest_cp.pb)
         else:
-            self.factory.promoter_cast_t(CpMsg(self.tc.my_chain.latest_cp))
+            self.factory.promoter_cast_t(self.tc.my_chain.latest_cp.pb)
 
     def _send_validation_req(self, seq):
         # type: (int) -> None
@@ -301,13 +308,13 @@ class TrustChainRunner(object):
         seq_r = block.other_half.inner.seq
         node = block.inner.counterparty
 
-        req = ValidationReq(seq, seq_r)
+        req = pb.ValidationReq(seq=seq, seq_r=seq_r)
         logging.debug("TC: sent validation to {}, {}".format(b64encode(node), req))
         self.send(node, req)
 
-    def _handle_validation_req(self, req, remote_vk):
-        # type: (ValidationReq, str) -> None
-        assert isinstance(req, ValidationReq)
+    def handle_validation_req(self, req, remote_vk):
+        # type: (pb.ValidationReq, str) -> None
+        assert isinstance(req, pb.ValidationReq)
         logging.debug("TC: received validation req from {}, {}".format(b64encode(remote_vk), req))
 
         pieces = self.tc.agreed_pieces(req.seq_r)
@@ -318,55 +325,43 @@ class TrustChainRunner(object):
 
         assert len(pieces) > 2
 
-        self.send(remote_vk, ValidationResp(req.seq, req.seq_r, pieces))
+        self.send(remote_vk, pb.ValidationResp(seq=req.seq, seq_r=req.seq_r, pieces=[p.pb for p in pieces]))
 
-    def _handle_validation_resp(self, resp, remote_vk):
-        # type: (ValidationResp, str) -> None
-        assert isinstance(resp, ValidationResp)
+    def handle_validation_resp(self, resp, remote_vk):
+        # type: (pb.ValidationResp, str) -> None
+        assert isinstance(resp, pb.ValidationResp)
         logging.debug("TC: received validation resp from {}, {}".format(b64encode(remote_vk), resp))
 
-        self.tc.verify_tx(resp.seq, resp.pieces)
+        self.tc.verify_tx(resp.seq, [CompactBlock(p) for p in resp.pieces])
 
-    def handle(self, msg, remote_vk):
-        # type: (Union[TxReq, TxResp]) -> None
-        """
-        Handle messages that are sent using self.send, primarily transaction messages.
-        :param msg: 
-        :param remote_vk: 
-        :return: 
-        """
-        logging.debug("TC: got message {}".format(msg))
-        if isinstance(msg, TxReq):
-            nonce = msg.tx.inner.nonce
-            m = msg.tx.inner.m
-            assert remote_vk == msg.tx.sig.vk, "{} != {}".format(b64encode(remote_vk), b64encode(msg.tx.sig.vk))
-            self.tc.new_tx(remote_vk, m, nonce)
+    def handle_tx_req(self, msg, remote_vk):
+        # type: (pb.TxReq, str) -> None
+        assert isinstance(msg, pb.TxReq)
 
-            # tx cannot be a CpBlock because we just called new_tx
-            tx = self.tc.my_chain.chain[-1]
-            tx.add_other_half(msg.tx)
-            self.send(remote_vk, TxResp(msg.tx.inner.seq, tx))
-            logging.info("TC: added tx (received) {}, from {}".format(encode_n(msg.tx.hash), encode_n(remote_vk)))
+        nonce = msg.tx.inner.nonce
+        m = msg.tx.inner.m
 
-        elif isinstance(msg, TxResp):
-            assert remote_vk == msg.tx.sig.vk, "{} != {}".format(b64encode(remote_vk), b64encode(msg.tx.sig.vk))
-            # TODO index access not safe
-            tx = self.tc.my_chain.chain[msg.seq]
-            tx.add_other_half(msg.tx)
-            logging.info("TC: other half {}".format(encode_n(msg.tx.hash)))
+        assert remote_vk == msg.tx.s.vk, "{} != {}".format(b64encode(remote_vk), b64encode(msg.tx.s.vk))
+        self.tc.new_tx(remote_vk, m, nonce)
 
-        elif isinstance(msg, ValidationReq):
-            self._handle_validation_req(msg, remote_vk)
+        # new_tx cannot be a CpBlock because we just called new_tx
+        new_tx = self.tc.my_chain.chain[-1]
+        new_tx.add_other_half(TxBlock(msg.tx))
+        self.send(remote_vk, pb.TxResp(seq=msg.tx.inner.seq, tx=new_tx.pb))
+        logging.info("TC: added tx (received) {}, from {}"
+                     .format(encode_n(new_tx.other_half.hash), encode_n(remote_vk)))
 
-        elif isinstance(msg, ValidationResp):
-            self._handle_validation_resp(msg, remote_vk)
-
-        else:
-            raise AssertionError("Incorrect message type")
+    def handle_tx_resp(self, msg, remote_vk):
+        # type: (pb.TxResp, str) -> None
+        assert isinstance(msg, pb.TxResp)
+        assert remote_vk == msg.tx.s.vk, "{} != {}".format(b64encode(remote_vk), b64encode(msg.tx.s.vk))
+        # TODO index access not safe
+        tx = self.tc.my_chain.chain[msg.seq]
+        tx.add_other_half(TxBlock(msg.tx))
+        logging.info("TC: other half {}".format(encode_n(tx.hash)))
 
     def send(self, node, msg):
-        logging.debug("TC: sending {} to {}".format(self.msg_wrapper_f(msg), b64encode(node)))
-        self.factory.send(node, self.msg_wrapper_f(msg))
+        self.factory.send(node, msg)
 
     def make_tx(self, interval, random_node=False):
         if random_node:
@@ -415,7 +410,7 @@ class TrustChainRunner(object):
         # create the tx and send the request
         self.tc.new_tx(node, m)
         tx = self.tc.my_chain.chain[-1]
-        self.send(node, TxReq(tx))
+        self.send(node, pb.TxReq(tx=tx.pb))
         logging.info("TC: added tx {}, from {}".format(encode_n(tx.hash), encode_n(self.tc.vk)))
 
     def make_validation(self, interval):
@@ -449,15 +444,15 @@ class TrustChainRunner(object):
         """
         n = self.factory.config.n
         self.factory.promoters = sorted(self.factory.peers.keys())[:n]
-        self.factory.promoter_cast(CpMsg(self.tc.genesis))
+        self.factory.promoter_cast(self.tc.genesis.pb)
 
         def bootstrap_when_ready():
             if self.factory.vk in self.factory.promoters:
                 logging.info("TC: bootstrap_lc, got {} CPs".format(len(self.round_states[0].received_cps)))
                 # collect CPs of round 0, from it, create consensus result of round 1
                 if len(self.round_states[0].received_cps) >= n:
-                    cps = self.round_states[0].received_cps
-                    self.factory.acs.start(cps, 1)
+                    msg = pb.CpBlocks(cps=[cp.pb for cp in self.round_states[0].received_cps])
+                    self.factory.acs.start(msg.SerializeToString(), 1)
                     self.bootstrap_lc.stop()
             else:
                 logging.info(

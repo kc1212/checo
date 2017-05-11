@@ -1,3 +1,5 @@
+import random
+import string
 import pytest
 from src.trustchain import *
 from src.utils import hash_pointers_ok
@@ -5,14 +7,14 @@ from src.utils import hash_pointers_ok
 
 @pytest.fixture
 def sigs():
-    msg = libnacl.randombytes(8)
+    msg = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(8))
     vk, sk = libnacl.crypto_sign_keypair()
     return msg, vk, sk
 
 
 def test_sigs(sigs):
     msg, vk, sk = sigs
-    s = Signature(vk, sk, msg)
+    s = Signature.new(vk, sk, msg)
 
     # no exception should be thrown
     s.verify(vk, msg)
@@ -20,7 +22,7 @@ def test_sigs(sigs):
 
 def test_sigs_failure(sigs):
     msg, vk, sk = sigs
-    s = Signature(vk, sk, msg)
+    s = Signature.new(vk, sk, msg)
 
     vk, _ = libnacl.crypto_sign_keypair()
     s.vk = vk
@@ -44,8 +46,8 @@ def gen_txblock(prev_s, prev_r, vk_s, sk_s, vk_r, sk_r, h_s, h_r, m):
     :param m:
     :return:
     """
-    tx_s = TxBlock(prev_s, h_s, vk_r, m, vk_s, sk_s)
-    tx_r = TxBlock(prev_r, h_r, vk_s, m, vk_r, sk_r, tx_s.inner.nonce)
+    tx_s = TxBlock.new(prev_s, h_s, vk_r, m, vk_s, sk_s)
+    tx_r = TxBlock.new(prev_r, h_r, vk_s, m, vk_r, sk_r, tx_s.inner.nonce)
 
     tx_s.add_other_half(tx_r)
     tx_r.add_other_half(tx_s)
@@ -92,10 +94,10 @@ def test_cpblock(n, x):
 
     t = (n - 1) / 3
     if x - 1 >= t:  # number of signatures - 1 is greater than t
-        CpBlock(my_genesis.hash, 1, cons, 1, my_vk, my_sk, ss, vks)
+        CpBlock.new(my_genesis.hash, 1, cons, 1, my_vk, my_sk, ss, vks)
     else:
         with pytest.raises(ValueError):
-            CpBlock(my_genesis.hash, 1, cons, 1, my_vk, my_sk, ss, vks)
+            CpBlock.new(my_genesis.hash, 1, cons, 1, my_vk, my_sk, ss, vks)
 
 
 def gen_cons(n, cons_round):
@@ -113,15 +115,15 @@ def gen_cons(n, cons_round):
         _, vk, sk = sigs()
         vks.append(vk)
         sks.append(sk)
-        blocks.append(generate_genesis_block(vk, sk))
+        blocks.append(generate_genesis_block(vk, sk).pb)
 
     # we have n blocks that has reached consensus
-    cons = Cons(cons_round, blocks)
+    cons = Cons.new(cons_round, blocks)
 
     # x of the promoters signed those blocks
     ss = []
     for i, vk, sk in zip(range(n), vks, sks):
-        s = Signature(vk, sk, cons.hash)
+        s = Signature.new(vk, sk, cons.hash)
         ss.append(s)
 
     return vks, ss, cons
@@ -144,7 +146,7 @@ def test_cp_chain(n, m):
 
     for i in range(m):
         vks, ss, cons = gen_cons(n, i + 1)
-        cp = CpBlock(prev, i + 1, cons, 0, vk, sk, ss, vks)
+        cp = CpBlock.new(prev, i + 1, cons, 0, vk, sk, ss, vks)
         prev = cp.compact.hash
         chain.new_cp(cp)
 
@@ -236,11 +238,14 @@ def generate_tc_pair(n_cp, n_tx):
             tc_r._new_tx(tx_r)
 
         r = i + 1
-        cons = Cons(r, [tc_s.latest_cp, tc_r.latest_cp])
-        ss = [Signature(vk_s, sk_s, cons.hash), Signature(vk_r, sk_r, cons.hash)]
+        cons = Cons.new(r, [tc_s.latest_cp.pb, tc_r.latest_cp.pb])
+        ss = [Signature.new(vk_s, sk_s, cons.hash), Signature.new(vk_r, sk_r, cons.hash)]
 
         tc_s.new_cp(1, cons, ss, vks)
         tc_r.new_cp(1, cons, ss, vks)
+
+        assert tc_s.latest_cp == tc_s.my_chain.compute_latest_cp()
+        assert tc_r.latest_cp == tc_r.my_chain.compute_latest_cp()
 
     assert tc_r.my_chain.tx_count == n_cp * n_tx
     assert tc_r.my_chain.cp_count == n_cp

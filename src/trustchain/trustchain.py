@@ -1,6 +1,5 @@
 import math
 import libnacl
-import abc
 import copy
 import logging
 from base64 import b64encode
@@ -8,58 +7,58 @@ from typing import List, Union, Dict, Tuple, Optional
 from enum import Enum
 
 from src.utils import hash_pointers_ok, GrowingList, encode_n
+import src.messages.messages_pb2 as pb
 
 VALIDITY_ENUM = Enum('VALIDITY_ENUM', 'Valid Invalid Unknown')
 
 
-class EqHash(object):
-    """
-    Objects that implement EqHash *must* be immutable
-    """
-    __metaclass__ = abc.ABCMeta
+class ProtobufWrapper(object):
+    def __init__(self, x):
+        self.pb = x
+        self._str = None
+        self._hash = None
 
-    def __init__(self):
-        self._hash = ''
-
-    @abc.abstractmethod
-    def _tuple(self):
-        """Please implement me"""
-        raise NotImplementedError
+    def SerializeToString(self):
+        if self._str is None:
+            self._str = self.pb.SerializeToString()
+        return self._str
 
     def __eq__(self, other):
-        return self._tuple() == other._tuple()
+        return self.SerializeToString() == other.SerializeToString()
 
     def __ne__(self, other):
         return not self.__eq__(other)
 
     def __hash__(self):
-        return hash(self._tuple())
+        return hash(self.SerializeToString())
+
+    def __str__(self):
+        return str(self.pb)
 
     @property
     def hash(self):
-        # TODO better to hash the packed tuple, use __repr__?
-        if len(self._hash) == 0:
-            self._hash = libnacl.crypto_hash_sha256(str(self.__hash__()))
+        # type: () -> str
+        if self._hash is None:
+            self._hash = libnacl.crypto_hash_sha256(self.SerializeToString())
         return self._hash
 
 
-class Signature(EqHash):
+class Signature(ProtobufWrapper):
     """
     Data structure stores the verification key along with the signature,
     we expect the original message to be small, preferably a digest
     """
-    def __init__(self, vk, sk, msg):
-        # type: (str, str, str) -> None
-        EqHash.__init__(self)
-        self.vk = vk
-        self._sig = libnacl.crypto_sign(msg, sk)
+    def __init__(self, x):
+        # type: (pb.Signature) -> None
+        ProtobufWrapper.__init__(self, x)
+        self.vk = self.pb.vk
+        self._signed_document = self.pb.signed_document
 
-    def __str__(self):
-        # type: () -> str
-        return '{{"vk": "{}", "sig": "{}"}}'.format(b64encode(self.vk), b64encode(self._sig))
+    @classmethod
+    def new(cls, vk, sk, msg):
+        # type: (str, str, str) -> Signature
+        return cls(pb.Signature(vk=vk, signed_document=libnacl.crypto_sign(msg, sk)))
 
-    def _tuple(self):
-        return self.vk,  self._sig
 
     def verify(self, vk, msg):
         # type: (str, str) -> None
@@ -69,67 +68,38 @@ class Signature(EqHash):
         """
         if vk != self.vk:
             raise ValueError("Mismatch verification key")
-        expected_msg = libnacl.crypto_sign_open(self._sig, self.vk)
+        expected_msg = libnacl.crypto_sign_open(self._signed_document, self.vk)
         if expected_msg != msg:
             raise ValueError("Mismatch message")
 
 
-class TxBlockInner(EqHash):
-    """
-    Ideally this should be defined inside TxBlock, but jsonpickle won't decode correctly if we do that...
-    """
-    def __init__(self, prev, seq, counterparty, nonce, m):
-        # type: (str, int, str, str, str) -> None
-        EqHash.__init__(self)
-        self.prev = prev
-        self.seq = seq
-        self.counterparty = counterparty
-        self.nonce = nonce
-        self.m = m
-
-    def _tuple(self):
-        return self.prev, self.seq, self.counterparty, self.m
-
-
-class TxBlock(EqHash):
-    def __init__(self, prev, seq, counterparty, m, vk, sk, nonce=None):
-        # type: (str, int, str, str, str, str, str) -> None
+class TxBlock(ProtobufWrapper):
+    def __init__(self, x):
+        # type: (pb.TxBlock) -> None
         """
-        
-        :param prev: 
-        :param seq: 
-        :param counterparty: 
-        :param m: 
-        :param vk: 
-        :param sk: 
-        :param nonce:
+        Convert a protobuf TxBlock into a TrustChain TxBlock
+        :param x: 
         """
-        EqHash.__init__(self)
-        if nonce is None:
-            nonce = libnacl.randombytes(32)
-        self.inner = TxBlockInner(prev, seq, counterparty, nonce, m)
-        self.sig = Signature(vk, sk, self.inner.hash)
+        ProtobufWrapper.__init__(self, x)
+        self.inner = self.pb.inner
+        self.s = Signature(self.pb.s)
+
+        # properties below are not a part of hash
         self.other_half = None
-
-        # properties below are used for tracking validation status, not a part of hash
         self.validity = VALIDITY_ENUM.Unknown
         self.request_sent_r = -1  # a positive value indicate the round at which the request is sent
 
         # make sure the arguments of CompactBlock constructor are initialised, especially _tuple
-        self.compact = CompactBlock(self.hash, self.prev, self.seq)
+        self.compact = CompactBlock.new(self.hash, self.prev, self.seq)
 
-    def __str__(self):
-        # type: () -> str
-        return '{{"prev": "{}", "seq": {}, "counterparty": "{}", "nonce": "{}", "msg": "{}", "sig": {}}}'\
-            .format(b64encode(self.prev),
-                    self.inner.seq,
-                    b64encode(self.inner.counterparty),
-                    b64encode(self.inner.nonce),
-                    self.inner.m,
-                    self.sig)
-
-    def _tuple(self):
-        return self.inner, self.sig
+    @classmethod
+    def new(cls, prev, seq, counterparty, m, vk, sk, nonce=None):
+        # type: (str, int, str, str, str, str, str) -> pb.TxBlock
+        if nonce is None:
+            nonce = libnacl.randombytes(32)
+        inner = pb.TxBlock.Inner(prev=prev, seq=seq, counterparty=counterparty, nonce=nonce, m=m)
+        s = Signature.new(vk, sk, libnacl.crypto_hash_sha256(inner.SerializeToString()))
+        return cls(pb.TxBlock(inner=inner, s=s.pb))
 
     @property
     def seq(self):
@@ -145,96 +115,71 @@ class TxBlock(EqHash):
         # type: (TxBlock) -> ()
         assert self.inner.nonce == other_half.inner.nonce
         assert self.inner.m == other_half.inner.m
-        other_half.sig.verify(self.inner.counterparty, other_half.inner.hash)
-
-        self.other_half = copy.deepcopy(other_half)
-
-
-class CpBlockInner(EqHash):
-    def __init__(self, prev, seq, cons, ss, p):
-        # type: (str, int, Cons, List[Signature], int) -> None
-        EqHash.__init__(self)
-        self.prev = prev
-        self.seq = seq
-        self.round = cons.round
-        self.cons_hash = cons.hash
-        self.ss = ss
-        self.p = p
-
-    def _tuple(self):
-        self.ss.sort(key=lambda x: x.vk)
-        return self.prev, self.seq, self.round, self.cons_hash, tuple(self.ss), self.p
+        other_half.s.verify(self.inner.counterparty,
+                            libnacl.crypto_hash_sha256(other_half.inner.SerializeToString()))
+        self.other_half = other_half
 
 
-class CpBlock(EqHash):
+def _verify_signatures(data, ss, vks, t):
+    # type: (str, List[Signature], List[str], int) -> None
+    oks = 0
+    _ss = [s for s in ss if s.vk in vks]  # only consider nodes that are promoters
+    for _s in _ss:
+        try:
+            _s.verify(_s.vk, data)
+            oks += 1
+        except ValueError:
+            logging.debug("one verification failed for {}".format(_s.vk))
+
+    if not oks > t:
+        raise ValueError("verification failed, oks = {}, t = {}".format(oks, t))
+
+
+class CpBlock(ProtobufWrapper):
     """
+    In the network, a CpBlock should be created using the following steps
     1, node receives some consensus result
     2, node receives some signatures
     3, generate the cp block
-    struct CpBlock {
-        prev: Digest,
-        round: u64, // of the Cons
-        con: Digest, // of the Cons
-        p: bool, // promoter registration
-        s: Signature,
-    }
     """
+    def __init__(self, x):
+        ProtobufWrapper.__init__(self, x)
+        self.inner = self.pb.inner
+        self.s = Signature(self.pb.s)  # type: Signature
 
-    def __init__(self, prev, h, cons, p, vk, sk, ss, vks):
-        # type: (str, int, Cons, int, str, str, List[Signature], List[str]) -> None
+        self.compact = CompactBlock.new(self.hash, self.prev, self.seq)
+
+    @classmethod
+    def new(cls, prev, seq, cons, p, vk, sk, ss, vks):
+        # type: (str, int, Cons, int, str, str, List[Signature], List[str]) -> pb.CpBlock
         """
 
         :param prev: hash pointer to the previous block
         :param cons: type Cons
-        :param h: height
+        :param seq: height
         :param p: promoter flag
         :param vk: my verification key
         :param sk: my secret key
         :param ss: signatures of the promoters, at least t-1 of them must be valid
         :param vks: all verification keys of promoters
         """
-        EqHash.__init__(self)
         assert p in (0, 1)
-        self.inner = CpBlockInner(prev, h, cons, ss, p)
+        inner = pb.CpBlock.Inner(prev=prev, seq=seq, round=cons.round, cons_hash=cons.hash, ss=[s.pb for s in ss], p=p)
 
-        if cons.round != -1 or len(ss) != 0 or len(vks) != 0 or self.inner.seq != 0:
+        if cons.round != -1 or len(ss) != 0 or len(vks) != 0 or inner.seq != 0:
             t = math.floor((len(vks) - 1) / 3.0)
-            self._verify_signatures(ss, vks, int(t))
+            _verify_signatures(inner.cons_hash, ss, vks, int(t))
         else:
             # if this is executed, it means this is a genesis block
             pass
-        self.s = Signature(vk, sk, self.inner.hash)
+        s = Signature.new(vk, sk, libnacl.crypto_hash_sha256(inner.SerializeToString()))
 
-        # make sure the arguments of CompactBlock are initialised
-        self.compact = CompactBlock(self.hash, self.prev, self.seq)
-
-    def __str__(self):
-        # type: () -> str
-        return '{{"prev": "{}", "cons": "{}", "h": {}, "r": {}, "p": {}, "s": {}}}'\
-            .format(b64encode(self.prev), b64encode(self.inner.cons_hash),
-                    self.seq, self.inner.round, self.inner.p, self.s)
-
-    def _tuple(self):
-        return self.inner, self.s
+        return cls(pb.CpBlock(inner=inner, s=s.pb))
 
     @property
     def luck(self):
         # type: () -> str
         return libnacl.crypto_hash_sha256(self.hash + self.s.vk)
-
-    def _verify_signatures(self, ss, vks, t):
-        # type: (List[Signature], List[str], int) -> None
-        oks = 0
-        _ss = [s for s in ss if s.vk in vks]  # only consider nodes that are promoters
-        for _s in _ss:
-            try:
-                _s.verify(_s.vk, self.inner.cons_hash)
-                oks += 1
-            except ValueError:
-                logging.debug("one verification failed for {}".format(_s.vk))
-
-        if not oks > t:
-            raise ValueError("verification failed, oks = {}, t = {}".format(oks, t))
 
     @property
     def seq(self):
@@ -252,51 +197,72 @@ class CpBlock(EqHash):
         return self.inner.round
 
 
-class CompactBlock(EqHash):
-    def __init__(self, digest, prev, seq):
-        # type: (str, str, int) -> None
-        EqHash.__init__(self)
-        self.digest = digest
-        self.prev = prev
+class CompactBlock(ProtobufWrapper):
+    def __init__(self, x):
+        # type: (pb.CompactBlock) -> None
+        ProtobufWrapper.__init__(self, x)
+        self.digest = self.pb.inner.digest
+        self.prev = self.pb.inner.prev
 
-        # not hashed
-        self.seq = seq
-        self.agreed_round = -1
+        # NOTE: these will be mutated, so we use getter/setter
+        self._seq = self.pb.seq
+        self._agreed_round = self.pb.agreed_round
 
-    def _tuple(self):
-        return self.digest, self.prev
+    @classmethod
+    def new(cls, digest, prev, seq):
+        # type: (str, str, int) -> pb.CompactBlock
+        return cls(pb.CompactBlock(inner=pb.CompactBlock.Inner(digest=digest, prev=prev), seq=seq, agreed_round=-1))
+
+    @property
+    def seq(self):
+        return self._seq
+
+    @seq.setter
+    def seq(self, v):
+        self.pb.seq = v
+        self._seq = self.pb.seq
+
+    @property
+    def agreed_round(self):
+        return self._agreed_round
+
+    @agreed_round.setter
+    def agreed_round(self, v):
+        self.pb.agreed_round = v
+        self._agreed_round = self.pb.agreed_round
+
+    @property
+    def hash(self):
+        # type: () -> str
+        """
+        Override the normal hash, we only need the inner part
+        :return: 
+        """
+        if self._hash is None:
+            self._hash = libnacl.crypto_hash_sha256(self.pb.inner.SerializeToString())
+        return self._hash
 
 
-class Cons(EqHash):
+class Cons(ProtobufWrapper):
     """
     The consensus results, data structure that the promoters agree on
-    struct Cons {
-        round: u64,
-        blocks: List<CpBlock>,
-    }
     """
+    def __init__(self, x):
+        # type: (pb.Cons) -> None
+        ProtobufWrapper.__init__(self, x)
+        self.round = self.pb.round
+        self.blocks = [CpBlock(blk) for blk in self.pb.blocks]  # convert to TrustChain type
 
-    def __init__(self, round, blocks):
-        # type: (int, List[CpBlock]) -> None
+    @classmethod
+    def new(cls, round, blocks):
+        # type: (int, List[pb.CpBlock]) -> pb.Cons
         """
-
+        NOTE: this new function is a bit different from others, it accepts a Protobuf type,
+        because it gets used directly in init.
         :param round: consensus round
         :param blocks: list of agreed checkpoint blocks
         """
-        # assert len(blocks) > 0
-        # assert isinstance(blocks[0], CpBlock)
-        EqHash.__init__(self)
-        self.round = round
-        self.blocks = blocks
-
-    def __str__(self):
-        # type: () -> str
-        return '{{"r": {}, "blocks": {}}}'.format(self.round, len(self.blocks))
-
-    def _tuple(self):
-        # TODO sorting this every time may be inefficient...
-        self.blocks.sort(key=hash)
-        return (self.round,) + tuple(self.blocks)
+        return cls(pb.Cons(round=round, blocks=blocks))
 
     def get_promoters(self, n):
         # type: () -> List[str]
@@ -313,7 +279,8 @@ class Cons(EqHash):
 def generate_genesis_block(vk, sk):
     # type: (str, str) -> CpBlock
     prev = libnacl.crypto_hash_sha256('0')
-    return CpBlock(prev, 0, Cons(0, []), 1, vk, sk, [], [])
+    cons = Cons.new(0, [])
+    return CpBlock.new(prev, 0, cons, 1, vk, sk, [], [])
 
 
 class Chain(object):
@@ -323,6 +290,7 @@ class Chain(object):
         self.chain = [generate_genesis_block(vk, sk)]  # type: List[Union[CpBlock, TxBlock]]
         self._tx_count = 0
         self._cp_count = 0
+        self.latest_cp = self.chain[0]
 
     def new_tx(self, tx):
         # type: (TxBlock) -> None
@@ -344,6 +312,8 @@ class Chain(object):
         self.chain.append(cp)
         self._cp_count += 1
 
+        self.latest_cp = cp
+
     def get_cp_of_round(self, r):
         # type: (int) -> Optional[CpBlock]
         # TODO an optimisation would be to begin from the back side if 'r' is large
@@ -362,15 +332,6 @@ class Chain(object):
     def latest_hash(self):
         # type: () -> str
         return self.chain[-1].hash
-
-    @property
-    def latest_cp(self):
-        # type: () -> CpBlock
-        for i in xrange(len(self.chain) - 1, -1, -1):
-            b = self.chain[i]
-            if isinstance(b, CpBlock):
-                return b
-        raise ValueError("No CpBlock in Chain")
 
     @property
     def genesis(self):
@@ -465,6 +426,14 @@ class Chain(object):
         """
         return filter(lambda b: isinstance(b, TxBlock) and b.validity != VALIDITY_ENUM.Unknown, self.chain)
 
+    def compute_latest_cp(self):
+        # type: () -> CpBlock
+        for i in xrange(len(self.chain) - 1, -1, -1):
+            b = self.chain[i]
+            if isinstance(b, CpBlock):
+                return b
+        raise ValueError("No CpBlock in Chain")
+
 
 class TrustChain(object):
     """
@@ -493,7 +462,7 @@ class TrustChain(object):
         :param nonce: 
         :return: 
         """
-        tx = TxBlock(self.latest_compact_hash, self.next_seq, counterparty, m, self.vk, self._sk, nonce)
+        tx = TxBlock.new(self.latest_compact_hash, self.next_seq, counterparty, m, self.vk, self._sk, nonce)
         self._new_tx(tx)
 
     def _new_tx(self, tx):
@@ -517,7 +486,7 @@ class TrustChain(object):
         """
         assert cons.round not in self.consensus
         self.consensus[cons.round] = cons
-        cp = CpBlock(self.latest_compact_hash, self.next_seq, cons, p, self.vk, self._sk, ss, vks)
+        cp = CpBlock.new(self.latest_compact_hash, self.next_seq, cons, p, self.vk, self._sk, ss, vks)
         self._new_cp(cp)
 
     def _new_cp(self, cp):

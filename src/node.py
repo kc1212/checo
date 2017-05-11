@@ -1,31 +1,27 @@
 import Queue
 import argparse
-import sys
 import logging
 import random
+import sys
+import signal
 from base64 import b64encode, b64decode
+
+from twisted.internet import reactor, task, error
+from twisted.internet.endpoints import TCP4ClientEndpoint, connectProtocol
+from twisted.internet.protocol import Factory
 from typing import Dict, Tuple
 
-from twisted.internet import reactor, task
-from twisted.internet.endpoints import TCP4ClientEndpoint, connectProtocol
-from twisted.internet.error import CannotListenError
-from twisted.internet.protocol import Factory
-
-from src.utils.jsonreceiver import JsonReceiver
-from src.utils.messages import \
-    DummyMsg, PingMsg, PongMsg, \
-    BrachaMsg, Mo14Msg, ACSMsg, \
-    ChainMsg, SigMsg, CpMsg, ConsMsg, \
-    InstructionMsg, AskConsMsg
-from src.utils import Replay, Handled, set_logging, my_err_back, call_later, MAX_LINE_LEN
-from src.consensus.bracha import Bracha
+import src.messages.messages_pb2 as pb
+from src.protobufreceiver import ProtobufReceiver
 from src.consensus.acs import ACS
+from src.consensus.bracha import Bracha
 from src.consensus.mo14 import Mo14
 from src.trustchain.trustchain_runner import TrustChainRunner
-from .discovery import Discovery, got_discovery
+from src.utils import Replay, Handled, set_logging, my_err_back, call_later, MAX_LINE_LEN
+from src.discovery import Discovery, got_discovery
 
 
-class MyProto(JsonReceiver):
+class MyProto(ProtobufReceiver):
     """
     Main protocol that handles the Byzantine consensus, one instance is created for each connection
     """
@@ -41,9 +37,9 @@ class MyProto(JsonReceiver):
         peer = "<None>" if self.remote_vk is None else b64encode(self.remote_vk)
         logging.debug("NODE: deleting peer {}".format(peer))
         try:
-            del self.peers[self.remote_vk]
-        except KeyError:
-            logging.warning("NODE: peer {} already deleted".format(b64encode(self.remote_vk)))
+            reactor.stop()
+        except error.ReactorNotRunning:
+            pass
 
     def obj_received(self, obj):
         """
@@ -55,48 +51,57 @@ class MyProto(JsonReceiver):
 
         # logging.debug("NODE: received obj {} from {}".format(type(obj), "<remote_vk>"))
 
-        if isinstance(obj, PingMsg):
+        # TODO do something like handler registry
+
+        if isinstance(obj, pb.Ping):
             self.handle_ping(obj)
 
-        elif isinstance(obj, PongMsg):
+        elif isinstance(obj, pb.Pong):
             self.handle_pong(obj)
 
-        elif isinstance(obj, ACSMsg):
+        elif isinstance(obj, pb.ACS):
             if self.factory.config.failure == 'omission':
                 return
             res = self.factory.acs.handle(obj, self.remote_vk)
             self.process_acs_res(res, obj)
 
-        elif isinstance(obj, ChainMsg):
-            self.factory.tc_runner.handle(obj.body, self.remote_vk)
+        elif isinstance(obj, pb.TxReq):
+            self.factory.tc_runner.handle_tx_req(obj, self.remote_vk)
 
-        # NOTE: all the consensus related messages are handled separately
-        # ChainMsg is only for transactions and its validation
-        elif isinstance(obj, SigMsg):
+        elif isinstance(obj, pb.TxResp):
+            self.factory.tc_runner.handle_tx_resp(obj, self.remote_vk)
+
+        elif isinstance(obj, pb.ValidationReq):
+            self.factory.tc_runner.handle_validation_req(obj, self.remote_vk)
+
+        elif isinstance(obj, pb.ValidationResp):
+            self.factory.tc_runner.handle_validation_resp(obj, self.remote_vk)
+
+        elif isinstance(obj, pb.SigWithRound):
             self.factory.tc_runner.handle_sig(obj, self.remote_vk)
 
-        elif isinstance(obj, CpMsg):
+        elif isinstance(obj, pb.CpBlock):
             self.factory.tc_runner.handle_cp(obj, self.remote_vk)
 
-        elif isinstance(obj, ConsMsg):
+        elif isinstance(obj, pb.Cons):
             self.factory.tc_runner.handle_cons(obj, self.remote_vk)
 
-        elif isinstance(obj, AskConsMsg):
+        elif isinstance(obj, pb.AskCons):
             self.factory.tc_runner.handle_ask_cons(obj, self.remote_vk)
 
         # NOTE messages below are for testing, bracha/mo14 is normally handled by acs
 
-        elif isinstance(obj, BrachaMsg):
+        elif isinstance(obj, pb.Bracha):
             if self.factory.config.failure == 'omission':
                 return
             self.factory.bracha.handle(obj, self.remote_vk)
 
-        elif isinstance(obj, Mo14Msg):
+        elif isinstance(obj, pb.Mo14):
             if self.factory.config.failure == 'omission':
                 return
             self.factory.mo14.handle(obj, self.remote_vk)
 
-        elif isinstance(obj, DummyMsg):
+        elif isinstance(obj, pb.Dummy):
             logging.info("NODE: got dummy message from {}".format(b64encode(self.remote_vk)))
 
         else:
@@ -125,23 +130,23 @@ class MyProto(JsonReceiver):
             raise AssertionError("instance is not Replay or Handled")
 
     def send_ping(self):
-        self.send_obj(PingMsg(self.vk, self.config.port))
+        self.send_obj(pb.Ping(vk=self.vk, port=self.config.port))
         logging.debug("NODE: sent ping")
         self.state = 'CLIENT'
 
     def handle_ping(self, msg):
-        # type: (PingMsg) -> None
+        # type: (pb.Ping) -> None
         logging.debug("NODE: got ping, {}".format(msg))
         assert (self.state == 'SERVER')
         if msg.vk in self.peers.keys():
             logging.debug("NODE: ping found myself in peers.keys")
         self.peers[msg.vk] = (self.transport.getPeer().host, msg.port, self)
         self.remote_vk = msg.vk
-        self.send_obj(PongMsg(self.vk, self.config.port))
+        self.send_obj(pb.Pong(vk=self.vk, port=self.config.port))
         logging.debug("sent pong")
 
     def handle_pong(self, msg):
-        # type: (PongMsg) -> None
+        # type: (pb.Pong) -> None
         logging.debug("NODE: got pong, {}".format(msg))
         assert (self.state == 'CLIENT')
         if msg.vk in self.peers.keys():
@@ -164,7 +169,7 @@ class MyFactory(Factory):
         self.bracha = Bracha(self)  # just for testing
         self.mo14 = Mo14(self)  # just for testing
         self.acs = ACS(self)
-        self.tc_runner = TrustChainRunner(self, ChainMsg)
+        self.tc_runner = TrustChainRunner(self)
         self.vk = self.tc_runner.tc.vk
         self.q = Queue.Queue()  # (str, msg)
 
@@ -329,8 +334,9 @@ class MyFactory(Factory):
         :param msg: 
         :return: 
         """
-        assert isinstance(msg, InstructionMsg)
-        logging.info("NODE: handling instruction {}".format(msg))
+        assert isinstance(msg, pb.Instruction)
+        logging.info("NODE: handling instruction - {}".format(msg).replace('\n', ','))
+        self.config.from_instruction = True
 
         call_later(msg.delay, self.tc_runner.bootstrap_promoters)
 
@@ -409,16 +415,18 @@ class Config(object):
 
         self.ignore_promoter = ignore_promoter
 
+        self.from_instruction = False
+
 
 def run(config, bcast, discovery_addr):
-    JsonReceiver.MAX_LENGTH = MAX_LINE_LEN
+    ProtobufReceiver.MAX_LENGTH = MAX_LINE_LEN
 
     f = MyFactory(config)
 
     try:
         port = reactor.listenTCP(config.port, f)
         config.port = port.getHost().port
-    except CannotListenError:
+    except error.CannotListenError:
         logging.error("cannot listen on {}".format(config.port))
         sys.exit(1)
 
@@ -438,14 +446,14 @@ def run(config, bcast, discovery_addr):
     # optionally run tests, args.test == None implies reactive node
     # we use call later to wait until the nodes are registered
     if config.test == 'dummy':
-        call_later(5, f.bcast, DummyMsg('z'))
+        call_later(5, f.bcast, pb.Dummy(m='z'))
     elif config.test == 'bracha':
         call_later(6, f.bracha.bcast_init)
     elif config.test == 'mo14':
         call_later(6, f.mo14.start, config.value)
     elif config.test == 'acs':
         # use port number (unique on local network) as test message
-        call_later(6, f.acs.start, config.port, 1)
+        call_later(6, f.acs.start, str(config.port), 1)
     elif config.test == 'tc':
         call_later(5, f.tc_runner.make_tx, 1.0 / config.tx_rate, True)
         # optionally use validate
@@ -559,6 +567,16 @@ if __name__ == '__main__':
         run(Config(args.port, args.n, args.t, args.test, args.value, args.failure, args.tx_rate, args.consensus_delay,
                    args.fan_out, args.validate, args.ignore_promoter),
             args.broadcast, args.discovery)
+
+    def _signal_handler(s, frame):
+        try:
+            reactor.stop()
+        except error.ReactorNotRunning:
+            pass
+        logging.info("got signal {}".format(s))
+
+    signal.signal(signal.SIGINT, _signal_handler)
+    signal.signal(signal.SIGTERM, _signal_handler)
 
     if args.profile:
         import cProfile
