@@ -33,6 +33,13 @@ class MyProto(ProtobufReceiver):
         self.state = 'SERVER'
 
     def connection_lost(self, reason):
+        """
+        We don't try to test churn for this experiment, so there's no reason to continue running the node when some.
+        If a node is deleted, it means either some error occurred, or the experiment is completed.
+        Thus we stop the current reactor too.
+        :param reason: 
+        :return: 
+        """
         peer = "<None>" if self.remote_vk is None else b64encode(self.remote_vk)
         logging.debug("NODE: deleting peer {}".format(peer))
 
@@ -50,8 +57,6 @@ class MyProto(ProtobufReceiver):
         :param obj:
         :return:
         """
-
-        # logging.debug("NODE: received obj {} from {}".format(type(obj), "<remote_vk>"))
 
         # TODO do something like handler registry
 
@@ -111,7 +116,8 @@ class MyProto(ProtobufReceiver):
 
     def process_acs_res(self, o, m):
         """
-
+        This function checks whether the result is Replay or Handled.
+        If it's the former, the message is placed into factory.q and then we replay it (factory.process_queue).
         :param o: the object we're processing
         :param m: the original message
         :return:

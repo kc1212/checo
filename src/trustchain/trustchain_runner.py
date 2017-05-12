@@ -188,7 +188,7 @@ class TrustChainRunner(object):
         :return: 
         """
         assert isinstance(msg, pb.Cons)
-        logging.debug("TC: received pb.Cons {} from {}".format(msg, b64encode(remote_vk)))
+        logging.debug("TC: received Cons {} from {}".format(msg, b64encode(remote_vk)))
 
         cons = Cons(msg)
 
@@ -199,12 +199,20 @@ class TrustChainRunner(object):
                 self.factory.gossip(msg)
 
     def handle_ask_cons(self, msg, remote_vk):
+        # type: (pb.AskCons, str) -> None
+        """
+        If we have the consensus result, send it to the requester.
+        TODO vulnerable to spam
+        :param msg: 
+        :param remote_vk: 
+        :return: 
+        """
         assert isinstance(msg, pb.AskCons)
-        # TODO vulnerable to spam
         if msg.r in self.tc.consensus:
             self.send(remote_vk, self.tc.consensus[msg.r].pb)
 
     def _try_add_cp(self, r):
+        # type: (int) -> None
         """
         Try to add my own CP from the received consensus results and signatures
         The input parameter is a bit strange, we don't add the cp from the parameter, but from the buffer round_states
@@ -230,6 +238,7 @@ class TrustChainRunner(object):
         self._add_cp(r)
 
     def _add_cp(self, r):
+        # type: (int) -> None
         """
         :param r:
         :return:
@@ -277,8 +286,9 @@ class TrustChainRunner(object):
                     self.factory.acs.reset_then_start(pb.CpBlocks(cps=_msg).SerializeToString(), _r)
 
             call_later(self.consensus_delay, _try_start_acs, r + 1)
+
         else:
-            logging.info("TC: I'm NOT a promoter")
+            logging.info("TC: round {}, I'm NOT a promoter".format(r))
 
         # send new CP to either all promoters
         # TODO having this if statement for test isn't ideal
@@ -291,7 +301,6 @@ class TrustChainRunner(object):
         # type: (int) -> None
         """
         Call this function when I want to initiate a instance of the validation protocol.
-        First we check the cache and try to validate, if there's nothing in cache send the request.
         :param seq: The sequence number on my side for the TX that I want to validate
         :return: 
         """
@@ -328,6 +337,13 @@ class TrustChainRunner(object):
 
     def handle_validation_resp(self, resp, remote_vk):
         # type: (pb.ValidationResp, str) -> None
+        """
+        Try to validate the pieces that we just received.
+        Note that tc.verify_tx will also validate additional transactions when there's sufficient information in cache.
+        :param resp: 
+        :param remote_vk: 
+        :return: 
+        """
         assert isinstance(resp, pb.ValidationResp)
         logging.debug("TC: received validation resp from {}, {}".format(b64encode(remote_vk), resp))
 
@@ -363,6 +379,13 @@ class TrustChainRunner(object):
         self.factory.send(node, msg)
 
     def make_tx(self, interval, random_node=False):
+        # type: (float, bool) -> None
+        """
+        Entry point for making transactions periodically.
+        :param interval: 
+        :param random_node: 
+        :return: 
+        """
         if random_node:
             lc = task.LoopingCall(lambda: self._make_tx(self.factory.random_node))
         else:
@@ -372,11 +395,6 @@ class TrustChainRunner(object):
         lc.start(interval).addErrback(my_err_back)
 
     def _make_tx(self, node):
-        """
-        only use this in LoopingCall, not continuous transaction
-        :param node: 
-        :return: 
-        """
         if self.factory.config.ignore_promoter:
             if self.tc.vk in self.factory.promoters or node in self.factory.promoters:
                 return
@@ -395,6 +413,12 @@ class TrustChainRunner(object):
         logging.info("TC: added tx {}, from {}".format(encode_n(tx.hash), encode_n(self.tc.vk)))
 
     def make_validation(self, interval):
+        # type: (float) -> None
+        """
+        Entry point for making validations periodically.
+        :param interval: 
+        :return: 
+        """
         lc = task.LoopingCall(self._validate_random_tx)
         lc.start(interval).addErrback(my_err_back)
 
