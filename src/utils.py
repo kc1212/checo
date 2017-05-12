@@ -85,14 +85,10 @@ def hash_pointers_ok(blocks):
 
 
 def my_err_back(failure):
+    logging.error("ERROR BACK:")
     logging.error(failure.getErrorMessage())
     logging.error(failure.getTraceback())
-    failure.printTraceback()
-    try:
-        reactor.stop()
-    except error.ReactorNotRunning:
-        pass
-
+    stop_reactor()
 
 class GrowingList(list):
     def __setitem__(self, index, value):
@@ -103,3 +99,11 @@ class GrowingList(list):
 
 def encode_n(s, n=8):
     return b64encode(s)[0:n]
+
+
+def stop_reactor():
+    try:
+        reactor.stop()
+    except error.ReactorNotRunning:
+        pass
+

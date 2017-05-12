@@ -16,7 +16,7 @@ from src.consensus.acs import ACS
 from src.consensus.bracha import Bracha
 from src.consensus.mo14 import Mo14
 from src.trustchain.trustchain_runner import TrustChainRunner
-from src.utils import Replay, Handled, set_logging, my_err_back, call_later, MAX_LINE_LEN
+from src.utils import Replay, Handled, set_logging, my_err_back, call_later, MAX_LINE_LEN, stop_reactor
 from src.discovery import Discovery, got_discovery
 
 
@@ -41,10 +41,7 @@ class MyProto(ProtobufReceiver):
         except KeyError:
             logging.warning("NODE: peer {} already deleted".format(b64encode(self.remote_vk)))
 
-        try:
-            reactor.stop()
-        except error.ReactorNotRunning:
-            pass
+        stop_reactor()
 
     def obj_received(self, obj):
         """
@@ -493,6 +490,12 @@ if __name__ == '__main__':
         help='run the node with cProfile'
     )
     parser.add_argument(
+        '--timeout',
+        help='force exit after timeout, 0 means continue forever',
+        default=0,
+        type=int
+    )
+    parser.add_argument(
         '--test',
         choices=['dummy', 'bracha', 'mo14', 'acs', 'tc', 'bootstrap'],
         help='[testing] choose an algorithm to initialise'
@@ -535,8 +538,12 @@ if __name__ == '__main__':
                    args.fan_out, args.validate, args.ignore_promoter),
             args.broadcast, args.discovery)
 
+    if args.timeout != 0:
+        call_later(args.timeout, stop_reactor)
+
     if args.profile:
         import cProfile
         cProfile.run('_run()', args.profile)
     else:
         _run()
+
