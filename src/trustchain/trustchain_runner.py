@@ -79,6 +79,9 @@ class TrustChainRunner(object):
         self.random_node_for_tx = False
         self.validation_enabled = False
 
+        self._verifiable_txs = []
+        self._verifiable_txs_t = time.time()
+
         # attributes below are states for building new CP blocks
         self.round_states = defaultdict(RoundState)
 
@@ -383,7 +386,7 @@ class TrustChainRunner(object):
                 return
 
         # throttle transactions if we cannot validate them timely
-        if self.validation_enabled and len(self.tc.get_verifiable_txs()) > 20 * self.factory.config.n:
+        if self.validation_enabled and len(self.verifiable_txs) > 20 * self.factory.config.n:
             logging.info("TC: throttling")
             return
 
@@ -416,12 +419,46 @@ class TrustChainRunner(object):
         if self.tc.latest_cp.round < 2:
             return
 
-        txs = self.tc.get_verifiable_txs()
+        txs = self.verifiable_txs
 
         if not txs:
             return
 
-        self._send_validation_req(random.choice(txs).seq)
+        self._send_validation_req(self.rand_verifiable_tx.seq)
+
+    @property
+    def verifiable_txs(self):
+        """
+        We cache a list of verifiable txs because calling self.tc.get_verifiable_txs is expensive
+        :return: 
+        """
+        if time.time() - self._verifiable_txs_t < 5:
+            return self._verifiable_txs
+
+        if self._verifiable_txs:  # if list not empty
+            return self._verifiable_txs
+
+        self._verifiable_txs = self.tc.get_verifiable_txs()
+        self._verifiable_txs_t = time.time()
+        logging.info("TC: rewriting _verifiable_txs")
+
+        return self._verifiable_txs
+
+    @property
+    def rand_verifiable_tx(self):
+        """
+        Return a random verifiable_tx, assume the list is not empty
+        :return: 
+        """
+        if not self._verifiable_txs:
+            raise AssertionError("self._verifiable_txs is empty")
+
+        tx = random.choice(self._verifiable_txs)
+
+        idx = self._verifiable_txs.index(tx)
+        del self._verifiable_txs[idx]
+
+        return tx
 
     def bootstrap_promoters(self):
         """
