@@ -3,7 +3,6 @@ import argparse
 import logging
 import random
 import sys
-import signal
 from base64 import b64encode, b64decode
 
 from twisted.internet import reactor, task, error
@@ -36,6 +35,12 @@ class MyProto(ProtobufReceiver):
     def connection_lost(self, reason):
         peer = "<None>" if self.remote_vk is None else b64encode(self.remote_vk)
         logging.debug("NODE: deleting peer {}".format(peer))
+
+        try:
+            del self.peers[self.remote_vk]
+        except KeyError:
+            logging.warning("NODE: peer {} already deleted".format(b64encode(self.remote_vk)))
+
         try:
             reactor.stop()
         except error.ReactorNotRunning:
@@ -529,16 +534,6 @@ if __name__ == '__main__':
         run(Config(args.port, args.n, args.t, args.test, args.value, args.failure, args.tx_rate, args.consensus_delay,
                    args.fan_out, args.validate, args.ignore_promoter),
             args.broadcast, args.discovery)
-
-    def _signal_handler(s, frame):
-        try:
-            reactor.stop()
-        except error.ReactorNotRunning:
-            pass
-        logging.info("got signal {}".format(s))
-
-    signal.signal(signal.SIGINT, _signal_handler)
-    signal.signal(signal.SIGTERM, _signal_handler)
 
     if args.profile:
         import cProfile
