@@ -77,7 +77,6 @@ class TrustChainRunner(object):
         self.bootstrap_lc = None
 
         self.random_node_for_tx = False
-        self.validation_enabled = False
 
         # attributes below are states for building new CP blocks
         self.round_states = defaultdict(RoundState)
@@ -382,11 +381,6 @@ class TrustChainRunner(object):
             if self.tc.vk in self.factory.promoters or node in self.factory.promoters:
                 return
 
-        # throttle transactions if we cannot validate them timely
-        if self.validation_enabled and len(self.tc.get_verifiable_txs()) > 20 * self.factory.config.n:
-            logging.info("TC: throttling")
-            return
-
         # cannot be myself
         assert node != self.factory.vk
 
@@ -403,7 +397,6 @@ class TrustChainRunner(object):
     def make_validation(self, interval):
         lc = task.LoopingCall(self._validate_random_tx)
         lc.start(interval).addErrback(my_err_back)
-        self.validation_enabled = True
 
     def _validate_random_tx(self):
         """
