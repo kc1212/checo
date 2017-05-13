@@ -124,6 +124,11 @@ def _verify_signatures(data, ss, vks, t):
     # type: (str, List[Signature], List[str], int) -> None
     oks = 0
     _ss = [s for s in ss if s.vk in vks]  # only consider nodes that are promoters
+
+    # validation will surely fail if these are not satisfied
+    assert len(ss) > t
+    assert len(_ss) > t
+
     for _s in _ss:
         try:
             _s.verify(_s.vk, data)
