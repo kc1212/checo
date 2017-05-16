@@ -86,15 +86,31 @@ def load_data(folder_name):
     for i, facilitator in enumerate(facilitators):
         for j, population in enumerate(populations):
             full_path = os.path.join(folder_name, "{}-{}".format(facilitator, population))
-            consensus_mean, consensus_std = _read_consensus_stats(full_path)
-            validation_rate = _read_validation_rate(full_path)
+            print "processing", full_path
+
+            consensus = ConsensusReader()
+            validation = ValidationReader()
+
+            fnames = list_files_that_match(full_path)
+            for fname in fnames:
+                iter_line_with_cb(fname, [consensus.read_line, validation.read_line])
+                consensus.finish_file(fname)
+                validation.finish_file(fname)
 
             # NOTE below need to be in sync with `data_labels`
-            arr[i][j][0] = consensus_mean
-            arr[i][j][1] = consensus_std
-            arr[i][j][2] = validation_rate
+            arr[i][j][0] = consensus.mean
+            arr[i][j][1] = consensus.std
+            arr[i][j][2] = validation.total_rate
 
     return arr, facilitators, populations, data_labels
+
+
+class PlotData(object):
+    def __init__(self, arr, facilitators, populations, data_labels):
+        self.arr = arr
+        self.facilitators = facilitators
+        self.populations = populations
+        self.data_labels = data_labels
 
 
 def plot(folder_name):
@@ -148,59 +164,71 @@ def list_files_that_match(folder_name, match='.err'):
     return fnames
 
 
-def _read_consensus_stats(folder_name):
-    fnames = list_files_that_match(folder_name)
-    differences = []
-    match = 'updated new promoters'
+class ConsensusReader(object):
+    def __init__(self):
+        self._lines_of_interest = []
+        self._differences = []
 
-    for fname in fnames:
-        lines_of_interest = find_lines_of_interest(match, fname)
+    def read_line(self, line):
+        match = 'updated new promoters'
+        if match in line:
+            self._lines_of_interest.append(line)
 
-        times = [datetime_from_line(line) for line in lines_of_interest]
+    def finish_file(self, fname):
+        times = [datetime_from_line(line) for line in self._lines_of_interest]
         idx = 0
         for a, b in zip(times, times[1:]):
-            if "round {}".format(idx+1) in lines_of_interest[idx] \
-                    and "round {}".format(idx+2) in lines_of_interest[idx+1]:
-                differences.append(difference_in_seconds(a, b))
+            if "round {}".format(idx+1) in self._lines_of_interest[idx] \
+                    and "round {}".format(idx+2) in self._lines_of_interest[idx+1]:
+                self._differences.append(difference_in_seconds(a, b))
                 idx += 1
             else:
                 print "a round is skipped: round {} in file {}\n" \
                       "\t{}\n" \
-                      "\t{}".format(idx, fname, lines_of_interest[idx+1], lines_of_interest[idx+2])
+                      "\t{}".format(idx, fname, self._lines_of_interest[idx+1], self._lines_of_interest[idx+2])
                 break
+        self._lines_of_interest = []
 
-    return np.mean(differences), np.std(differences)
+    @property
+    def mean(self):
+        return np.mean(self._differences)
+
+    @property
+    def std(self):
+        return np.std(self._differences)
 
 
-def _read_validation_rate(folder_name):
-    print "reading validation stats of {}".format(folder_name)
-    fnames = list_files_that_match(folder_name)
-    rates = []
-    match = 'TC: verified'
+class ValidationReader(object):
+    def __init__(self):
+        self._lines_of_interest = []
+        self._rates = []
 
-    for fname in fnames:
-        r = get_last_round(fname)
-        lines_of_interest = find_lines_of_interest(match, fname, until='round {}, updated new promoters'.format(r))
+    def read_line(self, line):
+        match = 'TC: verified'
+        if match in line:
+            self._lines_of_interest.append(line)
 
-        if len(lines_of_interest) == 0:
-            print "WARNING: no lines of interest for {}".format(fname)
-            continue
-        start_t = datetime_from_line(lines_of_interest[0])
-        end_t = datetime_from_line(lines_of_interest[-1])
-
-        if not lines_of_interest:
+    def finish_file(self, fname):
+        if not self._lines_of_interest:
             print "Nothing got validated for {}".format(fname)
-            continue
+            return
+
+        start_t = datetime_from_line(self._lines_of_interest[0])
+        end_t = datetime_from_line(self._lines_of_interest[-1])
 
         diff = difference_in_seconds(start_t, end_t)
         if diff == 0:
             print "Difference is zero for {}".format(fname)
-            continue
+            return
 
-        rate = float(len(lines_of_interest)) / diff
-        rates.append(rate)
+        rate = float(len(self._lines_of_interest)) / diff
+        self._rates.append(rate)
 
-    return np.sum(rates)
+        self._lines_of_interest = []
+
+    @property
+    def total_rate(self):
+        return np.sum(self._rates)
 
 
 def datetime_from_line(line):
@@ -214,32 +242,11 @@ def datetime_from_line(line):
     return dateutil.parser.parse(line.split(' - ')[0])
 
 
-def find_lines_of_interest(match, fname, until=None, ignore=None):
-    """
-    return lines that contain `match`
-    :param match: 
-    :param fname: 
-    :param until: match a string for a cut-off point
-    :param ignore: return empty list if there's a match
-    :return: 
-    """
-    lines_of_interest = []
+def iter_line_with_cb(fname, cbs):
     with open(fname, 'r') as f:
         for line in f:
-            if match in line:
-                if ignore is not None and ignore in line:
-                    return []
-                if until is not None and until in line:
-                    return lines_of_interest
-                lines_of_interest.append(line)
-
-    return lines_of_interest
-
-
-def get_last_round(fname):
-    match = 'updated new promoters'
-    last = find_lines_of_interest(match, fname)[-1]
-    return int(last.split('round ')[1][0])
+            for cb in cbs:
+                cb(line)
 
 
 def difference_in_seconds(a, b):
