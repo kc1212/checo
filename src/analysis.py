@@ -6,6 +6,7 @@ import os
 import argparse
 import zipfile
 import dateutil
+import pickle
 
 
 """
@@ -62,6 +63,8 @@ def load_data(folder_name):
     :return: 
     """
 
+    extract_files(folder_name)
+
     # iterate the directories once to see what keys we have
     data_labels = ['consensus mean', 'consensus std', 'throughput mean', 'throughput std']
     facilitators = []
@@ -102,18 +105,20 @@ def load_data(folder_name):
             arr[i][j][1] = consensus.std
             arr[i][j][2] = validation.total_rate
 
-    return arr, facilitators, populations, data_labels
+    x = (arr, facilitators, populations, data_labels)
+
+    with open(os.path.join(folder_name, 'pickle'), 'w') as f:
+        pickle.dump(x, f)
+    return x
 
 
-class PlotData(object):
-    def __init__(self, arr, facilitators, populations, data_labels):
-        self.arr = arr
-        self.facilitators = facilitators
-        self.populations = populations
-        self.data_labels = data_labels
+def load_from_cache(folder_name):
+    with open(os.path.join(folder_name, 'pickle'), 'r') as f:
+        x = pickle.load(f)
+    return x
 
 
-def plot(folder_name):
+def plot(folder_name, recompute):
     """
     We have two "inputs" - population and no. of facilitator and two "outputs" - consensus time and throughput
     thus 4 graphs is needed. More inputs/outputs may be added later.
@@ -121,9 +126,14 @@ def plot(folder_name):
     :return: 
     """
 
-    extract_files(folder_name)
+    if recompute:
+        arr, facilitators, populations, data_labels = load_data(folder_name)
+    else:
+        try:
+            arr, facilitators, populations, data_labels = load_from_cache(folder_name)
+        except IOError:
+            arr, facilitators, populations, data_labels = load_data(folder_name)
 
-    arr, facilitators, populations, data_labels = load_data(folder_name)
     print arr
 
     # plot throughput vs population
@@ -267,8 +277,13 @@ if __name__ == '__main__':
         help='directory containing the data',
         default='$HOME/tudelft/consensus-experiment/new'
     )
+    parser.add_argument(
+        '--recompute',
+        help='recompute, do not use the cache',
+        action='store_true'
+    )
     args = parser.parse_args()
 
-    plot(os.path.expandvars(args.dir))
+    plot(os.path.expandvars(args.dir), args.recompute)
 
     raw_input()
