@@ -172,8 +172,8 @@ class CpBlock(ProtobufWrapper):
         inner = pb.CpBlock.Inner(prev=prev, seq=seq, round=cons.round, cons_hash=cons.hash, ss=[s.pb for s in ss], p=p)
 
         if cons.round != -1 or len(ss) != 0 or len(vks) != 0 or inner.seq != 0:
-            t = math.floor((len(vks) - 1) / 3.0)
-            _verify_signatures(inner.cons_hash, ss, vks, int(t))
+            t = len(vks) / 3
+            _verify_signatures(inner.cons_hash, ss, vks, t)
         else:
             # if this is executed, it means this is a genesis block
             pass
