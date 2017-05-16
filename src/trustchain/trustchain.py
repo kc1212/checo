@@ -122,13 +122,16 @@ class TxBlock(ProtobufWrapper):
 
 def _verify_signatures(data, ss, vks, t):
     # type: (str, List[Signature], List[str], int) -> None
-    oks = 0
     _ss = [s for s in ss if s.vk in vks]  # only consider nodes that are promoters
 
     # validation will surely fail if these are not satisfied
-    assert len(ss) > t
-    assert len(_ss) > t
+    if not len(ss) > t:
+        raise ValueError("{} > {}, not satisfied".format(len(ss), t))
 
+    if not len(_ss) > t:
+        raise ValueError("{} > {}, not satisfied".format(len(_ss), t))
+
+    oks = 0
     for _s in _ss:
         try:
             _s.verify(_s.vk, data)
@@ -172,8 +175,8 @@ class CpBlock(ProtobufWrapper):
         inner = pb.CpBlock.Inner(prev=prev, seq=seq, round=cons.round, cons_hash=cons.hash, ss=[s.pb for s in ss], p=p)
 
         if cons.round != -1 or len(ss) != 0 or len(vks) != 0 or inner.seq != 0:
-            t = math.floor((len(vks) - 1) / 3.0)
-            _verify_signatures(inner.cons_hash, ss, vks, int(t))
+            t = (len(vks) - 1) / 3
+            _verify_signatures(inner.cons_hash, ss, vks, t)
         else:
             # if this is executed, it means this is a genesis block
             pass
