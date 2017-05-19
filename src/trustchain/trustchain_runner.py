@@ -81,6 +81,8 @@ class TrustChainRunner(object):
         # attributes below are states for building new CP blocks
         self.round_states = defaultdict(RoundState)
 
+        self._initial_promoters = []
+
         random.seed()
 
     def _log_info(self):
@@ -100,6 +102,11 @@ class TrustChainRunner(object):
 
     def _latest_promoters(self):
         r = self.tc.latest_round
+        return self._promoter_of_round(r)
+
+    def _promoter_of_round(self, r):
+        if r == 0:
+            return self._initial_promoters
         return self.tc.consensus[r].get_promoters(self.factory.config.n)
 
     def handle_cons_from_acs(self, msg):
@@ -249,7 +256,7 @@ class TrustChainRunner(object):
         self.tc.new_cp(1,
                        self.round_states[r].received_cons,
                        self.round_states[r].received_sigs.values(),
-                       self.factory.promoters)
+                       self._promoter_of_round(r - 1))
         if not self.tc.compact_cp_in_consensus(_prev_cp, self.tc.latest_round):
             logging.info("TC: round {}, my previous CP not in consensus".format(r))
 
@@ -449,6 +456,8 @@ class TrustChainRunner(object):
         n = self.factory.config.n
         self.factory.promoters = sorted(self.factory.peers.keys())[:n]
         self.factory.promoter_cast(self.tc.genesis.pb)
+
+        self._initial_promoters = self.factory.promoters
 
         def bootstrap_when_ready():
             if self.factory.vk in self.factory.promoters:

@@ -14,6 +14,10 @@ VALIDITY_ENUM = Enum('VALIDITY_ENUM', 'Valid Invalid Unknown')
 
 class ProtobufWrapper(object):
     def __init__(self, x):
+        """
+        The argument `x`, or `self.pb`, is the only data that gets serialized.
+        :param x: 
+        """
         self.pb = x
         self._str = None
         self._hash = None
@@ -260,6 +264,7 @@ class Cons(ProtobufWrapper):
         ProtobufWrapper.__init__(self, x)
         self.round = self.pb.round
         self.blocks = [CpBlock(blk) for blk in self.pb.blocks]  # convert to TrustChain type
+        self._promoters = []
 
     @classmethod
     def new(cls, round, blocks):
@@ -274,9 +279,11 @@ class Cons(ProtobufWrapper):
 
     def get_promoters(self, n):
         # type: () -> List[str]
-        registered = [cp for cp in self.blocks if cp.inner.p == 1]
-        registered.sort(key=lambda x: x.luck)
-        return [b.s.vk for b in registered][:n]
+        if not self._promoters:
+            registered = [cp for cp in self.blocks if cp.inner.p == 1]
+            registered.sort(key=lambda x: x.luck)
+            self._promoters = [b.s.vk for b in registered][:n]
+        return self._promoters
 
     @property
     def count(self):
@@ -449,8 +456,6 @@ class TrustChain(object):
     If it's the latter, there needs to be some communication mechanism.
 
     We assume there's a keyserver, so public keys (vk) of all nodes are available to us.
-
-    type System = Map<Node, Chain>;
     """
 
     def __init__(self):
