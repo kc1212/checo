@@ -134,11 +134,12 @@ def plot(folder_name, recompute):
         except IOError:
             arr, facilitators, populations, data_labels = load_data(folder_name)
 
-    print arr
+    consensus_idx = 0
+    consensus_std_idx = 1
+    throughtput_idx = 2
 
     # plot throughput vs population
     p1 = plt.figure(1)
-    throughtput_idx = 2
     assert data_labels[throughtput_idx] == 'throughput mean'
     for i, facilitator in enumerate(facilitators):
         legend = '{} facilitators'.format(facilitator)
@@ -151,9 +152,8 @@ def plot(folder_name, recompute):
     plt.grid()
     p1.show()
 
-    # plot consensus vs population
+    # plot consensus duration vs population
     p2 = plt.figure(2)
-    consensus_idx = 0
     assert data_labels[consensus_idx] == 'consensus mean'
     for i, facilitator in enumerate(facilitators):
         legend = '{} facilitators'.format(facilitator)
@@ -163,6 +163,18 @@ def plot(folder_name, recompute):
     plt.legend(loc='upper left')
     plt.grid()
     p2.show()
+
+    # plot consensus vs facilitators
+    p3 = plt.figure(3)
+    for i, population in enumerate(populations):
+        # TODO put 'population' in legend title
+        legend = '{} population'.format(population)
+        plt.plot(facilitators, arr[:, i, consensus_idx], STYLES[i], label=legend)
+    plt.ylabel('Consensus duration (s)')
+    plt.xlabel('Number of facilitators')
+    plt.legend(loc='upper left')
+    plt.grid()
+    p3.show()
 
 
 def list_files_that_match(folder_name, match='.err'):
