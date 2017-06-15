@@ -28,9 +28,11 @@ After extracting
 """
 
 
-LINE_STYLES = ['-', '--', '-.', ':']
-MARKER_STYLES = ['x', '.', 'o', 's', '*', ',']
-STYLES = [m + l for l in LINE_STYLES for m in MARKER_STYLES]
+MARKER_STYLES = ['x', 'o', '^', 's', '*', 'v']
+LINE_STYLES = ['-', '--']
+STYLES = [l + m for m in MARKER_STYLES for l in LINE_STYLES]
+CUSTOM_STYLES = ['x-', '^--', '*:', 'o--',  's:', 'v-', 'x-.']
+LINE_WIDTH = 1
 
 
 def extract_file(file_name):
@@ -142,13 +144,11 @@ def plot(folder_name, recompute):
     p1 = plt.figure(1)
     assert data_labels[throughtput_idx] == 'throughput mean'
     for i, facilitator in enumerate(facilitators):
-        legend = '{} facilitators'.format(facilitator)
-        # style =
-        plt.plot(populations, arr[i, :, throughtput_idx], STYLES[i], label=legend)
-
+        legend = '{}'.format(facilitator)
+        plt.plot(populations, arr[i, :, throughtput_idx], CUSTOM_STYLES[i], label=legend, lw=LINE_WIDTH)
     plt.ylabel('Throughput (validated tx / s)')
     plt.xlabel('Population size')
-    plt.legend(loc='upper left')
+    plt.legend(loc='upper left', title='facilitators')
     plt.grid()
     p1.show()
 
@@ -156,11 +156,11 @@ def plot(folder_name, recompute):
     p2 = plt.figure(2)
     assert data_labels[consensus_idx] == 'consensus mean'
     for i, facilitator in enumerate(facilitators):
-        legend = '{} facilitators'.format(facilitator)
-        plt.plot(populations, arr[i, :, consensus_idx], STYLES[i], label=legend)
+        legend = '{}'.format(facilitator)
+        plt.plot(populations, arr[i, :, consensus_idx], CUSTOM_STYLES[i], label=legend, lw=LINE_WIDTH)
     plt.ylabel('Consensus duration (s)')
     plt.xlabel('Population size')
-    plt.legend(loc='upper left')
+    plt.legend(loc='upper left', title='facilitators')
     plt.grid()
     p2.show()
 
@@ -168,11 +168,11 @@ def plot(folder_name, recompute):
     p3 = plt.figure(3)
     for i, population in enumerate(populations):
         # TODO put 'population' in legend title
-        legend = '{} population'.format(population)
-        plt.plot(facilitators, arr[:, i, consensus_idx], STYLES[i], label=legend)
+        legend = '{}'.format(population)
+        plt.plot(facilitators, arr[:, i, consensus_idx], STYLES[i], label=legend, lw=LINE_WIDTH)
     plt.ylabel('Consensus duration (s)')
     plt.xlabel('Number of facilitators')
-    plt.legend(loc='upper left')
+    plt.legend(loc='upper left', title='population')
     plt.grid()
     p3.show()
 
