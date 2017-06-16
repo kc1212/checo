@@ -207,7 +207,7 @@ class MyFactory(Factory):
         def print_messages():
             logging.info('NODE: messages info {{ "sent": {}, "recv": {} }}'
                          .format(json.dumps(self.sent_message_log), json.dumps(self.recv_message_log)))
-        task.LoopingCall(print_messages).start(2, False).addErrback(my_err_back)
+        task.LoopingCall(print_messages).start(5, False).addErrback(my_err_back)
 
     def process_queue(self):
         # we use counter to stop this routine from running forever,
