@@ -3,6 +3,8 @@ import argparse
 import logging
 import random
 import sys
+import json
+from collections import defaultdict
 from base64 import b64encode, b64decode
 
 from twisted.internet import reactor, task, error
@@ -25,6 +27,7 @@ class MyProto(ProtobufReceiver):
     Main protocol that handles the Byzantine consensus, one instance is created for each connection
     """
     def __init__(self, factory):
+        # type: (MyFactory) -> None
         self.factory = factory
         self.config = factory.config
         self.vk = factory.vk
@@ -99,20 +102,29 @@ class MyProto(ProtobufReceiver):
         # NOTE messages below are for testing, bracha/mo14 is normally handled by acs
 
         elif isinstance(obj, pb.Bracha):
-            if self.factory.config.failure == 'omission':
-                return
-            self.factory.bracha.handle(obj, self.remote_vk)
+            if self.factory.config.failure != 'omission':
+                self.factory.bracha.handle(obj, self.remote_vk)
 
         elif isinstance(obj, pb.Mo14):
-            if self.factory.config.failure == 'omission':
-                return
-            self.factory.mo14.handle(obj, self.remote_vk)
+            if self.factory.config.failure != 'omission':
+                self.factory.mo14.handle(obj, self.remote_vk)
 
         elif isinstance(obj, pb.Dummy):
             logging.info("NODE: got dummy message from {}".format(b64encode(self.remote_vk)))
 
         else:
             raise AssertionError("invalid message type {}".format(obj))
+
+        self.factory.recv_message_log[obj.__class__.__name__] += obj.ByteSize()
+
+    def send_obj(self, obj):
+        """
+        Wrapper around ProtobufReceiver.send_obj for logging
+        :param obj:
+        :return:
+        """
+        ProtobufReceiver.send_obj(self, obj)
+        self.factory.sent_message_log[obj.__class__.__name__] += obj.ByteSize()
 
     def process_acs_res(self, o, m):
         """
@@ -187,6 +199,15 @@ class MyFactory(Factory):
         # start looping call on the queue
         self.lc = task.LoopingCall(self.process_queue)
         self.lc.start(1).addErrback(my_err_back)
+
+        # logging message size
+        self.recv_message_log = defaultdict(long)
+        self.sent_message_log = defaultdict(long)
+
+        def print_messages():
+            logging.info('NODE: messages info {{ "sent": {}, "recv": {} }}'
+                         .format(json.dumps(self.sent_message_log), json.dumps(self.recv_message_log)))
+        task.LoopingCall(print_messages).start(2, False).addErrback(my_err_back)
 
     def process_queue(self):
         # we use counter to stop this routine from running forever,
