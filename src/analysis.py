@@ -7,6 +7,7 @@ import argparse
 import zipfile
 import dateutil
 import pickle
+import enum
 
 
 """
@@ -33,6 +34,12 @@ LINE_STYLES = ['-', '--']
 STYLES = [l + m for m in MARKER_STYLES for l in LINE_STYLES]
 CUSTOM_STYLES = ['x-', '^--', '*:', 'o--',  's:', 'v-', 'x-.']
 LINE_WIDTH = 1
+Exp = enum.Enum('Exp',
+                'round_duration_mean '
+                'round_duration_std '
+                'validation_count '
+                'consensus_duration_mean '
+                'consensus_duration_std')
 
 
 def extract_file(file_name):
@@ -68,7 +75,6 @@ def load_data(folder_name):
     extract_files(folder_name)
 
     # iterate the directories once to see what keys we have
-    data_labels = ['consensus mean', 'consensus std', 'throughput mean', 'throughput std']
     facilitators = []
     populations = []
     for path in os.listdir(folder_name):
@@ -85,7 +91,7 @@ def load_data(folder_name):
     populations = list(set(populations))
     populations.sort()
 
-    arr = np.empty([len(facilitators), len(populations), len(data_labels)])
+    arr = np.empty([len(facilitators), len(populations), len(Exp)])
 
     # iterate the directory again to actually read the data
     for i, facilitator in enumerate(facilitators):
@@ -93,21 +99,26 @@ def load_data(folder_name):
             full_path = os.path.join(folder_name, "{}-{}".format(facilitator, population))
             print "processing", full_path
 
-            consensus = ConsensusReader()
-            validation = ValidationReader()
+            round_duration = RoundDurationReader()
+            validation_count = ValidationCountReader()
+            consensus_duration = ConsensusDurationReader()
 
             fnames = list_files_that_match(full_path)
             for fname in fnames:
-                iter_line_with_cb(fname, [consensus.read_line, validation.read_line])
-                consensus.finish_file(fname)
-                validation.finish_file(fname)
+                iter_line_with_cb(fname,
+                                  [round_duration.read_line, validation_count.read_line, consensus_duration.read_line])
+                round_duration.finish_file(fname)
+                validation_count.finish_file(fname)
+                consensus_duration.finish_file(fname)
 
             # NOTE below need to be in sync with `data_labels`
-            arr[i][j][0] = consensus.mean
-            arr[i][j][1] = consensus.std
-            arr[i][j][2] = validation.total_rate
+            arr[i][j][0] = round_duration.mean
+            arr[i][j][1] = round_duration.std
+            arr[i][j][2] = validation_count.total_rate
+            arr[i][j][3] = consensus_duration.mean
+            arr[i][j][4] = consensus_duration.std
 
-    x = (arr, facilitators, populations, data_labels)
+    x = (arr, facilitators, populations)
 
     with open(os.path.join(folder_name, 'pickle'), 'w') as f:
         pickle.dump(x, f)
@@ -129,52 +140,51 @@ def plot(folder_name, recompute):
     """
 
     if recompute:
-        arr, facilitators, populations, data_labels = load_data(folder_name)
+        arr, facilitators, populations = load_data(folder_name)
     else:
         try:
-            arr, facilitators, populations, data_labels = load_from_cache(folder_name)
+            arr, facilitators, populations = load_from_cache(folder_name)
         except IOError:
-            arr, facilitators, populations, data_labels = load_data(folder_name)
-
-    consensus_idx = 0
-    consensus_std_idx = 1
-    throughtput_idx = 2
+            arr, facilitators, populations = load_data(folder_name)
 
     # plot throughput vs population
     p1 = plt.figure(1)
-    assert data_labels[throughtput_idx] == 'throughput mean'
     for i, facilitator in enumerate(facilitators):
         legend = '{}'.format(facilitator)
-        plt.plot(populations, arr[i, :, throughtput_idx], CUSTOM_STYLES[i], label=legend, lw=LINE_WIDTH)
+        plt.plot(populations, arr[i, :, Exp.validation_count.value - 1], CUSTOM_STYLES[i], label=legend, lw=LINE_WIDTH)
     plt.ylabel('Throughput (validated tx / s)')
-    plt.xlabel('Population size')
+    plt.xlabel('Population size $N$')
     plt.legend(loc='upper left', title='facilitators')
     plt.grid()
     p1.show()
 
-    # plot consensus duration vs population
+    # plot round duration vs population
     p2 = plt.figure(2)
-    assert data_labels[consensus_idx] == 'consensus mean'
     for i, facilitator in enumerate(facilitators):
         legend = '{}'.format(facilitator)
-        plt.plot(populations, arr[i, :, consensus_idx], CUSTOM_STYLES[i], label=legend, lw=LINE_WIDTH)
-    plt.ylabel('Consensus duration (s)')
-    plt.xlabel('Population size')
+        plt.plot(populations, arr[i, :, Exp.round_duration_mean.value - 1], CUSTOM_STYLES[i], label=legend, lw=LINE_WIDTH)
+    plt.ylabel('Round duration (seconds)')
+    plt.xlabel('Population size $N$')
     plt.legend(loc='upper left', title='facilitators')
     plt.grid()
     p2.show()
 
-    # plot consensus vs facilitators
+    # plot rounds duration vs facilitators
     p3 = plt.figure(3)
     for i, population in enumerate(populations):
-        # TODO put 'population' in legend title
         legend = '{}'.format(population)
-        plt.plot(facilitators, arr[:, i, consensus_idx], STYLES[i], label=legend, lw=LINE_WIDTH)
-    plt.ylabel('Consensus duration (s)')
-    plt.xlabel('Number of facilitators')
+        plt.plot(facilitators, arr[:, i, Exp.round_duration_mean.value - 1], STYLES[i], label=legend, lw=LINE_WIDTH)
+    plt.ylabel('Round duration (seconds)')
+    plt.xlabel('Number of facilitators $n$')
     plt.legend(loc='upper left', title='population')
     plt.grid()
     p3.show()
+
+    # plot consensus duration vs facilitators
+    # p4 = plt.figure()
+    # for i, populations in enumerate(populations):
+    #     legend = '{}'.format(populations)
+    #     plt.plot(facilitators, arr[:, i, Exp.consensus_duration_mean.value - 1], STYLES[i], label=legend, lw=LINE_WIDTH)
 
 
 def list_files_that_match(folder_name, match='.err'):
@@ -186,7 +196,7 @@ def list_files_that_match(folder_name, match='.err'):
     return fnames
 
 
-class ConsensusReader(object):
+class RoundDurationReader(object):
     def __init__(self):
         self._lines_of_interest = []
         self._differences = []
@@ -220,7 +230,33 @@ class ConsensusReader(object):
         return np.std(self._differences)
 
 
-class ValidationReader(object):
+class ConsensusDurationReader(object):
+    def __init__(self):
+        self._start_time = None
+        self._durations = []
+
+    def read_line(self, line):
+        if self._start_time:
+            if 'ACS: DONE':
+                self._durations.append(difference_in_seconds(self._start_time, datetime_from_line(line)))
+                self._start_time = None
+        else:
+            if 'ACS: initiating' in line:
+                self._start_time = datetime_from_line(line)
+
+    def finish_file(self, fname):
+        self._start_time = None
+
+    @property
+    def mean(self):
+        return np.mean(self._durations)
+
+    @property
+    def std(self):
+        return np.std(self._durations)
+
+
+class ValidationCountReader(object):
     def __init__(self):
         self._lines_of_interest = []
         self._rates = []
@@ -251,6 +287,14 @@ class ValidationReader(object):
     @property
     def total_rate(self):
         return np.sum(self._rates)
+
+
+class MessageReader(object):
+    def __init__(self):
+        pass
+
+    def read_line(self, line):
+        pass
 
 
 def datetime_from_line(line):
@@ -287,7 +331,6 @@ if __name__ == '__main__':
     parser.add_argument(
         '--dir',
         help='directory containing the data',
-        default='$HOME/tudelft/consensus-experiment/new'
     )
     parser.add_argument(
         '--recompute',
