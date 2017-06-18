@@ -8,6 +8,8 @@ import zipfile
 import dateutil
 import pickle
 import enum
+import json
+import collections
 
 
 """
@@ -39,7 +41,9 @@ Exp = enum.Enum('Exp',
                 'round_duration_std '
                 'validation_count '
                 'consensus_duration_mean '
-                'consensus_duration_std')
+                'consensus_duration_std '
+                'message_size_cons '
+                'message_size_tx')
 
 
 def extract_file(file_name):
@@ -102,14 +106,20 @@ def load_data(folder_name):
             round_duration = RoundDurationReader()
             validation_count = ValidationCountReader()
             consensus_duration = ConsensusDurationReader()
+            message_size = MessageSizeReader()
+            # readers = [round_duration, validation_count, consensus_duration, message_size]
 
             fnames = list_files_that_match(full_path)
             for fname in fnames:
                 iter_line_with_cb(fname,
-                                  [round_duration.read_line, validation_count.read_line, consensus_duration.read_line])
+                                  [round_duration.read_line,
+                                   validation_count.read_line,
+                                   consensus_duration.read_line,
+                                   message_size.read_line])
                 round_duration.finish_file(fname)
                 validation_count.finish_file(fname)
                 consensus_duration.finish_file(fname)
+                message_size.finish_file(fname)
 
             # NOTE below need to be in sync with `data_labels`
             arr[i][j][0] = round_duration.mean
@@ -117,6 +127,7 @@ def load_data(folder_name):
             arr[i][j][2] = validation_count.total_rate
             arr[i][j][3] = consensus_duration.mean
             arr[i][j][4] = consensus_duration.std
+            arr[i][j][5], arr[i][j][6] = message_size.sizes
 
     x = (arr, facilitators, populations)
 
@@ -147,6 +158,8 @@ def plot(folder_name, recompute):
         except IOError:
             arr, facilitators, populations = load_data(folder_name)
 
+    print facilitators
+    print populations
     # plot throughput vs population
     p1 = plt.figure(1)
     for i, facilitator in enumerate(facilitators):
@@ -181,10 +194,40 @@ def plot(folder_name, recompute):
     p3.show()
 
     # plot consensus duration vs facilitators
-    # p4 = plt.figure()
-    # for i, populations in enumerate(populations):
-    #     legend = '{}'.format(populations)
-    #     plt.plot(facilitators, arr[:, i, Exp.consensus_duration_mean.value - 1], STYLES[i], label=legend, lw=LINE_WIDTH)
+    p4 = plt.figure()
+    for i, population in enumerate(populations):
+        legend = '{}'.format(population)
+        plt.plot(facilitators, arr[:, i, Exp.consensus_duration_mean.value - 1], STYLES[i], label=legend, lw=LINE_WIDTH)
+    plt.ylabel('Consensus duration (seconds)')
+    plt.xlabel('Number of facilitators $n$')
+    plt.legend(loc='upper left', title='population')
+    plt.grid()
+    p4.show()
+
+    # plot consensus duration vs population
+    p5 = plt.figure()
+    for i, facilitator in enumerate(facilitators):
+        legend = '{}'.format(facilitator)
+        plt.plot(populations, arr[i, :, Exp.consensus_duration_mean.value - 1], CUSTOM_STYLES[i], label=legend, lw=LINE_WIDTH)
+    plt.ylabel('Consensus duration (seconds)')
+    plt.xlabel('Population size $N$')
+    plt.legend(loc='upper left', title='facilitators')
+    plt.grid()
+    p5.show()
+
+    p6 = plt.figure()
+    for i, population in enumerate(populations):
+        legend = '{}'.format(population)
+        plt.plot(facilitators, arr[:, i, Exp.message_size_cons.value - 1], STYLES[i], label=legend, lw=LINE_WIDTH)
+    plt.ylabel('Communication cost for consensus (bytes)')
+    plt.xlabel('Number of facilitators $n$')
+    plt.legend(loc='upper left', title='population')
+    plt.grid()
+    p6.show()
+
+    # TODO same as before but with facilitators on legend
+
+    # TODO
 
 
 def list_files_that_match(folder_name, match='.err'):
@@ -237,7 +280,7 @@ class ConsensusDurationReader(object):
 
     def read_line(self, line):
         if self._start_time:
-            if 'ACS: DONE':
+            if 'ACS: DONE' in line:
                 self._durations.append(difference_in_seconds(self._start_time, datetime_from_line(line)))
                 self._start_time = None
         else:
@@ -254,6 +297,47 @@ class ConsensusDurationReader(object):
     @property
     def std(self):
         return np.std(self._durations)
+
+
+class MessageSizeReader(object):
+    FIELDS = ["Cons", "TxReq", "Ping", "ValidationReq", "ACS",
+              "SigWithRound", "AskCons", "Pong", "CpBlock", "TxResp",
+              "ValidationResp"]
+
+    def __init__(self):
+        self._latest_json = None
+        self._collection = []
+        self._max_r = 0
+
+    def read_line(self, line):
+        if 'messages info' in line:
+            self._latest_json = json.loads(line.split('messages info')[1])
+        elif 'TC: round ' in line:
+            r = int(line.split('TC: round ')[1].split(',')[0])
+            if r > self._max_r:
+                self._max_r = r
+
+    def finish_file(self, fname):
+        assert self._latest_json
+        self._collection.append(self._latest_json)
+        self._latest_json = None
+
+    @property
+    def sizes(self):
+        sent_res = collections.defaultdict(long)
+        recv_res = collections.defaultdict(long)
+        for j in self._collection:
+            for f in self.FIELDS:
+                try:
+                    sent_res[f] += j['sent'][f]
+                    recv_res[f] += j['recv'][f]
+                except KeyError:
+                    continue
+
+        consensus_message_size = sent_res['ACS'] + recv_res['ACS'] + sent_res['AskCons'] + recv_res['AskCons']
+        tx_message_size = sent_res['TxResp'] + sent_res['TxReq'] + sent_res['ValidationReq'] + sent_res['ValidationResp'] + \
+            recv_res['TxResp'] + recv_res['TxReq'] + recv_res['ValidationReq'] + recv_res['ValidationResp']
+        return consensus_message_size / (self._max_r - 1), tx_message_size / (self._max_r - 1)
 
 
 class ValidationCountReader(object):
