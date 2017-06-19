@@ -370,18 +370,18 @@ class Config(object):
     All the static settings, used in Factory
     Should be singleton
     """
-    def __init__(self, port, n, t, test, value, failure, tx_rate, consensus_delay, fan_out, validate, ignore_promoter, population):
+    def __init__(self, port, n, t, population, test, value, failure, tx_rate, consensus_delay, fan_out, validate, ignore_promoter):
         """
         This only stores the config necessary at runtime, so not necessarily all the information from argparse
         :param port:
         :param n:
         :param t:
+        :param population:
         :param test:
         :param value:
         :param failure:
         :param tx_rate:
         :param consensus_delay:
-        :param population:
         """
         self.port = port
         self.n = n
@@ -464,15 +464,23 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument(
         'port',
-        type=int, help='the listener port'
+        type=int,
+        help='the listener port'
     )
     parser.add_argument(
         'n',
-        type=int, help='the total number of promoters'
+        type=int,
+        help='the total number of promoters'
     )
     parser.add_argument(
         't',
-        type=int, help='the total number of malicious nodes'
+        type=int,
+        help='the total number of malicious nodes'
+    )
+    parser.add_argument(
+        'population',
+        type=int,
+        help='the population size',
     )
     parser.add_argument(
         '-d', '--debug',
@@ -513,11 +521,6 @@ if __name__ == '__main__':
         '--ignore-promoter',
         action='store_true',
         help='do not transact with promoters'
-    )
-    parser.add_argument(
-        '--population',
-        type=int,
-        help='the population size',
     )
     parser.add_argument(
         '--profile',
@@ -569,8 +572,8 @@ if __name__ == '__main__':
     set_logging(args.loglevel, args.output)
 
     def _run():
-        run(Config(args.port, args.n, args.t, args.test, args.value, args.failure, args.tx_rate, args.consensus_delay,
-                   args.fan_out, args.validate, args.ignore_promoter, args.population),
+        run(Config(args.port, args.n, args.t, args.population, args.test, args.value, args.failure, args.tx_rate,
+                   args.consensus_delay, args.fan_out, args.validate, args.ignore_promoter),
             args.broadcast, args.discovery)
 
     if args.timeout != 0:
