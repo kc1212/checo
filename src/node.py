@@ -70,10 +70,9 @@ class MyProto(ProtobufReceiver):
             self.handle_pong(obj)
 
         elif isinstance(obj, pb.ACS):
-            if self.factory.config.failure == 'omission':
-                return
-            res = self.factory.acs.handle(obj, self.remote_vk)
-            self.process_acs_res(res, obj)
+            if self.factory.config.failure != 'omission':
+                res = self.factory.acs.handle(obj, self.remote_vk)
+                self.process_acs_res(res, obj)
 
         elif isinstance(obj, pb.TxReq):
             self.factory.tc_runner.handle_tx_req(obj, self.remote_vk)
@@ -370,7 +369,8 @@ class Config(object):
     All the static settings, used in Factory
     Should be singleton
     """
-    def __init__(self, port, n, t, population, test, value, failure, tx_rate, consensus_delay, fan_out, validate, ignore_promoter):
+    def __init__(self, port, n, t, population, test, value, failure, tx_rate, fan_out, validate,
+                 ignore_promoter, auto_byzantine):
         """
         This only stores the config necessary at runtime, so not necessarily all the information from argparse
         :param port:
@@ -381,7 +381,7 @@ class Config(object):
         :param value:
         :param failure:
         :param tx_rate:
-        :param consensus_delay:
+        :param auto_byzantine:
         """
         self.port = port
         self.n = n
@@ -397,10 +397,6 @@ class Config(object):
         assert isinstance(tx_rate, float)
         self.tx_rate = tx_rate
 
-        assert isinstance(consensus_delay, int)
-        assert consensus_delay >= 0
-        self.consensus_delay = consensus_delay
-
         self.fan_out = fan_out
 
         self.validate = validate
@@ -410,6 +406,8 @@ class Config(object):
         self.from_instruction = False
 
         self.population = population
+
+        self.auto_byzantine = auto_byzantine
 
 
 def run(config, bcast, discovery_addr):
@@ -506,12 +504,6 @@ if __name__ == '__main__':
         help='address of the discovery server on port 8123'
     )
     parser.add_argument(
-        '--consensus-delay',
-        type=int,
-        default=5,
-        help='delay in seconds between consensus rounds'
-    )
-    parser.add_argument(
         '--fan-out',
         type=int,
         default=10,
@@ -532,6 +524,11 @@ if __name__ == '__main__':
         help='force exit after timeout, 0 means continue forever',
         default=0,
         type=int
+    )
+    parser.add_argument(
+        '--auto-byzantine',
+        help='automatically become Byzantine during experiment',
+        action='store_true'
     )
     parser.add_argument(
         '--test',
@@ -573,7 +570,7 @@ if __name__ == '__main__':
 
     def _run():
         run(Config(args.port, args.n, args.t, args.population, args.test, args.value, args.failure, args.tx_rate,
-                   args.consensus_delay, args.fan_out, args.validate, args.ignore_promoter),
+                   args.fan_out, args.validate, args.ignore_promoter, args.auto_byzantine),
             args.broadcast, args.discovery)
 
     if args.timeout != 0:
