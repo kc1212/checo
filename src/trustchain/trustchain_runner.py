@@ -262,13 +262,13 @@ class TrustChainRunner(object):
 
         # new promoters are selected using the latest CP, these promoters are responsible for round r+1
         # no need to continue the ACS for earlier rounds
-        assert r == self.tc.latest_round, "{} != {}" \
-            .format(r, self.tc.latest_round)
+        assert r == self.tc.latest_round,\
+            "{} != {}".format(r, self.tc.latest_round)
         self.factory.promoters = self._latest_promoters()
         self.factory.acs.stop(self.tc.latest_round)
 
-        assert len(self.factory.promoters) == self.factory.config.n, "{} != {}" \
-            .format(len(self.factory.promoters), self.factory.config.n)
+        assert len(self.factory.promoters) == self.factory.config.n,\
+            "{} != {}".format(len(self.factory.promoters), self.factory.config.n)
         logging.info('TC: round {}, CP count in Cons is {}, time taken {}'
                      .format(r, self.tc.consensus[r].count, int(time.time()) - self.round_states[r].start_time))
         logging.info('TC: round {}, updated new promoters to [{}]'
@@ -289,8 +289,8 @@ class TrustChainRunner(object):
 
                 def try_start_acs(self, _r):
                     assert self.lc
-                    # NOTE: here we assume the consensus should have a length >= n
-                    _msg = [cp.pb for cp in self.p.round_states[_r].received_cps]
+                    # NOTE: we take CPs of round r - 1 to create consensus result of round r
+                    _msg = [cp.pb for cp in self.p.round_states[_r - 1].received_cps]
                     if self.p.tc.latest_round >= _r:
                         logging.info("TC: round {}, somebody completed ACS before me, not starting".format(_r))
                         # setting the following causes the old messages to be dropped
@@ -302,12 +302,14 @@ class TrustChainRunner(object):
                         self.p.factory.acs.reset_then_start(pb.CpBlocks(cps=_msg).SerializeToString(), _r)
                         self.lc.stop()
                         self.lc = None
+                    else:
+                        logging.info("TC: round {}, not enough CPs {}".format(_r, len(_msg)))
 
             lc_acs = LoopingStartACS(self)
             lc = task.LoopingCall(lc_acs.try_start_acs, r + 1)
             lc_acs.lc = lc
 
-            lc.start(2).addErrback(my_err_back)
+            lc.start(2, False).addErrback(my_err_back)
 
         else:
             logging.info("TC: round {}, I'm NOT a promoter".format(r))
