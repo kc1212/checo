@@ -93,12 +93,6 @@ class DiscoveryFactory(Factory):
 
             self.lc = task.LoopingCall(self.send_instruction_when_ready)
             self.lc.start(5).addErrback(my_err_back)
-            self.sent = False
-
-            def exit_if_not_sent():
-                if not self.sent:
-                    raise AssertionError("not sent")
-            call_later(120, exit_if_not_sent)
 
         else:
             logging.info("Insufficient params to send instructions")
@@ -112,7 +106,6 @@ class DiscoveryFactory(Factory):
             msg = pb.Instruction(instruction=self.inst_inst, delay=self.inst_delay, param=self.inst_param)
             logging.debug("Broadcasting instruction - {}".format(msg).replace('\n', ','))
             self.bcast(msg)
-            self.sent = True
             self.lc.stop()
         else:
             logging.debug("Instruction not ready ({} / {})...".format(len(self.nodes), self.m))
