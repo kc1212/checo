@@ -281,28 +281,39 @@ class TrustChainRunner(object):
                          .format(r))
             self.round_states[r].new_cp(self.tc.my_chain.latest_cp)
 
-            def _try_start_acs(_r):
-                # NOTE: here we assume the consensus should have a length >= n
-                _msg = [cp.pb for cp in self.round_states[r].received_cps]
-                if self.tc.latest_round >= _r:
-                    logging.info("TC: round {}, somebody completed ACS before me, not starting".format(_r))
-                    # setting the following causes the old messages to be dropped
-                    self.factory.acs.stop(self.tc.latest_round)
-                else:
-                    logging.info("TC: round {}, starting ACS with {} CPs".format(_r, len(_msg)))
-                    self.factory.acs.reset_then_start(pb.CpBlocks(cps=_msg).SerializeToString(), _r)
+            class LoopingStartACS(object):
+                def __init__(self, _p):
+                    # type: (TrustChainRunner) -> None
+                    self.p = _p
+                    self.lc = None
 
-            call_later(self.consensus_delay, _try_start_acs, r + 1)
+                def try_start_acs(self, _r):
+                    assert self.lc
+                    # NOTE: here we assume the consensus should have a length >= n
+                    _msg = [cp.pb for cp in self.p.round_states[_r].received_cps]
+                    if self.p.tc.latest_round >= _r:
+                        logging.info("TC: round {}, somebody completed ACS before me, not starting".format(_r))
+                        # setting the following causes the old messages to be dropped
+                        self.p.factory.acs.stop(self.p.tc.latest_round)
+                        self.lc.stop()
+                        self.lc = None
+                    elif len(_msg) >= self.p.factory.config.population - self.p.factory.config.t:
+                        logging.info("TC: round {}, starting ACS with {} CPs".format(_r, len(_msg)))
+                        self.p.factory.acs.reset_then_start(pb.CpBlocks(cps=_msg).SerializeToString(), _r)
+                        self.lc.stop()
+                        self.lc = None
+
+            lc_acs = LoopingStartACS(self)
+            lc = task.LoopingCall(lc_acs.try_start_acs, r + 1)
+            lc_acs.lc = lc
+
+            lc.start(2).addErrback(my_err_back)
 
         else:
             logging.info("TC: round {}, I'm NOT a promoter".format(r))
 
         # send new CP to either all promoters
-        # TODO having this if statement for test isn't ideal
-        if self.factory.config.test == 'bootstrap':
-            self.factory.promoter_cast(self.tc.my_chain.latest_cp.pb)
-        else:
-            self.factory.promoter_cast_t(self.tc.my_chain.latest_cp.pb)
+        self.factory.promoter_cast(self.tc.my_chain.latest_cp.pb)
 
     def _send_validation_req(self, seq):
         # type: (int) -> None
