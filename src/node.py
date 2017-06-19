@@ -370,7 +370,7 @@ class Config(object):
     All the static settings, used in Factory
     Should be singleton
     """
-    def __init__(self, port, n, t, test, value, failure, tx_rate, consensus_delay, fan_out, validate, ignore_promoter):
+    def __init__(self, port, n, t, test, value, failure, tx_rate, consensus_delay, fan_out, validate, ignore_promoter, population):
         """
         This only stores the config necessary at runtime, so not necessarily all the information from argparse
         :param port:
@@ -381,6 +381,7 @@ class Config(object):
         :param failure:
         :param tx_rate:
         :param consensus_delay:
+        :param population:
         """
         self.port = port
         self.n = n
@@ -407,6 +408,8 @@ class Config(object):
         self.ignore_promoter = ignore_promoter
 
         self.from_instruction = False
+
+        self.population = population
 
 
 def run(config, bcast, discovery_addr):
@@ -512,6 +515,11 @@ if __name__ == '__main__':
         help='do not transact with promoters'
     )
     parser.add_argument(
+        '--population',
+        type=int,
+        help='the population size',
+    )
+    parser.add_argument(
         '--profile',
         metavar='NAME',
         help='run the node with cProfile'
@@ -562,7 +570,7 @@ if __name__ == '__main__':
 
     def _run():
         run(Config(args.port, args.n, args.t, args.test, args.value, args.failure, args.tx_rate, args.consensus_delay,
-                   args.fan_out, args.validate, args.ignore_promoter),
+                   args.fan_out, args.validate, args.ignore_promoter, args.population),
             args.broadcast, args.discovery)
 
     if args.timeout != 0:

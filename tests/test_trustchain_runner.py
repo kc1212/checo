@@ -37,18 +37,29 @@ def print_profile_stats(file_name):
     # (19, 6, 30, 'omission', None),
 ])
 def test_consensus(n, t, m, failure, profile, folder, discover):
+    """
+
+    :param n:
+    :param t:
+    :param m: population
+    :param failure:
+    :param profile:
+    :param folder:
+    :param discover:
+    :return:
+    """
     configs = []
 
     for i in range(m - t):
         port = GOOD_PORT + i
         if profile and i == 0:
-            configs.append(make_args(port, n, t, profile=profile, test='bootstrap', output=DIR + str(port) + '.out', broadcast=False))
+            configs.append(make_args(port, n, t, m, profile=profile, test='bootstrap', output=DIR + str(port) + '.out', broadcast=False))
         else:
-            configs.append(make_args(port, n, t, test='bootstrap', output=DIR + str(port) + '.out', broadcast=False))
+            configs.append(make_args(port, n, t, m, test='bootstrap', output=DIR + str(port) + '.out', broadcast=False))
 
     for i in range(t):
         port = BAD_PORT + i
-        configs.append(make_args(port, n, t, test='bootstrap', output=DIR + str(port) + '.out', broadcast=False,
+        configs.append(make_args(port, n, t, m, test='bootstrap', output=DIR + str(port) + '.out', broadcast=False,
                                  failure=failure))
 
     ps = run_subprocesses(NODE_CMD_PREFIX, configs)
@@ -78,7 +89,7 @@ def test_tx(n, t, timeout, expected, folder, discover):
     configs = []
     for i in range(n):
         port = GOOD_PORT + i
-        configs.append(make_args(port, n, t, test='tc', tx_rate=5, output=DIR + str(port) + '.out'))
+        configs.append(make_args(port, n, t, n, test='tc', tx_rate=5, output=DIR + str(port) + '.out'))
 
     ps = run_subprocesses(NODE_CMD_PREFIX, configs)
     print "Test: tx nodes starting"
