@@ -133,12 +133,14 @@ class TrustChainRunner(object):
             s = Signature.new(self.tc.vk, self.tc._sk, cons.hash)
             sig_msg = pb.SigWithRound(s=s.pb, r=r)
 
-            self.factory.gossip_except(future_promoters, cons.pb)
-            self.factory.multicast(future_promoters, cons.pb)
+            # self.factory.gossip_except(future_promoters, cons.pb)
+            # self.factory.multicast(future_promoters, cons.pb)
+            self.factory.bcast(cons.pb)
 
-            sig_set = list(set(future_promoters) | set(self.factory.promoters))
-            self.factory.gossip_except(sig_set, sig_msg)
-            self.factory.multicast(sig_set, sig_msg)
+            # sig_set = list(set(future_promoters) | set(self.factory.promoters))
+            # self.factory.gossip_except(sig_set, sig_msg)
+            # self.factory.multicast(sig_set, sig_msg)
+            self.factory.bcast(sig_msg)
 
             # we also try to add the CP here because we may receive the signatures before the actual CP
             self._try_add_cp(r)
@@ -161,10 +163,10 @@ class TrustChainRunner(object):
         sig = Signature(msg.s)
 
         if msg.r >= self.tc.latest_round:
-            is_new = self.round_states[msg.r].new_sig(sig)
-            if is_new:
-                self._try_add_cp(msg.r)
-                self.factory.gossip(msg)
+            _ = self.round_states[msg.r].new_sig(sig)
+            # if is_new:
+            #     self._try_add_cp(msg.r)
+            #     self.factory.gossip(msg)
 
     def handle_cp(self, msg, remote_vk):
         # type: (pb.CpBlock, str) -> None
@@ -199,10 +201,10 @@ class TrustChainRunner(object):
         cons = Cons(msg)
 
         if cons.round >= self.tc.latest_round:
-            is_new = self.round_states[cons.round].new_cons(cons)
-            if is_new:
-                self._try_add_cp(cons.round)
-                self.factory.gossip(msg)
+            _ = self.round_states[cons.round].new_cons(cons)
+            # if is_new:
+            #     self._try_add_cp(cons.round)
+            #     self.factory.gossip(msg)
 
     def handle_ask_cons(self, msg, remote_vk):
         # type: (pb.AskCons, str) -> None
