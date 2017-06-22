@@ -12,6 +12,9 @@ assert len(_PB_PAIRS) == 21
 
 
 class ProtobufReceiver(Int32StringReceiver):
+
+    MAX_LENGTH = 1024 * 1024  # in bytes
+
     def connectionLost(self, reason):
         self.connection_lost(reason)
 
@@ -41,5 +44,5 @@ class ProtobufReceiver(Int32StringReceiver):
         msg = pack("H", _PB_NAME_TO_TAG[obj.__class__.__name__]) + obj.SerializeToString()
         self.sendString(msg)
 
-    def lineLengthExceeded(self, line):
-        raise IOError("Line length exceeded, len: {}".format(len(line)))
+    def lengthLimitExceeded(self, length):
+        raise IOError("Line length exceeded, len: {}".format(length))

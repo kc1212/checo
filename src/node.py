@@ -18,7 +18,7 @@ from src.consensus.acs import ACS
 from src.consensus.bracha import Bracha
 from src.consensus.mo14 import Mo14
 from src.trustchain.trustchain_runner import TrustChainRunner
-from src.utils import Replay, Handled, set_logging, my_err_back, call_later, MAX_LINE_LEN, stop_reactor
+from src.utils import Replay, Handled, set_logging, my_err_back, call_later, stop_reactor
 from src.discovery import Discovery, got_discovery
 
 
@@ -411,8 +411,6 @@ class Config(object):
 
 
 def run(config, bcast, discovery_addr):
-    ProtobufReceiver.MAX_LENGTH = MAX_LINE_LEN
-
     f = MyFactory(config)
 
     try:

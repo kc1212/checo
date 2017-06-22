@@ -5,8 +5,6 @@ import logging
 import sys
 import libnacl
 
-MAX_LINE_LEN = 1024 * 1024 * 1024
-
 
 def byteify(inp):
     """
