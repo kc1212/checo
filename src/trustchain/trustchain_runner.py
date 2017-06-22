@@ -241,6 +241,12 @@ class TrustChainRunner(object):
                 self.round_states[r].asked = True
             return
 
+        try:
+            self._promoter_of_round(r - 1)
+        except KeyError:
+            self.send(random.choice(self.factory.promoters), pb.AskCons(r=r-1))
+            return
+
         self._add_cp(r)
 
     def _add_cp(self, r):

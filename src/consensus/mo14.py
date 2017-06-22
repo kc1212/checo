@@ -164,8 +164,7 @@ class Mo14(object):
                     elif len(aux_value[1]) >= n - t:
                         return set([1])
                     else:
-                        logging.debug("Mo14: impossible condition in get_aux_vals")
-                        raise AssertionError
+                        raise AssertionError("Mo14: impossible condition in get_aux_vals")
                 return None
 
             vals = get_aux_vals(self._aux_values[self._r])
