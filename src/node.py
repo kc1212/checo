@@ -267,13 +267,13 @@ class MyFactory(Factory):
         :param msg: 
         :return: 
         """
-        fan_out = min(self.config.fan_out, self.config.n)
+        fan_out = min(self.config.fan_out, len(self.peers.keys()))
         for node in random.sample(self.peers.keys(), fan_out):
             self.send(node, msg)
 
     def gossip_except(self, exception, msg):
         new_set = set(self.peers.keys()) - set(exception)
-        fan_out = min(self.config.fan_out, self.config.n, len(new_set))
+        fan_out = min(self.config.fan_out, len(new_set))
         nodes = random.sample(new_set, fan_out)
         for node in nodes:
             self.send(node, msg)
