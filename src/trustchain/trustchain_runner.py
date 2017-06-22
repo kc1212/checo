@@ -158,15 +158,14 @@ class TrustChainRunner(object):
         :return: 
         """
         assert isinstance(msg, pb.SigWithRound)
-        logging.debug("TC: received SigWithRound {} from {}".format(msg, b64encode(remote_vk)))
+        logging.info("TC: received SigWithRound {} from {}".format(msg, b64encode(remote_vk)))
 
         sig = Signature(msg.s)
 
         if msg.r >= self.tc.latest_round:
-            _ = self.round_states[msg.r].new_sig(sig)
-            # if is_new:
-            #     self._try_add_cp(msg.r)
-            #     self.factory.gossip(msg)
+            is_new = self.round_states[msg.r].new_sig(sig)
+            if is_new:
+                self._try_add_cp(msg.r)
 
     def handle_cp(self, msg, remote_vk):
         # type: (pb.CpBlock, str) -> None
@@ -201,10 +200,9 @@ class TrustChainRunner(object):
         cons = Cons(msg)
 
         if cons.round >= self.tc.latest_round:
-            _ = self.round_states[cons.round].new_cons(cons)
-            # if is_new:
-            #     self._try_add_cp(cons.round)
-            #     self.factory.gossip(msg)
+            is_new = self.round_states[cons.round].new_cons(cons)
+            if is_new:
+                self._try_add_cp(cons.round)
 
     def handle_ask_cons(self, msg, remote_vk):
         # type: (pb.AskCons, str) -> None

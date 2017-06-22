@@ -241,7 +241,7 @@ class MyFactory(Factory):
     def bcast(self, msg):
         """
         Broadcast a message to all nodes in self.peers, the list should include myself
-        :param msg: dictionary that can be converted into json via send_json
+        :param msg:
         :return:
         """
         for k, v in self.peers.iteritems():
