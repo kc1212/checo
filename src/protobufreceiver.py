@@ -13,7 +13,7 @@ assert len(_PB_PAIRS) == 21
 
 class ProtobufReceiver(Int32StringReceiver):
 
-    MAX_LENGTH = 1024 * 1024  # in bytes
+    MAX_LENGTH = 20 * 1024 * 1024  # in bytes
 
     def connectionLost(self, reason):
         self.connection_lost(reason)
