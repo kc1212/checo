@@ -158,7 +158,7 @@ class TrustChainRunner(object):
         :return: 
         """
         assert isinstance(msg, pb.SigWithRound)
-        logging.info("TC: received SigWithRound {} from {}".format(msg, b64encode(remote_vk)))
+        logging.debug("TC: received SigWithRound {} from {}".format(msg, b64encode(remote_vk)))
 
         sig = Signature(msg.s)
 
@@ -235,10 +235,12 @@ class TrustChainRunner(object):
         if self.round_states[r].received_cons is None:
             # if we're here, it means we have enough signatures but still no consensus result
             # manually ask for it from the promoters only once, ideally this should be dynamic
-            if not self.round_states[r].asked:
-                logging.info("TC: round {}, don't have consensus result, asking...".format(r))
-                self.send(random.choice(self.factory.promoters), pb.AskCons(r=r))
-                self.round_states[r].asked = True
+
+            # NOTE not necessary anymore because promoters now broadcast
+            # if not self.round_states[r].asked:
+            #     logging.info("TC: round {}, don't have consensus result, asking...".format(r))
+            #     self.send(random.choice(self.factory.promoters), pb.AskCons(r=r))
+            #     self.round_states[r].asked = True
             return
 
         try:
