@@ -110,6 +110,11 @@ def load_data(folder_name):
             # readers = [round_duration, validation_count, consensus_duration, message_size]
 
             fnames = list_files_that_match(full_path)
+            if len(fnames) == 0:
+                print "NOTHING IN " + full_path
+                continue
+
+            assert len(fnames) == population
             for fname in fnames:
                 iter_line_with_cb(fname,
                                   [round_duration.read_line,

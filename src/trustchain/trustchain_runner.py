@@ -129,18 +129,10 @@ class TrustChainRunner(object):
             cons = Cons.new(r, [cp.pb for cp in collate_cp_blocks(cps)])
             self.round_states[r].new_cons(cons)
 
-            future_promoters = cons.get_promoters(self.factory.config.n)
             s = Signature.new(self.tc.vk, self.tc._sk, cons.hash)
-            sig_msg = pb.SigWithRound(s=s.pb, r=r)
 
-            # self.factory.gossip_except(future_promoters, cons.pb)
-            # self.factory.multicast(future_promoters, cons.pb)
             self.factory.bcast(cons.pb)
-
-            # sig_set = list(set(future_promoters) | set(self.factory.promoters))
-            # self.factory.gossip_except(sig_set, sig_msg)
-            # self.factory.multicast(sig_set, sig_msg)
-            self.factory.bcast(sig_msg)
+            self.factory.bcast(pb.SigWithRound(s=s.pb, r=r))
 
             # we also try to add the CP here because we may receive the signatures before the actual CP
             self._try_add_cp(r)
