@@ -43,7 +43,10 @@ Exp = enum.Enum('Exp',
                 'consensus_duration_mean '
                 'consensus_duration_std '
                 'message_size_cons '
-                'message_size_tx')
+                'message_size_tx ' 
+                'total_tx_count '
+                'total_vd_count '
+                'total_backlog')
 
 
 def extract_file(file_name):
@@ -107,6 +110,7 @@ def load_data(folder_name):
             validation_count = ValidationCountReader()
             consensus_duration = ConsensusDurationReader()
             message_size = MessageSizeReader()
+            backlog = BacklogReader()
             # readers = [round_duration, validation_count, consensus_duration, message_size]
 
             fnames = list_files_that_match(full_path)
@@ -120,11 +124,13 @@ def load_data(folder_name):
                                   [round_duration.read_line,
                                    validation_count.read_line,
                                    consensus_duration.read_line,
-                                   message_size.read_line])
+                                   message_size.read_line,
+                                   backlog.read_line])
                 round_duration.finish_file(fname)
                 validation_count.finish_file(fname)
                 consensus_duration.finish_file(fname)
                 message_size.finish_file(fname)
+                backlog.finish_file(fname)
 
             # NOTE below need to be in sync with `data_labels`
             arr[i][j][0] = round_duration.mean
@@ -133,6 +139,14 @@ def load_data(folder_name):
             arr[i][j][3] = consensus_duration.mean
             arr[i][j][4] = consensus_duration.std
             arr[i][j][5], arr[i][j][6] = message_size.sizes
+
+            tot_tx_count, tot_vd_count, tot_backlog = backlog.total_counts
+            arr[i][j][7] = tot_tx_count
+            arr[i][j][8] = tot_vd_count
+            arr[i][j][9] = tot_backlog
+
+            # communication complexity per validated transaction
+            arr[i][j][6] = arr[i][j][6] / tot_vd_count
 
     x = (arr, facilitators, populations)
 
@@ -145,6 +159,11 @@ def load_from_cache(folder_name):
     with open(os.path.join(folder_name, 'pickle'), 'r') as f:
         x = pickle.load(f)
     return x
+
+
+def filter_data(arr, facilitators, populations):
+    # right now we just filter out 8 facilitators
+    return arr[1:, :, :], facilitators[1:], populations
 
 
 def plot(folder_name, recompute):
@@ -163,6 +182,7 @@ def plot(folder_name, recompute):
         except IOError:
             arr, facilitators, populations = load_data(folder_name)
 
+    arr, facilitators, populations = filter_data(arr, facilitators, populations)
     print facilitators
     print populations
     # plot throughput vs population
@@ -224,15 +244,63 @@ def plot(folder_name, recompute):
     for i, population in enumerate(populations):
         legend = '{}'.format(population)
         plt.plot(facilitators, arr[:, i, Exp.message_size_cons.value - 1], STYLES[i], label=legend, lw=LINE_WIDTH)
-    plt.ylabel('Communication cost for consensus (bytes)')
+    plt.ylabel('Communication cost per round of consensus (bytes)')
     plt.xlabel('Number of facilitators $n$')
     plt.legend(loc='upper left', title='population')
     plt.grid()
     p6.show()
 
-    # TODO same as before but with facilitators on legend
+    p7 = plt.figure()
+    for i, facilitator in enumerate(facilitators):
+        legend = str(facilitator)
+        plt.plot(populations, arr[i, :, Exp.message_size_cons.value - 1], STYLES[i], label=legend, lw=LINE_WIDTH)
+    plt.ylabel('Communication cost round of consensus (bytes)')
+    plt.xlabel('Population size $N$')
+    plt.legend(loc='upper left', title='facilitators')
+    plt.grid()
+    p7.show()
 
-    # TODO
+    p8 = plt.figure()
+    for i, population in enumerate(populations):
+        legend = '{}'.format(population)
+        plt.plot(facilitators, arr[:, i, Exp.message_size_tx.value - 1], STYLES[i], label=legend, lw=LINE_WIDTH)
+    plt.ylabel('Communication cost per validated transactions (bytes)')
+    plt.xlabel('Number of facilitators $n$')
+    plt.legend(loc='upper left', title='population')
+    plt.grid()
+    p8.show()
+
+    p9 = plt.figure()
+    for i, facilitator in enumerate(facilitators):
+        legend = str(facilitator)
+        plt.plot(populations, arr[i, :, Exp.message_size_tx.value - 1], STYLES[i], label=legend, lw=LINE_WIDTH)
+    plt.ylabel('Communication cost per validated transactions (bytes)')
+    plt.xlabel('Population size $N$')
+    plt.legend(loc='upper left', title='facilitators')
+    plt.grid()
+    p9.show()
+
+    p10 = plt.figure()
+    for i, population in enumerate(populations):
+        legend = '{}'.format(population)
+        plt.plot(facilitators, arr[:, i, Exp.total_backlog.value - 1], STYLES[i], label=legend, lw=LINE_WIDTH)
+    plt.ylabel('Average backlog per node')
+    plt.xlabel('Number of facilitators $n$')
+    plt.legend(loc='upper left', title='population')
+    plt.grid()
+    p10.show()
+
+    p11 = plt.figure()
+    for i, facilitator in enumerate(facilitators):
+        legend = str(facilitator)
+        plt.plot(populations, arr[i, :, Exp.total_backlog.value - 1], STYLES[i], label=legend, lw=LINE_WIDTH)
+    plt.ylabel('Average backlog per node')
+    plt.xlabel('Population size $N$')
+    plt.legend(loc='upper left', title='facilitators')
+    plt.grid()
+    p11.show()
+
+    # TODO backlog as time series
 
 
 def list_files_that_match(folder_name, match='.err'):
@@ -304,6 +372,34 @@ class ConsensusDurationReader(object):
         return np.std(self._durations)
 
 
+class BacklogReader(object):
+    def __init__(self):
+        self._tx_count = 0
+        self._vd_count = 0
+        self._backlog = 0
+        self._backlogs = []
+
+    def read_line(self, line):
+        match = 'TC: current tx count '
+
+        if 'TC: verified' in line:
+            self._vd_count += 1
+        elif 'TC: added tx' in line:
+            self._tx_count += 1
+        elif match in line:
+            tmp = line.split(match)[1].split(', validated')
+            self._backlog = int(tmp[0]) - int(tmp[1])
+            assert self._backlog >= 0
+
+    def finish_file(self, fname):
+        self._backlogs.append(self._backlog)
+        self._backlog = 0
+
+    @property
+    def total_counts(self):
+        return self._tx_count, self._vd_count, np.mean(self._backlogs)
+
+
 class MessageSizeReader(object):
     FIELDS = ["Cons", "TxReq", "Ping", "ValidationReq", "ACS",
               "SigWithRound", "AskCons", "Pong", "CpBlock", "TxResp",
@@ -340,9 +436,10 @@ class MessageSizeReader(object):
                     continue
 
         consensus_message_size = sent_res['ACS'] + recv_res['ACS'] + sent_res['AskCons'] + recv_res['AskCons']
-        tx_message_size = sent_res['TxResp'] + sent_res['TxReq'] + sent_res['ValidationReq'] + sent_res['ValidationResp'] + \
-            recv_res['TxResp'] + recv_res['TxReq'] + recv_res['ValidationReq'] + recv_res['ValidationResp']
-        return consensus_message_size / (self._max_r - 1), tx_message_size / (self._max_r - 1)
+        # tx_message_size = sent_res['TxResp'] + sent_res['TxReq'] + sent_res['ValidationReq'] + sent_res['ValidationResp']
+        vd_message_size = recv_res['TxResp'] + recv_res['TxReq'] + recv_res['ValidationReq'] + recv_res['ValidationResp']
+
+        return consensus_message_size / (self._max_r - 1), vd_message_size
 
 
 class ValidationCountReader(object):
