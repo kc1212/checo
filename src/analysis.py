@@ -100,6 +100,9 @@ def load_data(folder_name):
 
     arr = np.empty([len(facilitators), len(populations), len(Exp)])
 
+    # we use regular array here because the third dimension is not an element, but a list
+    timeseries_arr = [[None for _ in range(len(populations))] for _ in range(len(facilitators))]
+
     # iterate the directory again to actually read the data
     for i, facilitator in enumerate(facilitators):
         for j, population in enumerate(populations):
@@ -111,6 +114,7 @@ def load_data(folder_name):
             consensus_duration = ConsensusDurationReader()
             message_size = MessageSizeReader()
             backlog = BacklogReader()
+            timeseries_backlog = TimeSeriesBacklogReader()
             # readers = [round_duration, validation_count, consensus_duration, message_size]
 
             fnames = list_files_that_match(full_path)
@@ -125,12 +129,14 @@ def load_data(folder_name):
                                    validation_count.read_line,
                                    consensus_duration.read_line,
                                    message_size.read_line,
-                                   backlog.read_line])
+                                   backlog.read_line,
+                                   timeseries_backlog.read_line])
                 round_duration.finish_file(fname)
                 validation_count.finish_file(fname)
                 consensus_duration.finish_file(fname)
                 message_size.finish_file(fname)
                 backlog.finish_file(fname)
+                timeseries_backlog.finish_line(fname)
 
             # NOTE below need to be in sync with `data_labels`
             arr[i][j][0] = round_duration.mean
@@ -148,7 +154,10 @@ def load_data(folder_name):
             # communication complexity per validated transaction
             arr[i][j][6] = arr[i][j][6] / tot_vd_count
 
-    x = (arr, facilitators, populations)
+            if population >= 1000:
+                timeseries_arr[i][j] = timeseries_backlog.get_result()
+
+    x = (arr, facilitators, populations, timeseries_arr)
 
     with open(os.path.join(folder_name, 'pickle'), 'w') as f:
         pickle.dump(x, f)
@@ -161,9 +170,9 @@ def load_from_cache(folder_name):
     return x
 
 
-def filter_data(arr, facilitators, populations):
+def filter_data(arr, facilitators, populations, timeseries_arr):
     # right now we just filter out 8 facilitators
-    return arr[1:, :, :], facilitators[1:], populations
+    return arr[1:, :, :], facilitators[1:], populations, timeseries_arr[1:]
 
 
 def plot(folder_name, recompute):
@@ -175,18 +184,20 @@ def plot(folder_name, recompute):
     """
 
     if recompute:
-        arr, facilitators, populations = load_data(folder_name)
+        arr, facilitators, populations, timeseries_arr = load_data(folder_name)
     else:
         try:
-            arr, facilitators, populations = load_from_cache(folder_name)
+            arr, facilitators, populations, timeseries_arr = load_from_cache(folder_name)
         except IOError:
-            arr, facilitators, populations = load_data(folder_name)
+            arr, facilitators, populations, timeseries_arr = load_data(folder_name)
 
-    arr, facilitators, populations = filter_data(arr, facilitators, populations)
+    arr, facilitators, populations, timeseries_arr = filter_data(arr, facilitators, populations, timeseries_arr)
+
     print facilitators
     print populations
+
     # plot throughput vs population
-    p1 = plt.figure(1)
+    p1 = plt.figure()
     for i, facilitator in enumerate(facilitators):
         legend = '{}'.format(facilitator)
         plt.plot(populations, arr[i, :, Exp.validation_count.value - 1], CUSTOM_STYLES[i], label=legend, lw=LINE_WIDTH)
@@ -194,10 +205,10 @@ def plot(folder_name, recompute):
     plt.xlabel('Population size $N$')
     plt.legend(loc='upper left', title='facilitators')
     plt.grid()
-    p1.show()
+    p1.savefig(os.path.join(folder_name, 'throughput-vs-population.pdf'))
 
     # plot round duration vs population
-    p2 = plt.figure(2)
+    p2 = plt.figure()
     for i, facilitator in enumerate(facilitators):
         legend = '{}'.format(facilitator)
         plt.plot(populations, arr[i, :, Exp.round_duration_mean.value - 1], CUSTOM_STYLES[i], label=legend, lw=LINE_WIDTH)
@@ -205,10 +216,10 @@ def plot(folder_name, recompute):
     plt.xlabel('Population size $N$')
     plt.legend(loc='upper left', title='facilitators')
     plt.grid()
-    p2.show()
+    p2.savefig(os.path.join(folder_name, 'round-duration-vs-population.pdf'))
 
     # plot rounds duration vs facilitators
-    p3 = plt.figure(3)
+    p3 = plt.figure()
     for i, population in enumerate(populations):
         legend = '{}'.format(population)
         plt.plot(facilitators, arr[:, i, Exp.round_duration_mean.value - 1], STYLES[i], label=legend, lw=LINE_WIDTH)
@@ -216,7 +227,7 @@ def plot(folder_name, recompute):
     plt.xlabel('Number of facilitators $n$')
     plt.legend(loc='upper left', title='population')
     plt.grid()
-    p3.show()
+    p3.savefig(os.path.join(folder_name, 'round-duration-vs-facilitators.pdf'))
 
     # plot consensus duration vs facilitators
     p4 = plt.figure()
@@ -227,7 +238,7 @@ def plot(folder_name, recompute):
     plt.xlabel('Number of facilitators $n$')
     plt.legend(loc='upper left', title='population')
     plt.grid()
-    p4.show()
+    p4.savefig(os.path.join(folder_name, 'consensus-duration-vs-facilitators.pdf'))
 
     # plot consensus duration vs population
     p5 = plt.figure()
@@ -238,7 +249,7 @@ def plot(folder_name, recompute):
     plt.xlabel('Population size $N$')
     plt.legend(loc='upper left', title='facilitators')
     plt.grid()
-    p5.show()
+    p5.savefig(os.path.join(folder_name, 'consensus-duration-vs-population.pdf'))
 
     p6 = plt.figure()
     for i, population in enumerate(populations):
@@ -248,17 +259,17 @@ def plot(folder_name, recompute):
     plt.xlabel('Number of facilitators $n$')
     plt.legend(loc='upper left', title='population')
     plt.grid()
-    p6.show()
+    p6.savefig(os.path.join(folder_name, 'consensus-communication-cost-vs-facilitators.pdf'))
 
     p7 = plt.figure()
     for i, facilitator in enumerate(facilitators):
         legend = str(facilitator)
-        plt.plot(populations, arr[i, :, Exp.message_size_cons.value - 1], STYLES[i], label=legend, lw=LINE_WIDTH)
+        plt.plot(populations, arr[i, :, Exp.message_size_cons.value - 1], CUSTOM_STYLES[i], label=legend, lw=LINE_WIDTH)
     plt.ylabel('Communication cost round of consensus (bytes)')
     plt.xlabel('Population size $N$')
     plt.legend(loc='upper left', title='facilitators')
     plt.grid()
-    p7.show()
+    p7.savefig(os.path.join(folder_name, 'consensus-communication-cost-vs-population.pdf'))
 
     p8 = plt.figure()
     for i, population in enumerate(populations):
@@ -268,17 +279,17 @@ def plot(folder_name, recompute):
     plt.xlabel('Number of facilitators $n$')
     plt.legend(loc='upper left', title='population')
     plt.grid()
-    p8.show()
+    p8.savefig(os.path.join(folder_name, 'tx-communication-cost-vs-facilitators.pdf'))
 
     p9 = plt.figure()
     for i, facilitator in enumerate(facilitators):
         legend = str(facilitator)
-        plt.plot(populations, arr[i, :, Exp.message_size_tx.value - 1], STYLES[i], label=legend, lw=LINE_WIDTH)
+        plt.plot(populations, arr[i, :, Exp.message_size_tx.value - 1], CUSTOM_STYLES[i], label=legend, lw=LINE_WIDTH)
     plt.ylabel('Communication cost per validated transactions (bytes)')
     plt.xlabel('Population size $N$')
     plt.legend(loc='upper left', title='facilitators')
     plt.grid()
-    p9.show()
+    p9.savefig(os.path.join(folder_name, 'tx-communication-cost-vs-population.pdf'))
 
     p10 = plt.figure()
     for i, population in enumerate(populations):
@@ -288,20 +299,34 @@ def plot(folder_name, recompute):
     plt.xlabel('Number of facilitators $n$')
     plt.legend(loc='upper left', title='population')
     plt.grid()
-    p10.show()
+    p10.savefig(os.path.join(folder_name, 'backlog-vs-facilitators.pdf'))
 
     p11 = plt.figure()
     for i, facilitator in enumerate(facilitators):
         legend = str(facilitator)
-        plt.plot(populations, arr[i, :, Exp.total_backlog.value - 1], STYLES[i], label=legend, lw=LINE_WIDTH)
+        plt.plot(populations, arr[i, :, Exp.total_backlog.value - 1], CUSTOM_STYLES[i], label=legend, lw=LINE_WIDTH)
     plt.ylabel('Average backlog per node')
     plt.xlabel('Population size $N$')
     plt.legend(loc='upper left', title='facilitators')
     plt.grid()
-    p11.show()
+    p11.savefig(os.path.join(folder_name, 'backlog-vs-population.pdf'))
 
-    # TODO backlog as time series
+    for i, facilitator in enumerate(facilitators):
+        for j, population in enumerate(populations):
+            if facilitator == 32 and population == 1200:
+                p12 = plt.figure()
+                # 20 seconds is the timeseries interval
+                x = map(lambda a: a * 20, range(len(timeseries_arr[i][j][0])))
+                tx_count, vd_count = timeseries_arr[i][j]
+                plt.plot(x, tx_count, 'v', label="transactions", lw=LINE_WIDTH)
+                plt.plot(x, vd_count, 'o', label="validations", lw=LINE_WIDTH)
+                plt.xlabel('Time (seconds)')
+                plt.ylabel('Count')
+                plt.legend(loc='upper left')
+                plt.grid()
+                p12.savefig(os.path.join(folder_name, 'timeseries.pdf'))
 
+    plt.show()
 
 def list_files_that_match(folder_name, match='.err'):
     fnames = []
@@ -475,12 +500,48 @@ class ValidationCountReader(object):
         return np.sum(self._rates)
 
 
-class MessageReader(object):
+class TimeSeriesBacklogReader(object):
     def __init__(self):
-        pass
+        self._all_tx_results = []
+        self._all_vd_results = []
+        self._tx_result = []
+        self._vd_result = []
+        self._is_promoter = False
 
     def read_line(self, line):
-        pass
+        if "I'm a promoter" in line:
+            self._is_promoter = True
+
+        if self._is_promoter:
+            self._tx_result = []
+            self._vd_result = []
+            return
+
+        match = 'TC: current tx count '
+        if match in line:
+            tmp = line.split(match)[1].split(', validated')
+            self._tx_result.append(int(tmp[0]))
+            self._vd_result.append(int(tmp[1]))
+
+    def finish_line(self, fname):
+        self._is_promoter = False
+        if self._tx_result and self._vd_result:
+            self._all_tx_results.append(self._tx_result)
+            self._all_vd_results.append(self._vd_result)
+        self._tx_result = []
+        self._vd_result = []
+
+    def get_result(self):
+        tx_len = max(map(len, self._all_tx_results)) - 2
+        vd_len = max(map(len, self._all_vd_results)) - 2
+
+        assert tx_len == vd_len
+
+        # these fail if not enough results
+        tx_results = [x[:tx_len] for x in self._all_tx_results]
+        vd_results = [x[:vd_len] for x in self._all_vd_results]
+
+        return np.mean(np.array(tx_results), axis=0), np.mean(np.array(vd_results), axis=0)
 
 
 def datetime_from_line(line):
@@ -526,5 +587,3 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     plot(os.path.expandvars(args.dir), args.recompute)
-
-    raw_input()
