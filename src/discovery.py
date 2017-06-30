@@ -7,7 +7,7 @@ from typing import Union, Dict
 
 import src.messages.messages_pb2 as pb
 from src.protobufreceiver import ProtobufReceiver
-from src.utils import set_logging, my_err_back, MAX_LINE_LEN, call_later
+from src.utils import set_logging, my_err_back
 
 
 class Discovery(ProtobufReceiver):
@@ -124,7 +124,6 @@ def got_discovery(p, id, port):
 
 
 def run(port, n, t, m, inst):
-    ProtobufReceiver.MAX_LENGTH = MAX_LINE_LEN
     reactor.listenTCP(port, DiscoveryFactory(n, t, m, inst))
     logging.info("Discovery server running on {}".format(port))
     reactor.run()

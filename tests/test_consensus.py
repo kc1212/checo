@@ -50,10 +50,10 @@ def test_acs(n, t, f, folder, discover):
     configs = []
     for i in range(n - t):
         port = GOOD_PORT + i
-        configs.append(make_args(port, n, t, test='acs', output=DIR + str(port) + '.out'))
+        configs.append(make_args(port, n, t, n, test='acs', output=DIR + str(port) + '.out'))
     for i in range(t):
         port = BAD_PORT + i
-        configs.append(make_args(port, n, t, test='acs', failure=f, output=DIR + str(port) + '.out'))
+        configs.append(make_args(port, n, t, n, test='acs', failure=f, output=DIR + str(port) + '.out'))
 
     ps = run_subprocesses(NODE_CMD_PREFIX, configs)
 
@@ -68,13 +68,13 @@ def test_acs(n, t, f, folder, discover):
     (19, 6, 'omission'),
 ])
 def test_bracha(n, t, f, folder, discover):
-    configs = [make_args(GOOD_PORT, n, t, test='bracha', output=DIR + str(GOOD_PORT) + '.out')]
+    configs = [make_args(GOOD_PORT, n, t, n, test='bracha', output=DIR + str(GOOD_PORT) + '.out')]
     for i in range(n - t - 1):
         port = GOOD_PORT + 1 + i
-        configs.append(make_args(port, n, t, output=DIR + str(port) + '.out'))
+        configs.append(make_args(port, n, t, n, output=DIR + str(port) + '.out'))
     for i in range(t):
         port = BAD_PORT + i
-        configs.append(make_args(port, n, t, failure=f, output=DIR + str(port) + '.out'))
+        configs.append(make_args(port, n, t, n, failure=f, output=DIR + str(port) + '.out'))
 
     ps = run_subprocesses(NODE_CMD_PREFIX, configs)
 
@@ -96,11 +96,11 @@ def test_mo14(n, t, f, folder, discover):
     configs = []
     for i in range(n - t):
         port = GOOD_PORT + i
-        configs.append(make_args(port, n, t, test='mo14', value=v, output=DIR + str(port) + '.out'))
+        configs.append(make_args(port, n, t, n, test='mo14', value=v, output=DIR + str(port) + '.out'))
     for i in range(t):
         port = BAD_PORT + i
         randv = random.randint(0, 1)
-        configs.append(make_args(port, n, t, test='mo14', value=randv, failure=f, output=DIR + str(port) + '.out'))
+        configs.append(make_args(port, n, t, n, test='mo14', value=randv, failure=f, output=DIR + str(port) + '.out'))
 
     ps = run_subprocesses(NODE_CMD_PREFIX, configs)
 

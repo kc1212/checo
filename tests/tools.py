@@ -153,13 +153,14 @@ def run_subprocesses(prefix, cmds, sleep_interval=0):
     return ps
 
 
-def make_args(port, n, t, test=None, value=0, failure=None, tx_rate=0, loglevel=logging.INFO, output=None,
-              broadcast=True, consensus_delay=5, fan_out=10, profile=None, validate=False, ignore_promoter=False):
+def make_args(port, n, t, population, test=None, value=0, failure=None, tx_rate=0, loglevel=logging.INFO, output=None,
+              broadcast=True, fan_out=10, profile=None, validate=False, ignore_promoter=False):
     """
     This function should produce all the parameters accepted by argparse
     :param port:
     :param n:
     :param t:
+    :param population:
     :param test:
     :param value:
     :param failure:
@@ -167,14 +168,13 @@ def make_args(port, n, t, test=None, value=0, failure=None, tx_rate=0, loglevel=
     :param loglevel:
     :param output:
     :param broadcast:
-    :param consensus_delay:
     :param fan_out:
     :param profile:
     :param validate:
     :param ignore_promoter:
     :return:
     """
-    res = [str(port), str(n), str(t)]
+    res = [str(port), str(n), str(t), str(population)]
 
     if test is not None:
         res.append('--test')
@@ -202,9 +202,6 @@ def make_args(port, n, t, test=None, value=0, failure=None, tx_rate=0, loglevel=
 
     if broadcast:
         res.append('--broadcast')
-
-    res.append('--consensus-delay')
-    res.append(str(consensus_delay))
 
     res.append('--fan-out')
     res.append(str(fan_out))

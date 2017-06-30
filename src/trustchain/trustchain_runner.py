@@ -8,7 +8,7 @@ from twisted.internet import task
 
 import src.messages.messages_pb2 as pb
 from src.trustchain.trustchain import TrustChain, TxBlock, CpBlock, Signature, Cons, CompactBlock
-from src.utils import collate_cp_blocks, my_err_back, encode_n, call_later
+from src.utils import collate_cp_blocks, my_err_back, encode_n
 
 
 class RoundState(object):
@@ -66,10 +66,9 @@ class TrustChainRunner(object):
     def __init__(self, factory):
         self.tc = TrustChain()
         self.factory = factory
-        self.consensus_delay = factory.config.consensus_delay
 
         self.collect_rubbish_lc = task.LoopingCall(self._collect_rubbish)
-        self.collect_rubbish_lc.start(self.consensus_delay, False).addErrback(my_err_back)
+        self.collect_rubbish_lc.start(5, False).addErrback(my_err_back)
 
         self.log_tx_count_lc = task.LoopingCall(self._log_info)
         self.log_tx_count_lc.start(20, False).addErrback(my_err_back)
@@ -130,16 +129,10 @@ class TrustChainRunner(object):
             cons = Cons.new(r, [cp.pb for cp in collate_cp_blocks(cps)])
             self.round_states[r].new_cons(cons)
 
-            future_promoters = cons.get_promoters(self.factory.config.n)
             s = Signature.new(self.tc.vk, self.tc._sk, cons.hash)
-            sig_msg = pb.SigWithRound(s=s.pb, r=r)
 
-            self.factory.gossip_except(future_promoters, cons.pb)
-            self.factory.multicast(future_promoters, cons.pb)
-
-            sig_set = list(set(future_promoters) | set(self.factory.promoters))
-            self.factory.gossip_except(sig_set, sig_msg)
-            self.factory.multicast(sig_set, sig_msg)
+            self.factory.bcast(cons.pb)
+            self.factory.bcast(pb.SigWithRound(s=s.pb, r=r))
 
             # we also try to add the CP here because we may receive the signatures before the actual CP
             self._try_add_cp(r)
@@ -165,7 +158,6 @@ class TrustChainRunner(object):
             is_new = self.round_states[msg.r].new_sig(sig)
             if is_new:
                 self._try_add_cp(msg.r)
-                self.factory.gossip(msg)
 
     def handle_cp(self, msg, remote_vk):
         # type: (pb.CpBlock, str) -> None
@@ -203,7 +195,6 @@ class TrustChainRunner(object):
             is_new = self.round_states[cons.round].new_cons(cons)
             if is_new:
                 self._try_add_cp(cons.round)
-                self.factory.gossip(msg)
 
     def handle_ask_cons(self, msg, remote_vk):
         # type: (pb.AskCons, str) -> None
@@ -236,10 +227,18 @@ class TrustChainRunner(object):
         if self.round_states[r].received_cons is None:
             # if we're here, it means we have enough signatures but still no consensus result
             # manually ask for it from the promoters only once, ideally this should be dynamic
-            if not self.round_states[r].asked:
-                logging.info("TC: round {}, don't have consensus result, asking...".format(r))
-                self.send(random.choice(self.factory.promoters), pb.AskCons(r=r))
-                self.round_states[r].asked = True
+
+            # NOTE not necessary anymore because promoters now broadcast
+            # if not self.round_states[r].asked:
+            #     logging.info("TC: round {}, don't have consensus result, asking...".format(r))
+            #     self.send(random.choice(self.factory.promoters), pb.AskCons(r=r))
+            #     self.round_states[r].asked = True
+            return
+
+        try:
+            self._promoter_of_round(r - 1)
+        except KeyError:
+            self.send(random.choice(self.factory.promoters), pb.AskCons(r=r-1))
             return
 
         self._add_cp(r)
@@ -262,13 +261,13 @@ class TrustChainRunner(object):
 
         # new promoters are selected using the latest CP, these promoters are responsible for round r+1
         # no need to continue the ACS for earlier rounds
-        assert r == self.tc.latest_round, "{} != {}" \
-            .format(r, self.tc.latest_round)
+        assert r == self.tc.latest_round,\
+            "{} != {}".format(r, self.tc.latest_round)
         self.factory.promoters = self._latest_promoters()
         self.factory.acs.stop(self.tc.latest_round)
 
-        assert len(self.factory.promoters) == self.factory.config.n, "{} != {}" \
-            .format(len(self.factory.promoters), self.factory.config.n)
+        assert len(self.factory.promoters) == self.factory.config.n,\
+            "{} != {}".format(len(self.factory.promoters), self.factory.config.n)
         logging.info('TC: round {}, CP count in Cons is {}, time taken {}'
                      .format(r, self.tc.consensus[r].count, int(time.time()) - self.round_states[r].start_time))
         logging.info('TC: round {}, updated new promoters to [{}]'
@@ -277,32 +276,52 @@ class TrustChainRunner(object):
         # at this point the promoters are updated
         # finally collect new CP if I'm the promoter, otherwise send CP to promoter
         if self.tc.vk in self.factory.promoters:
-            logging.info("TC: round {}, I'm a promoter, starting a new consensus round when we have enough CPs"
-                         .format(r))
-            self.round_states[r].new_cp(self.tc.my_chain.latest_cp)
 
-            def _try_start_acs(_r):
-                # NOTE: here we assume the consensus should have a length >= n
-                _msg = [cp.pb for cp in self.round_states[r].received_cps]
-                if self.tc.latest_round >= _r:
-                    logging.info("TC: round {}, somebody completed ACS before me, not starting".format(_r))
-                    # setting the following causes the old messages to be dropped
-                    self.factory.acs.stop(self.tc.latest_round)
-                else:
-                    logging.info("TC: round {}, starting ACS with {} CPs".format(_r, len(_msg)))
-                    self.factory.acs.reset_then_start(pb.CpBlocks(cps=_msg).SerializeToString(), _r)
+            # do not start ACS if I'm Byzantine
+            if self.factory.config.auto_byzantine and \
+                            sorted(self.factory.promoters).index(self.tc.vk) < self.factory.config.t:
+                logging.info("TC: round {}, I'm a Byzantine promoter".format(r))
 
-            call_later(self.consensus_delay, _try_start_acs, r + 1)
+            else:
+                logging.info("TC: round {}, I'm a promoter, starting a new consensus round when we have enough CPs"
+                             .format(r))
+                self.round_states[r].new_cp(self.tc.my_chain.latest_cp)
+
+                class LoopingStartACS(object):
+                    def __init__(self, _p):
+                        # type: (TrustChainRunner) -> None
+                        self.p = _p
+                        self.lc = None
+
+                    def try_start_acs(self, _r):
+                        assert self.lc
+                        # NOTE: we take CPs of round r - 1 to create consensus result of round r
+                        _msg = [cp.pb for cp in self.p.round_states[_r - 1].received_cps]
+                        if self.p.tc.latest_round >= _r:
+                            logging.info("TC: round {}, somebody completed ACS before me, not starting".format(_r))
+                            # setting the following causes the old messages to be dropped
+                            self.p.factory.acs.stop(self.p.tc.latest_round)
+                            self.lc.stop()
+                            self.lc = None
+                        elif len(_msg) >= self.p.factory.config.population - self.p.factory.config.t:
+                            logging.info("TC: round {}, starting ACS with {} CPs".format(_r, len(_msg)))
+                            self.p.factory.acs.reset_then_start(pb.CpBlocks(cps=_msg).SerializeToString(), _r)
+                            self.lc.stop()
+                            self.lc = None
+                        else:
+                            logging.info("TC: round {}, not enough CPs {}".format(_r, len(_msg)))
+
+                lc_acs = LoopingStartACS(self)
+                lc = task.LoopingCall(lc_acs.try_start_acs, r + 1)
+                lc_acs.lc = lc
+
+                lc.start(2, False).addErrback(my_err_back)
 
         else:
             logging.info("TC: round {}, I'm NOT a promoter".format(r))
 
         # send new CP to either all promoters
-        # TODO having this if statement for test isn't ideal
-        if self.factory.config.test == 'bootstrap':
-            self.factory.promoter_cast(self.tc.my_chain.latest_cp.pb)
-        else:
-            self.factory.promoter_cast_t(self.tc.my_chain.latest_cp.pb)
+        self.factory.promoter_cast(self.tc.my_chain.latest_cp.pb)
 
     def _send_validation_req(self, seq):
         # type: (int) -> None

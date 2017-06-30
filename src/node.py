@@ -18,7 +18,7 @@ from src.consensus.acs import ACS
 from src.consensus.bracha import Bracha
 from src.consensus.mo14 import Mo14
 from src.trustchain.trustchain_runner import TrustChainRunner
-from src.utils import Replay, Handled, set_logging, my_err_back, call_later, MAX_LINE_LEN, stop_reactor
+from src.utils import Replay, Handled, set_logging, my_err_back, call_later, stop_reactor
 from src.discovery import Discovery, got_discovery
 
 
@@ -70,10 +70,9 @@ class MyProto(ProtobufReceiver):
             self.handle_pong(obj)
 
         elif isinstance(obj, pb.ACS):
-            if self.factory.config.failure == 'omission':
-                return
-            res = self.factory.acs.handle(obj, self.remote_vk)
-            self.process_acs_res(res, obj)
+            if self.factory.config.failure != 'omission':
+                res = self.factory.acs.handle(obj, self.remote_vk)
+                self.process_acs_res(res, obj)
 
         elif isinstance(obj, pb.TxReq):
             self.factory.tc_runner.handle_tx_req(obj, self.remote_vk)
@@ -242,7 +241,7 @@ class MyFactory(Factory):
     def bcast(self, msg):
         """
         Broadcast a message to all nodes in self.peers, the list should include myself
-        :param msg: dictionary that can be converted into json via send_json
+        :param msg:
         :return:
         """
         for k, v in self.peers.iteritems():
@@ -268,13 +267,13 @@ class MyFactory(Factory):
         :param msg: 
         :return: 
         """
-        fan_out = min(self.config.fan_out, self.config.n)
+        fan_out = min(self.config.fan_out, len(self.peers.keys()))
         for node in random.sample(self.peers.keys(), fan_out):
             self.send(node, msg)
 
     def gossip_except(self, exception, msg):
         new_set = set(self.peers.keys()) - set(exception)
-        fan_out = min(self.config.fan_out, self.config.n, len(new_set))
+        fan_out = min(self.config.fan_out, len(new_set))
         nodes = random.sample(new_set, fan_out)
         for node in nodes:
             self.send(node, msg)
@@ -370,17 +369,19 @@ class Config(object):
     All the static settings, used in Factory
     Should be singleton
     """
-    def __init__(self, port, n, t, test, value, failure, tx_rate, consensus_delay, fan_out, validate, ignore_promoter):
+    def __init__(self, port, n, t, population, test, value, failure, tx_rate, fan_out, validate,
+                 ignore_promoter, auto_byzantine):
         """
         This only stores the config necessary at runtime, so not necessarily all the information from argparse
         :param port:
         :param n:
         :param t:
+        :param population:
         :param test:
         :param value:
         :param failure:
         :param tx_rate:
-        :param consensus_delay:
+        :param auto_byzantine:
         """
         self.port = port
         self.n = n
@@ -396,10 +397,6 @@ class Config(object):
         assert isinstance(tx_rate, float)
         self.tx_rate = tx_rate
 
-        assert isinstance(consensus_delay, int)
-        assert consensus_delay >= 0
-        self.consensus_delay = consensus_delay
-
         self.fan_out = fan_out
 
         self.validate = validate
@@ -408,10 +405,12 @@ class Config(object):
 
         self.from_instruction = False
 
+        self.population = population
+
+        self.auto_byzantine = auto_byzantine
+
 
 def run(config, bcast, discovery_addr):
-    ProtobufReceiver.MAX_LENGTH = MAX_LINE_LEN
-
     f = MyFactory(config)
 
     try:
@@ -461,15 +460,23 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument(
         'port',
-        type=int, help='the listener port'
+        type=int,
+        help='the listener port'
     )
     parser.add_argument(
         'n',
-        type=int, help='the total number of promoters'
+        type=int,
+        help='the total number of promoters'
     )
     parser.add_argument(
         't',
-        type=int, help='the total number of malicious nodes'
+        type=int,
+        help='the total number of malicious nodes'
+    )
+    parser.add_argument(
+        'population',
+        type=int,
+        help='the population size',
     )
     parser.add_argument(
         '-d', '--debug',
@@ -495,12 +502,6 @@ if __name__ == '__main__':
         help='address of the discovery server on port 8123'
     )
     parser.add_argument(
-        '--consensus-delay',
-        type=int,
-        default=5,
-        help='delay in seconds between consensus rounds'
-    )
-    parser.add_argument(
         '--fan-out',
         type=int,
         default=10,
@@ -521,6 +522,11 @@ if __name__ == '__main__':
         help='force exit after timeout, 0 means continue forever',
         default=0,
         type=int
+    )
+    parser.add_argument(
+        '--auto-byzantine',
+        help='automatically become Byzantine during experiment',
+        action='store_true'
     )
     parser.add_argument(
         '--test',
@@ -561,8 +567,8 @@ if __name__ == '__main__':
     set_logging(args.loglevel, args.output)
 
     def _run():
-        run(Config(args.port, args.n, args.t, args.test, args.value, args.failure, args.tx_rate, args.consensus_delay,
-                   args.fan_out, args.validate, args.ignore_promoter),
+        run(Config(args.port, args.n, args.t, args.population, args.test, args.value, args.failure, args.tx_rate,
+                   args.fan_out, args.validate, args.ignore_promoter, args.auto_byzantine),
             args.broadcast, args.discovery)
 
     if args.timeout != 0:
