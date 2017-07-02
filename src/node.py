@@ -203,10 +203,12 @@ class MyFactory(Factory):
         self.recv_message_log = defaultdict(long)
         self.sent_message_log = defaultdict(long)
 
-        def print_messages():
-            logging.info('NODE: messages info {{ "sent": {}, "recv": {} }}'
-                         .format(json.dumps(self.sent_message_log), json.dumps(self.recv_message_log)))
-        task.LoopingCall(print_messages).start(5, False).addErrback(my_err_back)
+        # TODO output this at the end of every round
+        task.LoopingCall(self.log_communication_costs).start(5, False).addErrback(my_err_back)
+
+    def log_communication_costs(self, heading="NODE:"):
+        logging.info('{} messages info {{ "sent": {}, "recv": {} }}'
+                     .format(heading, json.dumps(self.sent_message_log), json.dumps(self.recv_message_log)))
 
     def process_queue(self):
         # we use counter to stop this routine from running forever,

@@ -719,7 +719,7 @@ class TrustChain(object):
             if b.hash == tx.other_half.compact.hash:
                 assert b.seq == tx.other_half.seq
                 self.my_chain.set_validity(seq, VALIDITY_ENUM.Valid)
-                logging.info("TC: verified {}".format(encode_n(self.my_chain.chain[seq].hash)))
+                logging.debug("TC: verified {}".format(encode_n(self.my_chain.chain[seq].hash)))
                 if use_cache:
                     updated = self._cache_compact_blocks(tx.inner.counterparty, compact_blocks)
                     if updated:
@@ -768,7 +768,7 @@ class TrustChain(object):
             compact_blocks = self.load_cache_for_verification(tx.seq)
             res = self.verify_tx(tx.seq, compact_blocks, use_cache=False)
             if res == VALIDITY_ENUM.Valid:
-                logging.info("TC: verified (from cache) {}".format(encode_n(tx.hash)))
+                logging.debug("TC: verified (from cache) {}".format(encode_n(tx.hash)))
 
     def get_verifiable_txs(self):
         # type: () -> List[TxBlock]
