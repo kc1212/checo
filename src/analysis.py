@@ -328,6 +328,7 @@ def plot(folder_name, recompute):
 
     plt.show()
 
+
 def list_files_that_match(folder_name, match='.err'):
     fnames = []
     for root, dirs, files in os.walk(folder_name):

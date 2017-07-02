@@ -459,7 +459,7 @@ class TrustChainRunner(object):
         if self.tc.latest_cp.round < 2:
             return
 
-        txs = self.tc.get_verifiable_txs()
+        txs = filter(lambda tx: tx.request_sent_r == -1, self.tc.get_verifiable_txs())
 
         if not txs:
             return
