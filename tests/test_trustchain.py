@@ -94,10 +94,10 @@ def test_cpblock(n, x):
 
     t = (n - 1) / 3
     if x - 1 >= t:  # number of signatures - 1 is greater than t
-        CpBlock.new(my_genesis.hash, 1, cons, 1, my_vk, my_sk, ss, vks)
+        CpBlock.new(my_genesis.hash, 1, cons, 1, my_vk, my_sk, ss, vks, t)
     else:
         with pytest.raises(ValueError):
-            CpBlock.new(my_genesis.hash, 1, cons, 1, my_vk, my_sk, ss, vks)
+            CpBlock.new(my_genesis.hash, 1, cons, 1, my_vk, my_sk, ss, vks, t)
 
 
 def gen_cons(n, cons_round):
@@ -146,7 +146,7 @@ def test_cp_chain(n, m):
 
     for i in range(m):
         vks, ss, cons = gen_cons(n, i + 1)
-        cp = CpBlock.new(prev, i + 1, cons, 0, vk, sk, ss, vks)
+        cp = CpBlock.new(prev, i + 1, cons, 0, vk, sk, ss, vks, (len(ss)-1)/3)
         prev = cp.compact.hash
         chain.new_cp(cp)
 
@@ -241,8 +241,8 @@ def generate_tc_pair(n_cp, n_tx):
         cons = Cons.new(r, [tc_s.latest_cp.pb, tc_r.latest_cp.pb])
         ss = [Signature.new(vk_s, sk_s, cons.hash), Signature.new(vk_r, sk_r, cons.hash)]
 
-        tc_s.new_cp(1, cons, ss, vks)
-        tc_r.new_cp(1, cons, ss, vks)
+        tc_s.new_cp(1, cons, ss, vks, 0)
+        tc_r.new_cp(1, cons, ss, vks, 0)
 
         assert tc_s.latest_cp == tc_s.my_chain.compute_latest_cp()
         assert tc_r.latest_cp == tc_r.my_chain.compute_latest_cp()

@@ -10,6 +10,7 @@ import pickle
 import enum
 import json
 import collections
+import re
 
 
 """
@@ -402,24 +403,25 @@ class BacklogReader(object):
     def __init__(self):
         self._tx_count = 0
         self._vd_count = 0
-        self._backlog = 0
+        self._tmp_tx_count = 0
+        self._tmp_vd_count = 0
         self._backlogs = []
 
     def read_line(self, line):
         match = 'TC: current tx count '
-
-        if 'TC: verified' in line:
-            self._vd_count += 1
-        elif 'TC: added tx' in line:
-            self._tx_count += 1
-        elif match in line:
+        if match in line:
             tmp = line.split(match)[1].split(', validated')
-            self._backlog = int(tmp[0]) - int(tmp[1])
-            assert self._backlog >= 0
+            self._tmp_tx_count = int(tmp[0])
+            self._tmp_vd_count = int(tmp[1])
+            assert self._tmp_tx_count >= self._tmp_vd_count
 
     def finish_file(self, fname):
-        self._backlogs.append(self._backlog)
-        self._backlog = 0
+        self._tx_count += self._tmp_tx_count
+        self._vd_count += self._tmp_vd_count
+        self._backlogs.append(self._tmp_tx_count - self._tmp_vd_count)
+
+        self._tmp_tx_count = 0
+        self._tmp_vd_count = 0
 
     @property
     def total_counts(self):
@@ -432,40 +434,50 @@ class MessageSizeReader(object):
               "ValidationResp"]
 
     def __init__(self):
-        self._latest_json = None
-        self._collection = []
-        self._max_r = 0
+        self._consensus_sizes = []
+        self._validation_sizes = []
+        self._tmp_validation_size = 0
+        self._idx = 1
 
     def read_line(self, line):
-        if 'messages info' in line:
-            self._latest_json = json.loads(line.split('messages info')[1])
-        elif 'TC: round ' in line:
-            r = int(line.split('TC: round ')[1].split(',')[0])
-            if r > self._max_r:
-                self._max_r = r
+        if re.search(r"TC: round %s, messages info" % self._idx, line):
+            messages_info = json.loads(line.split('messages info')[1])
+
+            consensus_size = self._get_consensus_size(messages_info['sent'], messages_info['recv'])
+            if len(self._consensus_sizes) == 0:
+                self._consensus_sizes.append(consensus_size)
+            else:
+                latest = self._consensus_sizes[-1]
+                self._consensus_sizes.append(consensus_size - latest)
+
+            self._idx += 1
+
+        elif 'NODE: messages info' in line:
+            messages_info = json.loads(line.split('messages info')[1])
+            self._tmp_validation_size = self._get_validation_size(messages_info['sent'], messages_info['recv'])
 
     def finish_file(self, fname):
-        assert self._latest_json
-        self._collection.append(self._latest_json)
-        self._latest_json = None
+        self._validation_sizes.append(self._tmp_validation_size)
+        self._tmp_validation_size = 0
+        self._idx = 1
+
+    @staticmethod
+    def _get_consensus_size(sent_res, recv_res):
+        return value_or_zero(sent_res, 'ACS') + value_or_zero(recv_res, 'ACS') + \
+               value_or_zero(sent_res, 'AskCons') + value_or_zero(recv_res, 'AskCons')
+
+    @staticmethod
+    def _get_validation_size(sent_res, recv_res):
+        return value_or_zero(sent_res, 'ValidationReq') + value_or_zero(sent_res, 'ValidationResp') + \
+               value_or_zero(recv_res, 'ValidationReq') + value_or_zero(recv_res, 'ValidationResp')
 
     @property
     def sizes(self):
-        sent_res = collections.defaultdict(long)
-        recv_res = collections.defaultdict(long)
-        for j in self._collection:
-            for f in self.FIELDS:
-                try:
-                    sent_res[f] += j['sent'][f]
-                    recv_res[f] += j['recv'][f]
-                except KeyError:
-                    continue
+        return np.mean(self._consensus_sizes), np.sum(self._validation_sizes)
 
-        consensus_message_size = sent_res['ACS'] + recv_res['ACS'] + sent_res['AskCons'] + recv_res['AskCons']
-        # tx_message_size = sent_res['TxResp'] + sent_res['TxReq'] + sent_res['ValidationReq'] + sent_res['ValidationResp']
-        vd_message_size = recv_res['TxResp'] + recv_res['TxReq'] + recv_res['ValidationReq'] + recv_res['ValidationResp']
 
-        return consensus_message_size / (self._max_r - 1), vd_message_size
+def value_or_zero(d, k):
+    return d[k] if k in d else 0
 
 
 class ValidationCountReader(object):
@@ -474,11 +486,18 @@ class ValidationCountReader(object):
         self._rates = []
 
     def read_line(self, line):
-        match = 'TC: verified'
+        match = 'TC: current tx count '
         if match in line:
-            self._lines_of_interest.append(line)
+            if int(line.split(match)[1].split(', validated')[1]) == 0:
+                pass
+            elif len(self._lines_of_interest) >= 2:
+                self._lines_of_interest[1] = line
+            else:
+                self._lines_of_interest.append(line)
 
     def finish_file(self, fname):
+        assert len(self._lines_of_interest) == 2
+
         if not self._lines_of_interest:
             print "Nothing got validated for {}".format(fname)
             return
@@ -491,7 +510,8 @@ class ValidationCountReader(object):
             print "Difference is zero for {}".format(fname)
             return
 
-        rate = float(len(self._lines_of_interest)) / diff
+        validated_count = self._lines_of_interest[-1].split('TC: current tx count')[1].split(', validated')[1]
+        rate = float(validated_count) / diff
         self._rates.append(rate)
 
         self._lines_of_interest = []

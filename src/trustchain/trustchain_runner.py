@@ -255,7 +255,8 @@ class TrustChainRunner(object):
         self.tc.new_cp(1,
                        self.round_states[r].received_cons,
                        self.round_states[r].received_sigs.values(),
-                       self._promoter_of_round(r - 1))
+                       self._promoter_of_round(r - 1),
+                       self.factory.config.t)
         if not self.tc.compact_cp_in_consensus(_prev_cp, self.tc.latest_round):
             logging.info("TC: round {}, my previous CP not in consensus".format(r))
 
