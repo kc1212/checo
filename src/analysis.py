@@ -9,8 +9,6 @@ import dateutil
 import pickle
 import enum
 import json
-import collections
-import re
 
 
 """
@@ -255,8 +253,8 @@ def plot(folder_name, recompute):
     p6 = plt.figure()
     for i, population in enumerate(populations):
         legend = '{}'.format(population)
-        plt.plot(facilitators, arr[:, i, Exp.message_size_cons.value - 1], STYLES[i], label=legend, lw=LINE_WIDTH)
-    plt.ylabel('Communication cost per round of consensus (bytes)')
+        plt.plot(facilitators, arr[:, i, Exp.message_size_cons.value - 1] / 1024 / 1024, STYLES[i], label=legend, lw=LINE_WIDTH)
+    plt.ylabel('Communication cost per round of consensus (MB)')
     plt.xlabel('Number of facilitators $n$')
     plt.legend(loc='upper left', title='population')
     plt.grid()
@@ -265,8 +263,8 @@ def plot(folder_name, recompute):
     p7 = plt.figure()
     for i, facilitator in enumerate(facilitators):
         legend = str(facilitator)
-        plt.plot(populations, arr[i, :, Exp.message_size_cons.value - 1], CUSTOM_STYLES[i], label=legend, lw=LINE_WIDTH)
-    plt.ylabel('Communication cost round of consensus (bytes)')
+        plt.plot(populations, arr[i, :, Exp.message_size_cons.value - 1] / 1024 / 1024, CUSTOM_STYLES[i], label=legend, lw=LINE_WIDTH)
+    plt.ylabel('Communication cost per round of consensus (MB)')
     plt.xlabel('Population size $N$')
     plt.legend(loc='upper left', title='facilitators')
     plt.grid()
@@ -275,8 +273,8 @@ def plot(folder_name, recompute):
     p8 = plt.figure()
     for i, population in enumerate(populations):
         legend = '{}'.format(population)
-        plt.plot(facilitators, arr[:, i, Exp.message_size_tx.value - 1], STYLES[i], label=legend, lw=LINE_WIDTH)
-    plt.ylabel('Communication cost per validated transactions (bytes)')
+        plt.plot(facilitators, arr[:, i, Exp.message_size_tx.value - 1] / 1024 / 1024, STYLES[i], label=legend, lw=LINE_WIDTH)
+    plt.ylabel('Communication cost per validated transaction (MB)')
     plt.xlabel('Number of facilitators $n$')
     plt.legend(loc='upper left', title='population')
     plt.grid()
@@ -285,8 +283,8 @@ def plot(folder_name, recompute):
     p9 = plt.figure()
     for i, facilitator in enumerate(facilitators):
         legend = str(facilitator)
-        plt.plot(populations, arr[i, :, Exp.message_size_tx.value - 1], CUSTOM_STYLES[i], label=legend, lw=LINE_WIDTH)
-    plt.ylabel('Communication cost per validated transactions (bytes)')
+        plt.plot(populations, arr[i, :, Exp.message_size_tx.value - 1] / 1024 / 1024, CUSTOM_STYLES[i], label=legend, lw=LINE_WIDTH)
+    plt.ylabel('Communication cost per validated transactions (MB)')
     plt.xlabel('Population size $N$')
     plt.legend(loc='upper left', title='facilitators')
     plt.grid()
@@ -436,30 +434,25 @@ class MessageSizeReader(object):
     def __init__(self):
         self._consensus_sizes = []
         self._validation_sizes = []
+        self._tmp_consensus_size = 0
         self._tmp_validation_size = 0
-        self._idx = 1
+        self._max_r = 0
 
     def read_line(self, line):
-        if re.search(r"TC: round %s, messages info" % self._idx, line):
-            messages_info = json.loads(line.split('messages info')[1])
-
-            consensus_size = self._get_consensus_size(messages_info['sent'], messages_info['recv'])
-            if len(self._consensus_sizes) == 0:
-                self._consensus_sizes.append(consensus_size)
-            else:
-                latest = self._consensus_sizes[-1]
-                self._consensus_sizes.append(consensus_size - latest)
-
-            self._idx += 1
-
-        elif 'NODE: messages info' in line:
+        if 'messages info' in line:
             messages_info = json.loads(line.split('messages info')[1])
             self._tmp_validation_size = self._get_validation_size(messages_info['sent'], messages_info['recv'])
+            self._tmp_consensus_size = self._get_consensus_size(messages_info['sent'], messages_info['recv'])
+        elif 'updated new promoters' in line:
+            r = int(line.split('TC: round ')[1].split(',')[0])
+            if r > self._max_r:
+                self._max_r = r
 
     def finish_file(self, fname):
         self._validation_sizes.append(self._tmp_validation_size)
+        self._consensus_sizes.append(self._tmp_consensus_size)
         self._tmp_validation_size = 0
-        self._idx = 1
+        self._tmp_consensus_size = 0
 
     @staticmethod
     def _get_consensus_size(sent_res, recv_res):
@@ -468,12 +461,11 @@ class MessageSizeReader(object):
 
     @staticmethod
     def _get_validation_size(sent_res, recv_res):
-        return value_or_zero(sent_res, 'ValidationReq') + value_or_zero(sent_res, 'ValidationResp') + \
-               value_or_zero(recv_res, 'ValidationReq') + value_or_zero(recv_res, 'ValidationResp')
+        return value_or_zero(recv_res, 'ValidationReq') + value_or_zero(recv_res, 'ValidationResp')
 
     @property
     def sizes(self):
-        return np.mean(self._consensus_sizes), np.sum(self._validation_sizes)
+        return np.sum(self._consensus_sizes) / self._max_r, np.sum(self._validation_sizes)
 
 
 def value_or_zero(d, k):

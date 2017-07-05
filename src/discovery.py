@@ -1,5 +1,6 @@
 import argparse
 import logging
+import sys
 
 from twisted.internet import reactor, task
 from twisted.internet.protocol import Factory
@@ -7,7 +8,9 @@ from typing import Union, Dict
 
 import src.messages.messages_pb2 as pb
 from src.protobufreceiver import ProtobufReceiver
-from src.utils import set_logging, my_err_back
+from src.utils import set_logging, my_err_back, call_later
+
+return_code = 0
 
 
 class Discovery(ProtobufReceiver):
@@ -94,6 +97,15 @@ class DiscoveryFactory(Factory):
             self.lc = task.LoopingCall(self.send_instruction_when_ready)
             self.lc.start(5).addErrback(my_err_back)
 
+            self.sent = False
+
+            def stop_and_ret():
+                if not self.sent:
+                    global return_code
+                    return_code = 1
+                    reactor.stop()
+            call_later(120, stop_and_ret)
+
         else:
             logging.info("Insufficient params to send instructions")
 
@@ -107,6 +119,7 @@ class DiscoveryFactory(Factory):
             logging.debug("Broadcasting instruction - {}".format(msg).replace('\n', ','))
             self.bcast(msg)
             self.lc.stop()
+            self.sent = True
         else:
             logging.debug("Instruction not ready ({} / {})...".format(len(self.nodes), self.m))
 
@@ -162,3 +175,4 @@ if __name__ == '__main__':
 
     # NOTE: n, t, m and inst must be all or nothing
     run(args.port, args.n, args.t, args.m, args.inst)
+    sys.exit(return_code)
