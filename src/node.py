@@ -235,7 +235,7 @@ class MyFactory(Factory):
 
     def make_new_connection(self, host, port):
         logging.debug("NODE: making client connection {}:{}".format(host, port))
-        point = TCP4ClientEndpoint(reactor, host, port)
+        point = TCP4ClientEndpoint(reactor, host, port, timeout=60)
         proto = MyProto(self)
         d = connectProtocol(point, proto)
         d.addCallback(got_protocol).addErrback(my_err_back)
@@ -423,12 +423,12 @@ def run(config, bcast, discovery_addr):
         sys.exit(1)
 
     # connect to discovery server
-    point = TCP4ClientEndpoint(reactor, discovery_addr, 8123)
+    point = TCP4ClientEndpoint(reactor, discovery_addr, 8123, timeout=60)
     d = connectProtocol(point, Discovery({}, f))
     d.addCallback(got_discovery, b64encode(f.vk), config.port).addErrback(my_err_back)
 
     # connect to myself
-    point = TCP4ClientEndpoint(reactor, "localhost", config.port)
+    point = TCP4ClientEndpoint(reactor, "localhost", config.port, timeout=60)
     d = connectProtocol(point, MyProto(f))
     d.addCallback(got_protocol).addErrback(my_err_back)
 
