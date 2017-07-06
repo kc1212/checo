@@ -44,7 +44,12 @@ class MyProto(ProtobufReceiver):
         :return: 
         """
         peer = "<None>" if self.remote_vk is None else b64encode(self.remote_vk)
-        logging.debug("NODE: deleting peer {}".format(peer))
+
+        if not self.factory.first_disconnect_logged:
+            logging.info("NODE: deleting peer {}, reason {}".format(peer, reason))
+            self.factory.first_disconnect_logged = True
+        else:
+            logging.debug("NODE: deleting peer {}, reason {}".format(peer, reason))
 
         try:
             del self.peers[self.remote_vk]
@@ -191,6 +196,7 @@ class MyFactory(Factory):
         self.tc_runner = TrustChainRunner(self)
         self.vk = self.tc_runner.tc.vk
         self.q = Queue.Queue()  # (str, msg)
+        self.first_disconnect_logged = False
 
         self._neighbour = None
         self._sorted_peer_keys = None

@@ -88,6 +88,7 @@ def my_err_back(failure):
     logging.error(failure.getTraceback())
     stop_reactor()
 
+
 class GrowingList(list):
     def __setitem__(self, index, value):
         if index >= len(self):
@@ -102,6 +103,8 @@ def encode_n(s, n=8):
 def stop_reactor():
     try:
         reactor.stop()
+        logging.info("STOPPING REACTOR")
     except error.ReactorNotRunning:
         pass
+
 
