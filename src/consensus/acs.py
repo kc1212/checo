@@ -170,8 +170,11 @@ class ACS(object):
             # return the result if we're done, otherwise return None
             assert n == len(self._mo14_results)
 
-            self._done = True
             res = self._collate_results()
+            if not res[0]:
+                return Handled()
+
+            self._done = True
             # NOTE we just print the hash of the results and compare, the actual output is too much...
             # NOTE we also use a random value to trip up tests, since it shouldn't be used
             logging.info("ACS: DONE \"{}\""
@@ -181,6 +184,10 @@ class ACS(object):
 
     def _collate_results(self):
         key_of_ones = [k for k, v in self._mo14_results.iteritems() if v == 1]
-        res = {k: self._bracha_results[k] for k in key_of_ones}
-        # logging.info("{}".format({b64encode(k): b64encode(v) for k, v in res.iteritems()}))
-        return res, self._round
+
+        if all(map(lambda _k: _k in self._bracha_results, key_of_ones)):
+            res = {k: self._bracha_results[k] for k in key_of_ones}
+            return res, self._round
+        else:
+            return None, self._round
+
