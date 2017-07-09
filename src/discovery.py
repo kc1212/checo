@@ -76,6 +76,7 @@ class Discovery(ProtobufReceiver):
 class DiscoveryFactory(Factory):
     def __init__(self, n, t, m, inst):
         self.nodes = {}  # key = vk, val = addr
+        self.timeout_called = False
 
         def has_sufficient_instruction_params():
             return n is not None and \
@@ -99,13 +100,6 @@ class DiscoveryFactory(Factory):
 
             self.sent = False
 
-            def stop_and_ret():
-                if not self.sent:
-                    global return_code
-                    return_code = 1
-                    reactor.stop()
-            call_later(120, stop_and_ret)
-
         else:
             logging.info("Insufficient params to send instructions")
 
@@ -114,6 +108,20 @@ class DiscoveryFactory(Factory):
         return msg
 
     def send_instruction_when_ready(self):
+
+        # if at least 1 node started, then all should start within 120 seconds
+        # otherwise exit 1
+        if len(self.nodes) > 0:
+            def stop_and_ret():
+                if not self.sent:
+                    global return_code
+                    return_code = 1
+                    reactor.stop()
+            if not self.timeout_called:
+                logging.info("Timeout start")
+                call_later(120, stop_and_ret)
+                self.timeout_called = True
+
         if len(self.nodes) >= self.m:
             msg = pb.Instruction(instruction=self.inst_inst, delay=self.inst_delay, param=self.inst_param)
             logging.debug("Broadcasting instruction - {}".format(msg).replace('\n', ','))
