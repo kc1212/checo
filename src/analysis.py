@@ -33,7 +33,7 @@ After extracting
 MARKER_STYLES = ['x', 'o', '^', 's', '*', 'v']
 LINE_STYLES = ['-', '--']
 STYLES = [l + m for m in MARKER_STYLES for l in LINE_STYLES]
-CUSTOM_STYLES = ['x-', '^--', '*:', 'o--',  's:', 'v-', 'x-.']
+CUSTOM_STYLES = ['x-', '^--', '*:', 'o--',  's:', 'v-', 'x-.', '^:']
 LINE_WIDTH = 1
 Exp = enum.Enum('Exp',
                 'round_duration_mean '
@@ -190,7 +190,7 @@ def plot(folder_name, recompute):
         except IOError:
             arr, facilitators, populations, timeseries_arr = load_data(folder_name)
 
-    arr, facilitators, populations, timeseries_arr = filter_data(arr, facilitators, populations, timeseries_arr)
+    # arr, facilitators, populations, timeseries_arr = filter_data(arr, facilitators, populations, timeseries_arr)
 
     print facilitators
     print populations
@@ -436,10 +436,15 @@ class MessageSizeReader(object):
         self._validation_sizes = []
         self._tmp_consensus_size = 0
         self._tmp_validation_size = 0
+        self._tmp_validation_count = 0
         self._max_r = 0
 
     def read_line(self, line):
-        if 'messages info' in line:
+        validation_match = 'TC: current tx count '
+        if validation_match in line:
+            self._tmp_validation_count = int(line.split(validation_match)[1].split(', validated')[1])
+
+        if 'NODE: messages info' in line:
             messages_info = json.loads(line.split('messages info')[1])
             self._tmp_validation_size = self._get_validation_size(messages_info['sent'], messages_info['recv'])
             self._tmp_consensus_size = self._get_consensus_size(messages_info['sent'], messages_info['recv'])
@@ -449,10 +454,14 @@ class MessageSizeReader(object):
                 self._max_r = r
 
     def finish_file(self, fname):
-        self._validation_sizes.append(self._tmp_validation_size)
+        if self._tmp_validation_count == 0:
+            print "Nothing got validated for " + fname
+        else:
+            self._validation_sizes.append(float(self._tmp_validation_size) / self._tmp_validation_count)
         self._consensus_sizes.append(self._tmp_consensus_size)
         self._tmp_validation_size = 0
         self._tmp_consensus_size = 0
+        self._tmp_validation_count = 0
 
     @staticmethod
     def _get_consensus_size(sent_res, recv_res):
@@ -461,11 +470,11 @@ class MessageSizeReader(object):
 
     @staticmethod
     def _get_validation_size(sent_res, recv_res):
-        return value_or_zero(recv_res, 'ValidationReq') + value_or_zero(recv_res, 'ValidationResp')
+        return value_or_zero(recv_res, 'ValidationResp')
 
     @property
     def sizes(self):
-        return np.sum(self._consensus_sizes) / self._max_r, np.sum(self._validation_sizes)
+        return np.sum(self._consensus_sizes) / self._max_r, np.mean(self._validation_sizes)
 
 
 def value_or_zero(d, k):
@@ -583,7 +592,7 @@ def difference_in_seconds(a, b):
     :return: 
     """
     assert b > a
-    return (b - a).seconds
+    return (b - a).total_seconds()
 
 
 if __name__ == '__main__':
