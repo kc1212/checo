@@ -42,7 +42,10 @@ Exp = enum.Enum('Exp',
                 'consensus_duration_mean '
                 'consensus_duration_std '
                 'message_size_cons '
-                'message_size_tx ' 
+                'message_size_tx '
+                'message_size_tx_std ' 
+                'message_size_round '
+                'message_size_round_std '
                 'total_tx_count '
                 'total_vd_count '
                 'total_backlog')
@@ -143,15 +146,16 @@ def load_data(folder_name):
             arr[i][j][2] = validation_count.total_rate
             arr[i][j][3] = consensus_duration.mean
             arr[i][j][4] = consensus_duration.std
-            arr[i][j][5], arr[i][j][6] = message_size.sizes
+            arr[i][j][5] = message_size.sum_consensus_size()
+            arr[i][j][6] = message_size.mean_validation_size()
+            arr[i][j][7] = message_size.stderr_validation_size()
+            arr[i][j][8] = message_size.mean_round_size()
+            arr[i][j][9] = message_size.stderr_round_size()
 
             tot_tx_count, tot_vd_count, tot_backlog = backlog.total_counts
-            arr[i][j][7] = tot_tx_count
-            arr[i][j][8] = tot_vd_count
-            arr[i][j][9] = tot_backlog
-
-            # communication complexity per validated transaction
-            arr[i][j][6] = arr[i][j][6] / tot_vd_count
+            arr[i][j][10] = tot_tx_count
+            arr[i][j][11] = tot_vd_count
+            arr[i][j][12] = tot_backlog
 
             if population >= 1000:
                 timeseries_arr[i][j] = timeseries_backlog.get_result()
@@ -210,7 +214,10 @@ def plot(folder_name, recompute):
     p2 = plt.figure()
     for i, facilitator in enumerate(facilitators):
         legend = '{}'.format(facilitator)
-        plt.plot(populations, arr[i, :, Exp.round_duration_mean.value - 1], CUSTOM_STYLES[i], label=legend, lw=LINE_WIDTH)
+        plt.errorbar(populations, arr[i, :, Exp.round_duration_mean.value - 1],
+                     yerr=arr[i, :, Exp.round_duration_std.value - 1],
+                     fmt=CUSTOM_STYLES[i], label=legend, lw=LINE_WIDTH,
+                     capsize=2, elinewidth=0.5)
     plt.ylabel('Round duration (seconds)')
     plt.xlabel('Population size $N$')
     plt.legend(loc='upper left', title='facilitators')
@@ -221,7 +228,10 @@ def plot(folder_name, recompute):
     p3 = plt.figure()
     for i, population in enumerate(populations):
         legend = '{}'.format(population)
-        plt.plot(facilitators, arr[:, i, Exp.round_duration_mean.value - 1], STYLES[i], label=legend, lw=LINE_WIDTH)
+        plt.errorbar(facilitators, arr[:, i, Exp.round_duration_mean.value - 1],
+                     yerr=arr[:, i, Exp.round_duration_std.value - 1],
+                     fmt=STYLES[i], label=legend, lw=LINE_WIDTH,
+                     capsize=2, elinewidth=0.5)
     plt.ylabel('Round duration (seconds)')
     plt.xlabel('Number of facilitators $n$')
     plt.legend(loc='upper left', title='population')
@@ -273,8 +283,11 @@ def plot(folder_name, recompute):
     p8 = plt.figure()
     for i, population in enumerate(populations):
         legend = '{}'.format(population)
-        plt.plot(facilitators, arr[:, i, Exp.message_size_tx.value - 1] / 1024 / 1024, STYLES[i], label=legend, lw=LINE_WIDTH)
-    plt.ylabel('Communication cost per validated transaction (MB)')
+        plt.errorbar(facilitators, arr[:, i, Exp.message_size_tx.value - 1],
+                     yerr=arr[:, i, Exp.message_size_tx_std.value - 1],
+                     fmt=STYLES[i], label=legend, lw=LINE_WIDTH,
+                     capsize=2, elinewidth=0.5)
+    plt.ylabel('Communication cost per validated transaction (bytes)')
     plt.xlabel('Number of facilitators $n$')
     plt.legend(loc='upper left', title='population')
     plt.grid()
@@ -283,8 +296,11 @@ def plot(folder_name, recompute):
     p9 = plt.figure()
     for i, facilitator in enumerate(facilitators):
         legend = str(facilitator)
-        plt.plot(populations, arr[i, :, Exp.message_size_tx.value - 1] / 1024 / 1024, CUSTOM_STYLES[i], label=legend, lw=LINE_WIDTH)
-    plt.ylabel('Communication cost per validated transactions (MB)')
+        plt.errorbar(populations, arr[i, :, Exp.message_size_tx.value - 1],
+                     yerr=arr[i, :, Exp.message_size_tx_std.value - 1],
+                     fmt=CUSTOM_STYLES[i], label=legend, lw=LINE_WIDTH,
+                     capsize=2, elinewidth=0.5)
+    plt.ylabel('Communication cost per validated transactions (bytes)')
     plt.xlabel('Population size $N$')
     plt.legend(loc='upper left', title='facilitators')
     plt.grid()
@@ -310,10 +326,36 @@ def plot(folder_name, recompute):
     plt.grid()
     p11.savefig(os.path.join(folder_name, 'backlog-vs-population.pdf'))
 
+    p12 = plt.figure()
+    for i, population in enumerate(populations):
+        legend = '{}'.format(population)
+        plt.errorbar(facilitators, arr[:, i, Exp.message_size_round.value - 1] / 1024 / 1024,
+                     yerr=arr[:, i, Exp.message_size_round_std.value - 1] / 1024 / 1024,
+                     fmt=STYLES[i], label=legend, lw=LINE_WIDTH,
+                     capsize=2, elinewidth=0.5)
+    plt.ylabel('Communication cost per round (MB)')
+    plt.xlabel('Number of facilitators $n$')
+    plt.legend(loc='upper left', title='population')
+    plt.grid()
+    p12.savefig(os.path.join(folder_name, 'round-communication-cost-vs-facilitators.pdf'))
+
+    p13 = plt.figure()
+    for i, facilitator in enumerate(facilitators):
+        legend = str(facilitator)
+        plt.errorbar(populations, arr[i, :, Exp.message_size_round.value - 1] / 1024 / 1024,
+                     yerr=arr[i, :, Exp.message_size_round_std.value - 1] / 1024 / 1024,
+                     fmt=CUSTOM_STYLES[i], label=legend, lw=LINE_WIDTH,
+                     capsize=2, elinewidth=0.5)
+    plt.ylabel('Communication cost per round (MB)')
+    plt.xlabel('Population size $N$')
+    plt.legend(loc='upper left', title='facilitators')
+    plt.grid()
+    p13.savefig(os.path.join(folder_name, 'round-communication-cost-vs-population.pdf'))
+
     for i, facilitator in enumerate(facilitators):
         for j, population in enumerate(populations):
             if facilitator == 32 and population == 1200:
-                p12 = plt.figure()
+                p14 = plt.figure()
                 # 20 seconds is the timeseries interval
                 x = map(lambda a: a * 20, range(len(timeseries_arr[i][j][0])))
                 tx_count, vd_count = timeseries_arr[i][j]
@@ -323,7 +365,7 @@ def plot(folder_name, recompute):
                 plt.ylabel('Count')
                 plt.legend(loc='upper left')
                 plt.grid()
-                p12.savefig(os.path.join(folder_name, 'timeseries.pdf'))
+                p14.savefig(os.path.join(folder_name, 'timeseries.pdf'))
 
     plt.show()
 
@@ -368,7 +410,7 @@ class RoundDurationReader(object):
 
     @property
     def std(self):
-        return np.std(self._differences)
+        return np.std(self._differences) / np.sqrt(len(self._differences))
 
 
 class ConsensusDurationReader(object):
@@ -394,7 +436,7 @@ class ConsensusDurationReader(object):
 
     @property
     def std(self):
-        return np.std(self._durations)
+        return np.std(self._durations) / np.sqrt(len(self._durations))
 
 
 class BacklogReader(object):
@@ -434,9 +476,11 @@ class MessageSizeReader(object):
     def __init__(self):
         self._consensus_sizes = []
         self._validation_sizes = []
+        self._round_sizes = []
         self._tmp_consensus_size = 0
         self._tmp_validation_size = 0
         self._tmp_validation_count = 0
+        self._tmp_round_size = 0
         self._max_r = 0
 
     def read_line(self, line):
@@ -448,6 +492,7 @@ class MessageSizeReader(object):
             messages_info = json.loads(line.split('messages info')[1])
             self._tmp_validation_size = self._get_validation_size(messages_info['sent'], messages_info['recv'])
             self._tmp_consensus_size = self._get_consensus_size(messages_info['sent'], messages_info['recv'])
+            self._tmp_round_size = self._get_round_size(messages_info['sent'], messages_info['recv'])
         elif 'updated new promoters' in line:
             r = int(line.split('TC: round ')[1].split(',')[0])
             if r > self._max_r:
@@ -457,11 +502,14 @@ class MessageSizeReader(object):
         if self._tmp_validation_count == 0:
             print "Nothing got validated for " + fname
         else:
-            self._validation_sizes.append(float(self._tmp_validation_size) / self._tmp_validation_count)
+            self._validation_sizes.append(float(self._tmp_validation_size) / float(self._tmp_validation_count))
         self._consensus_sizes.append(self._tmp_consensus_size)
+        self._round_sizes.append(float(self._tmp_round_size) / float(self._max_r))
+
         self._tmp_validation_size = 0
         self._tmp_consensus_size = 0
         self._tmp_validation_count = 0
+        self._tmp_round_size = 0
 
     @staticmethod
     def _get_consensus_size(sent_res, recv_res):
@@ -469,12 +517,28 @@ class MessageSizeReader(object):
                value_or_zero(sent_res, 'AskCons') + value_or_zero(recv_res, 'AskCons')
 
     @staticmethod
-    def _get_validation_size(sent_res, recv_res):
-        return value_or_zero(recv_res, 'ValidationResp')
+    def _get_round_size(sent_res, recv_res):
+        return MessageSizeReader._get_consensus_size(sent_res, recv_res) + \
+               value_or_zero(sent_res, 'Cons') + value_or_zero(sent_res, 'Cons')
 
-    @property
-    def sizes(self):
-        return np.sum(self._consensus_sizes) / self._max_r, np.mean(self._validation_sizes)
+    @staticmethod
+    def _get_validation_size(sent_res, recv_res):
+        return value_or_zero(recv_res, 'ValidationResp') + value_or_zero(recv_res, 'TxResp')
+
+    def sum_consensus_size(self):
+        return np.sum(self._consensus_sizes) / self._max_r
+
+    def mean_validation_size(self):
+        return np.mean(self._validation_sizes)
+
+    def stderr_validation_size(self):
+        return np.std(self._validation_sizes) / np.sqrt(len(self._validation_sizes))
+
+    def mean_round_size(self):
+        return np.mean(self._round_sizes)
+
+    def stderr_round_size(self):
+        return np.std(self._round_sizes) / np.sqrt(len(self._round_sizes))
 
 
 def value_or_zero(d, k):
