@@ -74,11 +74,10 @@ def test_consensus(n, t, m, failure, profile, folder, discover):
 
 
 def check_tx(expected):
-    target = 'TC: added tx'
-    strings = search_for_all_string_in_dir(DIR, target)
+    target = 'INFO - TC: current tx count'
+    total_tx_count = sum([int(res.split(',')[0]) for res in search_for_last_string_in_dir(DIR, target)])
 
-    print len(strings)
-    assert len(strings) >= expected
+    assert int(total_tx_count) >= expected
 
 
 @pytest.mark.parametrize("n,t,timeout,expected", [
