@@ -71,7 +71,7 @@ class TrustChainRunner(object):
         self.collect_rubbish_lc.start(5, False).addErrback(my_err_back)
 
         self.log_tx_count_lc = task.LoopingCall(self._log_info)
-        self.log_tx_count_lc.start(20, False).addErrback(my_err_back)
+        self.log_tx_count_lc.start(5, False).addErrback(my_err_back)
 
         self.bootstrap_lc = None
 
@@ -255,7 +255,8 @@ class TrustChainRunner(object):
         self.tc.new_cp(1,
                        self.round_states[r].received_cons,
                        self.round_states[r].received_sigs.values(),
-                       self._promoter_of_round(r - 1))
+                       self._promoter_of_round(r - 1),
+                       self.factory.config.t)
         if not self.tc.compact_cp_in_consensus(_prev_cp, self.tc.latest_round):
             logging.info("TC: round {}, my previous CP not in consensus".format(r))
 
@@ -272,6 +273,7 @@ class TrustChainRunner(object):
                      .format(r, self.tc.consensus[r].count, int(time.time()) - self.round_states[r].start_time))
         logging.info('TC: round {}, updated new promoters to [{}]'
                      .format(r, ",".join(['"' + b64encode(p) + '"' for p in self.factory.promoters])))
+        self.factory.log_communication_costs("TC: round {},".format(r))
 
         # at this point the promoters are updated
         # finally collect new CP if I'm the promoter, otherwise send CP to promoter
@@ -389,8 +391,8 @@ class TrustChainRunner(object):
         new_tx = self.tc.my_chain.chain[-1]
         new_tx.add_other_half(TxBlock(msg.tx))
         self.send(remote_vk, pb.TxResp(seq=msg.tx.inner.seq, tx=new_tx.pb))
-        logging.info("TC: added tx (received) {}, from {}"
-                     .format(encode_n(new_tx.other_half.hash), encode_n(remote_vk)))
+        logging.debug("TC: added tx (received) {}, from {}"
+                      .format(encode_n(new_tx.other_half.hash), encode_n(remote_vk)))
 
     def handle_tx_resp(self, msg, remote_vk):
         # type: (pb.TxResp, str) -> None
@@ -399,7 +401,7 @@ class TrustChainRunner(object):
         # TODO index access not safe
         tx = self.tc.my_chain.chain[msg.seq]
         tx.add_other_half(TxBlock(msg.tx))
-        logging.info("TC: other half {}".format(encode_n(tx.hash)))
+        logging.debug("TC: other half {}".format(encode_n(tx.hash)))
 
     def send(self, node, msg):
         self.factory.send(node, msg)
@@ -436,7 +438,7 @@ class TrustChainRunner(object):
         self.tc.new_tx(node, m)
         tx = self.tc.my_chain.chain[-1]
         self.send(node, pb.TxReq(tx=tx.pb))
-        logging.info("TC: added tx {}, from {}".format(encode_n(tx.hash), encode_n(self.tc.vk)))
+        logging.debug("TC: added tx {}, from {}".format(encode_n(tx.hash), encode_n(self.tc.vk)))
 
     def make_validation(self, interval):
         # type: (float) -> None
@@ -459,7 +461,7 @@ class TrustChainRunner(object):
         if self.tc.latest_cp.round < 2:
             return
 
-        txs = self.tc.get_verifiable_txs()
+        txs = filter(lambda tx: tx.request_sent_r == -1, self.tc.get_verifiable_txs())
 
         if not txs:
             return

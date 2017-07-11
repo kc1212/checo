@@ -9,7 +9,6 @@ import dateutil
 import pickle
 import enum
 import json
-import collections
 
 
 """
@@ -34,7 +33,7 @@ After extracting
 MARKER_STYLES = ['x', 'o', '^', 's', '*', 'v']
 LINE_STYLES = ['-', '--']
 STYLES = [l + m for m in MARKER_STYLES for l in LINE_STYLES]
-CUSTOM_STYLES = ['x-', '^--', '*:', 'o--',  's:', 'v-', 'x-.']
+CUSTOM_STYLES = ['x-', '^--', '*:', 'o--',  's:', 'v-', 'x-.', '^:']
 LINE_WIDTH = 1
 Exp = enum.Enum('Exp',
                 'round_duration_mean '
@@ -191,7 +190,7 @@ def plot(folder_name, recompute):
         except IOError:
             arr, facilitators, populations, timeseries_arr = load_data(folder_name)
 
-    arr, facilitators, populations, timeseries_arr = filter_data(arr, facilitators, populations, timeseries_arr)
+    # arr, facilitators, populations, timeseries_arr = filter_data(arr, facilitators, populations, timeseries_arr)
 
     print facilitators
     print populations
@@ -254,8 +253,8 @@ def plot(folder_name, recompute):
     p6 = plt.figure()
     for i, population in enumerate(populations):
         legend = '{}'.format(population)
-        plt.plot(facilitators, arr[:, i, Exp.message_size_cons.value - 1], STYLES[i], label=legend, lw=LINE_WIDTH)
-    plt.ylabel('Communication cost per round of consensus (bytes)')
+        plt.plot(facilitators, arr[:, i, Exp.message_size_cons.value - 1] / 1024 / 1024, STYLES[i], label=legend, lw=LINE_WIDTH)
+    plt.ylabel('Communication cost per round of consensus (MB)')
     plt.xlabel('Number of facilitators $n$')
     plt.legend(loc='upper left', title='population')
     plt.grid()
@@ -264,8 +263,8 @@ def plot(folder_name, recompute):
     p7 = plt.figure()
     for i, facilitator in enumerate(facilitators):
         legend = str(facilitator)
-        plt.plot(populations, arr[i, :, Exp.message_size_cons.value - 1], CUSTOM_STYLES[i], label=legend, lw=LINE_WIDTH)
-    plt.ylabel('Communication cost round of consensus (bytes)')
+        plt.plot(populations, arr[i, :, Exp.message_size_cons.value - 1] / 1024 / 1024, CUSTOM_STYLES[i], label=legend, lw=LINE_WIDTH)
+    plt.ylabel('Communication cost per round of consensus (MB)')
     plt.xlabel('Population size $N$')
     plt.legend(loc='upper left', title='facilitators')
     plt.grid()
@@ -274,8 +273,8 @@ def plot(folder_name, recompute):
     p8 = plt.figure()
     for i, population in enumerate(populations):
         legend = '{}'.format(population)
-        plt.plot(facilitators, arr[:, i, Exp.message_size_tx.value - 1], STYLES[i], label=legend, lw=LINE_WIDTH)
-    plt.ylabel('Communication cost per validated transactions (bytes)')
+        plt.plot(facilitators, arr[:, i, Exp.message_size_tx.value - 1] / 1024 / 1024, STYLES[i], label=legend, lw=LINE_WIDTH)
+    plt.ylabel('Communication cost per validated transaction (MB)')
     plt.xlabel('Number of facilitators $n$')
     plt.legend(loc='upper left', title='population')
     plt.grid()
@@ -284,8 +283,8 @@ def plot(folder_name, recompute):
     p9 = plt.figure()
     for i, facilitator in enumerate(facilitators):
         legend = str(facilitator)
-        plt.plot(populations, arr[i, :, Exp.message_size_tx.value - 1], CUSTOM_STYLES[i], label=legend, lw=LINE_WIDTH)
-    plt.ylabel('Communication cost per validated transactions (bytes)')
+        plt.plot(populations, arr[i, :, Exp.message_size_tx.value - 1] / 1024 / 1024, CUSTOM_STYLES[i], label=legend, lw=LINE_WIDTH)
+    plt.ylabel('Communication cost per validated transactions (MB)')
     plt.xlabel('Population size $N$')
     plt.legend(loc='upper left', title='facilitators')
     plt.grid()
@@ -327,6 +326,7 @@ def plot(folder_name, recompute):
                 p12.savefig(os.path.join(folder_name, 'timeseries.pdf'))
 
     plt.show()
+
 
 def list_files_that_match(folder_name, match='.err'):
     fnames = []
@@ -401,24 +401,25 @@ class BacklogReader(object):
     def __init__(self):
         self._tx_count = 0
         self._vd_count = 0
-        self._backlog = 0
+        self._tmp_tx_count = 0
+        self._tmp_vd_count = 0
         self._backlogs = []
 
     def read_line(self, line):
         match = 'TC: current tx count '
-
-        if 'TC: verified' in line:
-            self._vd_count += 1
-        elif 'TC: added tx' in line:
-            self._tx_count += 1
-        elif match in line:
+        if match in line:
             tmp = line.split(match)[1].split(', validated')
-            self._backlog = int(tmp[0]) - int(tmp[1])
-            assert self._backlog >= 0
+            self._tmp_tx_count = int(tmp[0])
+            self._tmp_vd_count = int(tmp[1])
+            assert self._tmp_tx_count >= self._tmp_vd_count
 
     def finish_file(self, fname):
-        self._backlogs.append(self._backlog)
-        self._backlog = 0
+        self._tx_count += self._tmp_tx_count
+        self._vd_count += self._tmp_vd_count
+        self._backlogs.append(self._tmp_tx_count - self._tmp_vd_count)
+
+        self._tmp_tx_count = 0
+        self._tmp_vd_count = 0
 
     @property
     def total_counts(self):
@@ -431,40 +432,53 @@ class MessageSizeReader(object):
               "ValidationResp"]
 
     def __init__(self):
-        self._latest_json = None
-        self._collection = []
+        self._consensus_sizes = []
+        self._validation_sizes = []
+        self._tmp_consensus_size = 0
+        self._tmp_validation_size = 0
+        self._tmp_validation_count = 0
         self._max_r = 0
 
     def read_line(self, line):
-        if 'messages info' in line:
-            self._latest_json = json.loads(line.split('messages info')[1])
-        elif 'TC: round ' in line:
+        validation_match = 'TC: current tx count '
+        if validation_match in line:
+            self._tmp_validation_count = int(line.split(validation_match)[1].split(', validated')[1])
+
+        if 'NODE: messages info' in line:
+            messages_info = json.loads(line.split('messages info')[1])
+            self._tmp_validation_size = self._get_validation_size(messages_info['sent'], messages_info['recv'])
+            self._tmp_consensus_size = self._get_consensus_size(messages_info['sent'], messages_info['recv'])
+        elif 'updated new promoters' in line:
             r = int(line.split('TC: round ')[1].split(',')[0])
             if r > self._max_r:
                 self._max_r = r
 
     def finish_file(self, fname):
-        assert self._latest_json
-        self._collection.append(self._latest_json)
-        self._latest_json = None
+        if self._tmp_validation_count == 0:
+            print "Nothing got validated for " + fname
+        else:
+            self._validation_sizes.append(float(self._tmp_validation_size) / self._tmp_validation_count)
+        self._consensus_sizes.append(self._tmp_consensus_size)
+        self._tmp_validation_size = 0
+        self._tmp_consensus_size = 0
+        self._tmp_validation_count = 0
+
+    @staticmethod
+    def _get_consensus_size(sent_res, recv_res):
+        return value_or_zero(sent_res, 'ACS') + value_or_zero(recv_res, 'ACS') + \
+               value_or_zero(sent_res, 'AskCons') + value_or_zero(recv_res, 'AskCons')
+
+    @staticmethod
+    def _get_validation_size(sent_res, recv_res):
+        return value_or_zero(recv_res, 'ValidationResp')
 
     @property
     def sizes(self):
-        sent_res = collections.defaultdict(long)
-        recv_res = collections.defaultdict(long)
-        for j in self._collection:
-            for f in self.FIELDS:
-                try:
-                    sent_res[f] += j['sent'][f]
-                    recv_res[f] += j['recv'][f]
-                except KeyError:
-                    continue
+        return np.sum(self._consensus_sizes) / self._max_r, np.mean(self._validation_sizes)
 
-        consensus_message_size = sent_res['ACS'] + recv_res['ACS'] + sent_res['AskCons'] + recv_res['AskCons']
-        # tx_message_size = sent_res['TxResp'] + sent_res['TxReq'] + sent_res['ValidationReq'] + sent_res['ValidationResp']
-        vd_message_size = recv_res['TxResp'] + recv_res['TxReq'] + recv_res['ValidationReq'] + recv_res['ValidationResp']
 
-        return consensus_message_size / (self._max_r - 1), vd_message_size
+def value_or_zero(d, k):
+    return d[k] if k in d else 0
 
 
 class ValidationCountReader(object):
@@ -473,11 +487,18 @@ class ValidationCountReader(object):
         self._rates = []
 
     def read_line(self, line):
-        match = 'TC: verified'
+        match = 'TC: current tx count '
         if match in line:
-            self._lines_of_interest.append(line)
+            if int(line.split(match)[1].split(', validated')[1]) == 0:
+                pass
+            elif len(self._lines_of_interest) >= 2:
+                self._lines_of_interest[1] = line
+            else:
+                self._lines_of_interest.append(line)
 
     def finish_file(self, fname):
+        assert len(self._lines_of_interest) == 2
+
         if not self._lines_of_interest:
             print "Nothing got validated for {}".format(fname)
             return
@@ -490,7 +511,8 @@ class ValidationCountReader(object):
             print "Difference is zero for {}".format(fname)
             return
 
-        rate = float(len(self._lines_of_interest)) / diff
+        validated_count = self._lines_of_interest[-1].split('TC: current tx count')[1].split(', validated')[1]
+        rate = float(validated_count) / diff
         self._rates.append(rate)
 
         self._lines_of_interest = []
@@ -570,7 +592,7 @@ def difference_in_seconds(a, b):
     :return: 
     """
     assert b > a
-    return (b - a).seconds
+    return (b - a).total_seconds()
 
 
 if __name__ == '__main__':

@@ -44,7 +44,12 @@ class MyProto(ProtobufReceiver):
         :return: 
         """
         peer = "<None>" if self.remote_vk is None else b64encode(self.remote_vk)
-        logging.debug("NODE: deleting peer {}".format(peer))
+
+        if not self.factory.first_disconnect_logged:
+            logging.info("NODE: deleting peer {}, reason {}".format(peer, reason))
+            self.factory.first_disconnect_logged = True
+        else:
+            logging.debug("NODE: deleting peer {}, reason {}".format(peer, reason))
 
         try:
             del self.peers[self.remote_vk]
@@ -191,6 +196,7 @@ class MyFactory(Factory):
         self.tc_runner = TrustChainRunner(self)
         self.vk = self.tc_runner.tc.vk
         self.q = Queue.Queue()  # (str, msg)
+        self.first_disconnect_logged = False
 
         self._neighbour = None
         self._sorted_peer_keys = None
@@ -203,10 +209,12 @@ class MyFactory(Factory):
         self.recv_message_log = defaultdict(long)
         self.sent_message_log = defaultdict(long)
 
-        def print_messages():
-            logging.info('NODE: messages info {{ "sent": {}, "recv": {} }}'
-                         .format(json.dumps(self.sent_message_log), json.dumps(self.recv_message_log)))
-        task.LoopingCall(print_messages).start(5, False).addErrback(my_err_back)
+        # TODO output this at the end of every round
+        task.LoopingCall(self.log_communication_costs).start(5, False).addErrback(my_err_back)
+
+    def log_communication_costs(self, heading="NODE:"):
+        logging.info('{} messages info {{ "sent": {}, "recv": {} }}'
+                     .format(heading, json.dumps(self.sent_message_log), json.dumps(self.recv_message_log)))
 
     def process_queue(self):
         # we use counter to stop this routine from running forever,
@@ -233,7 +241,7 @@ class MyFactory(Factory):
 
     def make_new_connection(self, host, port):
         logging.debug("NODE: making client connection {}:{}".format(host, port))
-        point = TCP4ClientEndpoint(reactor, host, port)
+        point = TCP4ClientEndpoint(reactor, host, port, timeout=90)
         proto = MyProto(self)
         d = connectProtocol(point, proto)
         d.addCallback(got_protocol).addErrback(my_err_back)
@@ -421,12 +429,12 @@ def run(config, bcast, discovery_addr):
         sys.exit(1)
 
     # connect to discovery server
-    point = TCP4ClientEndpoint(reactor, discovery_addr, 8123)
+    point = TCP4ClientEndpoint(reactor, discovery_addr, 8123, timeout=90)
     d = connectProtocol(point, Discovery({}, f))
     d.addCallback(got_discovery, b64encode(f.vk), config.port).addErrback(my_err_back)
 
     # connect to myself
-    point = TCP4ClientEndpoint(reactor, "localhost", config.port)
+    point = TCP4ClientEndpoint(reactor, "localhost", config.port, timeout=90)
     d = connectProtocol(point, MyProto(f))
     d.addCallback(got_protocol).addErrback(my_err_back)
 

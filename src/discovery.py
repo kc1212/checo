@@ -1,5 +1,6 @@
 import argparse
 import logging
+import sys
 
 from twisted.internet import reactor, task
 from twisted.internet.protocol import Factory
@@ -7,7 +8,9 @@ from typing import Union, Dict
 
 import src.messages.messages_pb2 as pb
 from src.protobufreceiver import ProtobufReceiver
-from src.utils import set_logging, my_err_back
+from src.utils import set_logging, my_err_back, call_later
+
+return_code = 0
 
 
 class Discovery(ProtobufReceiver):
@@ -73,6 +76,7 @@ class Discovery(ProtobufReceiver):
 class DiscoveryFactory(Factory):
     def __init__(self, n, t, m, inst):
         self.nodes = {}  # key = vk, val = addr
+        self.timeout_called = False
 
         def has_sufficient_instruction_params():
             return n is not None and \
@@ -94,6 +98,8 @@ class DiscoveryFactory(Factory):
             self.lc = task.LoopingCall(self.send_instruction_when_ready)
             self.lc.start(5).addErrback(my_err_back)
 
+            self.sent = False
+
         else:
             logging.info("Insufficient params to send instructions")
 
@@ -102,11 +108,26 @@ class DiscoveryFactory(Factory):
         return msg
 
     def send_instruction_when_ready(self):
+
+        # if at least 1 node started, then all should start within 120 seconds
+        # otherwise exit 1
+        if len(self.nodes) > 0:
+            def stop_and_ret():
+                if not self.sent:
+                    global return_code
+                    return_code = 1
+                    reactor.stop()
+            if not self.timeout_called:
+                logging.info("Timeout start")
+                call_later(120, stop_and_ret)
+                self.timeout_called = True
+
         if len(self.nodes) >= self.m:
             msg = pb.Instruction(instruction=self.inst_inst, delay=self.inst_delay, param=self.inst_param)
             logging.debug("Broadcasting instruction - {}".format(msg).replace('\n', ','))
             self.bcast(msg)
             self.lc.stop()
+            self.sent = True
         else:
             logging.debug("Instruction not ready ({} / {})...".format(len(self.nodes), self.m))
 
@@ -162,3 +183,4 @@ if __name__ == '__main__':
 
     # NOTE: n, t, m and inst must be all or nothing
     run(args.port, args.n, args.t, args.m, args.inst)
+    sys.exit(return_code)

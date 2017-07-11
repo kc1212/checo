@@ -162,8 +162,8 @@ class CpBlock(ProtobufWrapper):
         self.compact = CompactBlock.new(self.hash, self.prev, self.seq)
 
     @classmethod
-    def new(cls, prev, seq, cons, p, vk, sk, ss, vks):
-        # type: (str, int, Cons, int, str, str, List[Signature], List[str]) -> pb.CpBlock
+    def new(cls, prev, seq, cons, p, vk, sk, ss, vks, t):
+        # type: (str, int, Cons, int, str, str, List[Signature], List[str], int) -> pb.CpBlock
         """
 
         :param prev: hash pointer to the previous block
@@ -174,12 +174,12 @@ class CpBlock(ProtobufWrapper):
         :param sk: my secret key
         :param ss: signatures of the promoters, at least t-1 of them must be valid
         :param vks: all verification keys of promoters
+        :param t:
         """
         assert p in (0, 1)
         inner = pb.CpBlock.Inner(prev=prev, seq=seq, round=cons.round, cons_hash=cons.hash, ss=[s.pb for s in ss], p=p)
 
-        if cons.round != -1 or len(ss) != 0 or len(vks) != 0 or inner.seq != 0:
-            t = (len(vks) - 1) / 3
+        if cons.round != 0 or len(ss) != 0 or len(vks) != 0 or inner.seq != 0:
             _verify_signatures(inner.cons_hash, ss, vks, t)
         else:
             # if this is executed, it means this is a genesis block
@@ -295,7 +295,7 @@ def generate_genesis_block(vk, sk):
     # type: (str, str) -> CpBlock
     prev = libnacl.crypto_hash_sha256('0')
     cons = Cons.new(0, [])
-    return CpBlock.new(prev, 0, cons, 1, vk, sk, [], [])
+    return CpBlock.new(prev, 0, cons, 1, vk, sk, [], [], 0)
 
 
 class Chain(object):
@@ -487,19 +487,20 @@ class TrustChain(object):
         assert tx.seq == self.next_seq, "{} != {}".format(tx.seq, self.next_seq)
         self.my_chain.new_tx(copy.deepcopy(tx))
 
-    def new_cp(self, p, cons, ss, vks):
-        # type: (int, Cons, List[Signature], List[str], List[str]) -> None
+    def new_cp(self, p, cons, ss, vks, t):
+        # type: (int, Cons, List[Signature], List[str], int) -> None
         """
 
         :param p:
         :param cons:
         :param ss: signature of the promoters
         :param vks: verification key of the promoters
+        :param t:
         :return:
         """
         assert cons.round not in self.consensus
         self.consensus[cons.round] = cons
-        cp = CpBlock.new(self.latest_compact_hash, self.next_seq, cons, p, self.vk, self._sk, ss, vks)
+        cp = CpBlock.new(self.latest_compact_hash, self.next_seq, cons, p, self.vk, self._sk, ss, vks, t)
         self._new_cp(cp)
 
     def _new_cp(self, cp):
@@ -719,7 +720,7 @@ class TrustChain(object):
             if b.hash == tx.other_half.compact.hash:
                 assert b.seq == tx.other_half.seq
                 self.my_chain.set_validity(seq, VALIDITY_ENUM.Valid)
-                logging.info("TC: verified {}".format(encode_n(self.my_chain.chain[seq].hash)))
+                logging.debug("TC: verified {}".format(encode_n(self.my_chain.chain[seq].hash)))
                 if use_cache:
                     updated = self._cache_compact_blocks(tx.inner.counterparty, compact_blocks)
                     if updated:
@@ -768,7 +769,7 @@ class TrustChain(object):
             compact_blocks = self.load_cache_for_verification(tx.seq)
             res = self.verify_tx(tx.seq, compact_blocks, use_cache=False)
             if res == VALIDITY_ENUM.Valid:
-                logging.info("TC: verified (from cache) {}".format(encode_n(tx.hash)))
+                logging.debug("TC: verified (from cache) {}".format(encode_n(tx.hash)))
 
     def get_verifiable_txs(self):
         # type: () -> List[TxBlock]
