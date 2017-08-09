@@ -1,4 +1,3 @@
-import math
 import libnacl
 import copy
 import logging
@@ -62,7 +61,6 @@ class Signature(ProtobufWrapper):
     def new(cls, vk, sk, msg):
         # type: (str, str, str) -> Signature
         return cls(pb.Signature(vk=vk, signed_document=libnacl.crypto_sign(msg, sk)))
-
 
     def verify(self, vk, msg):
         # type: (str, str) -> None

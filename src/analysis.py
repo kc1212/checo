@@ -356,11 +356,11 @@ def plot(folder_name, recompute):
         for j, population in enumerate(populations):
             if facilitator == 32 and population == 1200:
                 p14 = plt.figure()
-                # 20 seconds is the timeseries interval
-                x = map(lambda a: a * 20, range(len(timeseries_arr[i][j][0])))
+                # 5 seconds is the timeseries interval
+                x = map(lambda a: a * 5, range(len(timeseries_arr[i][j][0])))
                 tx_count, vd_count = timeseries_arr[i][j]
-                plt.plot(x, tx_count, 'v', label="transactions", lw=LINE_WIDTH)
-                plt.plot(x, vd_count, 'o', label="validations", lw=LINE_WIDTH)
+                plt.plot(x, tx_count, '+', label="transactions", lw=LINE_WIDTH, markerfacecolor='none', markersize=4)
+                plt.plot(x, vd_count, 'x', label="validations", lw=LINE_WIDTH, markerfacecolor='none', markersize=4)
                 plt.xlabel('Time (seconds)')
                 plt.ylabel('Count')
                 plt.legend(loc='upper left')
