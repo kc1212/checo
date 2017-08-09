@@ -1,6 +1,6 @@
-consensus-thesis-code
+Checo (*che*ckpoint *co*nsensus)
 =====================
-[![Build Status](https://travis-ci.org/kc1212/consensus-thesis-code.svg?branch=master)](https://travis-ci.org/kc1212/consensus-thesis-code)
+[![Build Status](https://travis-ci.org/kc1212/checo.svg?branch=master)](https://travis-ci.org/kc1212/checo)
 
 The code for my [thesis](https://github.com/kc1212/consensus-thesis).
 
